@@ -1,12 +1,30 @@
-use clap::Parser as _;
-use edgefirst_samples::Args;
+use clap::Parser;
 use std::{collections::HashSet, time::Instant};
+use zenoh::Config;
+
+#[derive(Parser, Debug, Clone)]
+struct Args {
+    /// Time in seconds to run command before exiting.
+    #[arg(short, long)]
+    pub timeout: Option<u64>,
+
+    /// Connect to a Zenoh router rather than peer mode.
+    #[arg(short, long)]
+    connect: Option<String>,
+}
 
 #[tokio::main]
 async fn main() {
-    // Parse command line arguments using the common args parse from lib.rs
     let args = Args::parse();
-    let session = zenoh::open(args.clone()).await.unwrap();
+
+    // Create the default Zenoh configuration and if the connect argument is
+    // provided set the mode to client and add the target to the endpoints.
+    let mut config = Config::default();
+    if let Some(connect) = args.connect {
+        config.insert_json5("mode", "client").unwrap();
+        config.insert_json5("connect/endpoints", &connect).unwrap();
+    }
+    let session = zenoh::open(config).await.unwrap();
 
     // Create a subscriber for all topics matching the pattern "rt/**"
     let subscriber = session.declare_subscriber("rt/**").await.unwrap();

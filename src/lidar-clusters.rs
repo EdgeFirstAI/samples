@@ -2,7 +2,6 @@ use clap::Parser;
 use edgefirst_schemas::sensor_msgs::{PointCloud2, PointField, point_field};
 use std::{error::Error, time::Instant};
 use zenoh::Config;
-
 #[derive(Parser, Debug, Clone)]
 struct Args {
     /// Time in seconds to run command before exiting.
@@ -17,7 +16,6 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-
     // Create the default Zenoh configuration and if the connect argument is
     // provided set the mode to client and add the target to the endpoints.
     let mut config = Config::default();
@@ -27,9 +25,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let session = zenoh::open(config).await.unwrap();
 
-    // Create a subscriber for all topics matching the pattern "rt/**"
+    // Create a subscriber for "rt/lidar/clusters"
     let subscriber = session
-        .declare_subscriber("rt/lidar/cluster")
+        .declare_subscriber("rt/lidar/clusters")
         .await
         .unwrap();
 
@@ -50,6 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             clustered_points.len(),
         );
     }
+
     Ok(())
 }
 

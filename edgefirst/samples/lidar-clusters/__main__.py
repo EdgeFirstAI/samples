@@ -11,7 +11,7 @@ class LidarPoint:
         self.x = 0
         self.y = 0
         self.z = 0
-        self.id = 0
+        self.fields = dict()
 
 
 SIZE_OF_DATATYPE = [
@@ -85,7 +85,7 @@ if __name__ == "__main__":
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
     session = zenoh.open(config)
 
-    # Create a subscriber for all topics matching the pattern "rt/**"
+    # Create a subscriber for "rt/lidar/cluster"
     subscriber = session.declare_subscriber('rt/lidar/cluster')
 
     # Keep a list of discovered topics to avoid noise from duplicates

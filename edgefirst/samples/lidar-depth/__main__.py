@@ -32,10 +32,12 @@ if __name__ == "__main__":
             break
         msg = subscriber.recv()
 
-        # deserialize message
+        # Deserialize message
         depth = Image.deserialize(msg.payload.to_bytes())
-        endian_format = ">" if depth.is_bigendian else "<"
+
+        # Process depth image
         assert depth.encoding == "mono16"
+        endian_format = ">" if depth.is_bigendian else "<"
         depth_vals = list(struct.unpack(
             f"{endian_format}{depth.width*depth.height}H"))
 

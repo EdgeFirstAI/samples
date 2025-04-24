@@ -1,6 +1,6 @@
 use clap::Parser;
 use edgefirst_schemas::sensor_msgs::Image;
-use std::{collections::HashMap, error::Error, time::Instant};
+use std::{error::Error, time::Instant};
 use zenoh::Config;
 #[derive(Parser, Debug, Clone)]
 struct Args {
@@ -37,17 +37,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         let depth: Image = cdr::deserialize(&msg.payload().to_bytes())?;
+
+        // Process depth image
+        assert_eq!(depth.encoding, "mono16");
         let u16_from_bytes = if depth.is_bigendian > 0 {
             u16::from_be_bytes
         } else {
             u16::from_le_bytes
         };
-        assert_eq!(depth.encoding, "mono16");
         let depth_vals: Vec<u16> = depth
             .data
             .chunks_exact(2)
             .map(|a| u16_from_bytes([a[0], a[1]]))
             .collect();
+
         let min_depth_mm = *depth_vals.iter().min().unwrap();
         let max_depth_mm = *depth_vals.iter().max().unwrap();
         println!(

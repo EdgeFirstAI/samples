@@ -16,6 +16,10 @@ path = "src/lidar-clusters.rs"
 name = "lidar-points"
 path = "src/lidar-points.rs"
 
+[[bin]]
+name = "lidar-depth"
+path = "src/lidar-depth.rs"
+
 [features]
 default = ["rerun"]
 rerun = ["dep:rerun"]

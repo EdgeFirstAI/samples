@@ -6,7 +6,7 @@ from time import time
 import rerun
 
 if __name__ == "__main__":
-    args = ArgumentParser(description="EdgeFirst Samples - List Topics")
+    args = ArgumentParser(description="EdgeFirst Samples - Lidar Depth")
     args.add_argument('-c', '--connect', type=str, default=None,
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,

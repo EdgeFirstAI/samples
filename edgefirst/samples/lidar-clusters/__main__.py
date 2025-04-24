@@ -70,7 +70,7 @@ def decode_pcd(pcd: PointCloud2) -> list[LidarPoint]:
 
 
 if __name__ == "__main__":
-    args = ArgumentParser(description="EdgeFirst Samples - List Topics")
+    args = ArgumentParser(description="EdgeFirst Samples - Lidar Clusters")
     args.add_argument('-c', '--connect', type=str, default=None,
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,

@@ -39,7 +39,7 @@ if __name__ == "__main__":
         assert depth.encoding == "mono16"
         endian_format = ">" if depth.is_bigendian else "<"
         depth_vals = list(struct.unpack(
-            f"{endian_format}{depth.width*depth.height}H"))
+            f"{endian_format}{depth.width*depth.height}H", depth.data))
 
         min_depth_mm = min(depth_vals)
         max_depth_mm = max(depth_vals)

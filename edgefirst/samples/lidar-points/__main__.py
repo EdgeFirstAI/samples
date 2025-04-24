@@ -6,7 +6,7 @@ from time import time
 import rerun
 
 
-class LidarPoint:
+class Point:
     def __init__(self):
         self.x = 0
         self.y = 0
@@ -39,12 +39,12 @@ STRUCT_LETTER_OF_DATATYPE = [
 ]
 
 
-def decode_pcd(pcd: PointCloud2) -> list[LidarPoint]:
+def decode_pcd(pcd: PointCloud2) -> list[Point]:
     points = []
     endian_format = ">" if pcd.is_bigendian else "<"
     for i in range(pcd.height):
         for j in range(pcd.width):
-            point = LidarPoint()
+            point = Point()
             point_start = (i * pcd.width + j) * pcd.point_step
             # Loop through the provided Fields for each Point (x, y, z, speed,
             # power, rcs)
@@ -59,12 +59,12 @@ def decode_pcd(pcd: PointCloud2) -> list[LidarPoint]:
                     f'{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}', arr)[0]
                 if f.name == "x":
                     point.x = val
-                if f.name == "y":
+                elif f.name == "y":
                     point.y = val
-                if f.name == "z":
+                elif f.name == "z":
                     point.z = val
-                if f.name == "cluster_id":
-                    point.id = int(val)
+                else:
+                    point.field[f.name] = val
             points.append(point)
     return points
 
@@ -99,6 +99,16 @@ if __name__ == "__main__":
         # deserialize message
         pcd = PointCloud2.deserialize(msg.payload.to_bytes())
         points = decode_pcd(pcd)
-        clustered_points = [p for p in points if p.id > 0]
+        min_x = min([p.x for p in points])
+        max_x = max([p.x for p in points])
+
+        min_y = min([p.y for p in points])
+        max_y = max([p.y for p in points])
+
+        min_z = min([p.z for p in points])
+        max_z = max([p.z for p in points])
+
+        min_refl = min([p.fields["reflect"] for p in points])
+        max_refl = max([p.fields["reflect"] for p in points])
         print(
-            f"Recieved {len(points)} lidar points. {len(clustered_points)} are clustered")
+            f"Recieved {len(points)} lidar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\treflect: [{min_refl:.2}, {max_refl:.2}]")

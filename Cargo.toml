@@ -12,6 +12,10 @@ path = "src/list-topics.rs"
 name = "lidar-clusters"
 path = "src/lidar-clusters.rs"
 
+[[bin]]
+name = "lidar-points"
+path = "src/lidar-points.rs"
+
 [features]
 default = ["rerun"]
 rerun = ["dep:rerun"]

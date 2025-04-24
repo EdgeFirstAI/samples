@@ -20,6 +20,10 @@ path = "src/lidar-points.rs"
 name = "lidar-depth"
 path = "src/lidar-depth.rs"
 
+[[bin]]
+name = "lidar-reflect"
+path = "src/lidar-reflect.rs"
+
 [features]
 default = ["rerun"]
 rerun = ["dep:rerun"]

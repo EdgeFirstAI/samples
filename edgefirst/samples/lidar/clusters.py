@@ -6,7 +6,7 @@ from time import time
 import rerun
 
 
-class Point:
+class LidarPoint:
     def __init__(self):
         self.x = 0
         self.y = 0
@@ -39,12 +39,12 @@ STRUCT_LETTER_OF_DATATYPE = [
 ]
 
 
-def decode_pcd(pcd: PointCloud2) -> list[Point]:
+def decode_pcd(pcd: PointCloud2) -> list[LidarPoint]:
     points = []
     endian_format = ">" if pcd.is_bigendian else "<"
     for i in range(pcd.height):
         for j in range(pcd.width):
-            point = Point()
+            point = LidarPoint()
             point_start = (i * pcd.width + j) * pcd.point_step
             # Loop through the provided Fields for each Point (x, y, z, speed,
             # power, rcs)
@@ -59,18 +59,18 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
                     f'{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}', arr)[0]
                 if f.name == "x":
                     point.x = val
-                elif f.name == "y":
+                if f.name == "y":
                     point.y = val
-                elif f.name == "z":
+                if f.name == "z":
                     point.z = val
-                else:
-                    point.field[f.name] = val
+                if f.name == "cluster_id":
+                    point.id = int(val)
             points.append(point)
     return points
 
 
 if __name__ == "__main__":
-    args = ArgumentParser(description="EdgeFirst Samples - Lidar Points")
+    args = ArgumentParser(description="EdgeFirst Samples - Lidar Clusters")
     args.add_argument('-c', '--connect', type=str, default=None,
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,
@@ -85,10 +85,9 @@ if __name__ == "__main__":
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/lidar/cluster"
-    subscriber = session.declare_subscriber('rt/lidar/cluster')
+    # Create a subscriber for "rt/lidar/clusters"
+    subscriber = session.declare_subscriber('rt/lidar/clusters')
 
-    # Keep a list of discovered topics to avoid noise from duplicates
     start = time()
 
     while True:
@@ -99,16 +98,6 @@ if __name__ == "__main__":
         # deserialize message
         pcd = PointCloud2.deserialize(msg.payload.to_bytes())
         points = decode_pcd(pcd)
-        min_x = min([p.x for p in points])
-        max_x = max([p.x for p in points])
-
-        min_y = min([p.y for p in points])
-        max_y = max([p.y for p in points])
-
-        min_z = min([p.z for p in points])
-        max_z = max([p.z for p in points])
-
-        min_refl = min([p.fields["reflect"] for p in points])
-        max_refl = max([p.fields["reflect"] for p in points])
+        clustered_points = [p for p in points if p.id > 0]
         print(
-            f"Recieved {len(points)} lidar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\treflect: [{min_refl:.2}, {max_refl:.2}]")
+            f"Recieved {len(points)} lidar points. {len(clustered_points)} are clustered")

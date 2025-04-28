@@ -10,19 +10,20 @@ path = "src/list-topics.rs"
 
 [[bin]]
 name = "lidar-clusters"
-path = "src/lidar-clusters.rs"
+path = "src/lidar/clusters.rs"
 
 [[bin]]
 name = "lidar-points"
-path = "src/lidar-points.rs"
+path = "src/lidar/points.rs"
 
 [[bin]]
 name = "lidar-depth"
-path = "src/lidar-depth.rs"
+path = "src/lidar/depth.rs"
 
 [[bin]]
 name = "lidar-reflect"
-path = "src/lidar-reflect.rs"
+path = "src/lidar/reflect.rs"
+
 
 [features]
 default = ["rerun"]

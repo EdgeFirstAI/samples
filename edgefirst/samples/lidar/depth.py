@@ -23,8 +23,7 @@ if __name__ == "__main__":
 
     # Create a subscriber for "rt/lidar/depth"
     subscriber = session.declare_subscriber('rt/lidar/depth')
-
-    # Keep a list of discovered topics to avoid noise from duplicates
+    
     start = time()
 
     while True:

@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let gps: NavSatFix = cdr::deserialize(&msg.payload().to_bytes())?;
         let lat = gps.latitude;
         let long = gps.longitude;
-        println!("Latitude: {} Longitude: {}",lat, long);
+        // println!("Latitude: {} Longitude: {}",lat, long);
         let _ = rec.log("CurrentLoc", &rerun::GeoPoints::from_lat_lon([(lat, long)]));
     }
 

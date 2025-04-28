@@ -24,6 +24,22 @@ path = "src/lidar/depth.rs"
 name = "lidar-reflect"
 path = "src/lidar/reflect.rs"
 
+[[bin]]
+name = "radar-targets"
+path = "src/radar/targets.rs"
+
+[[bin]]
+name = "radar-clusters"
+path = "src/radar/clusters.rs"
+
+[[bin]]
+name = "radar-info"
+path = "src/radar/info.rs"
+
+[[bin]]
+name = "radar-cube"
+path = "src/radar/cube.rs"
+
 
 [features]
 default = ["rerun"]

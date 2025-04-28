@@ -2,6 +2,7 @@ use clap::Parser;
 use edgefirst_schemas::sensor_msgs::{NavSatFix};
 use std::{error::Error, time::Instant};
 use zenoh::Config;
+
 #[derive(Parser, Debug, Clone)]
 struct Args {
     /// Time in seconds to run command before exiting.
@@ -20,8 +21,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // provided set the mode to client and add the target to the endpoints.
     let mut config = Config::default();
     if let Some(connect) = args.connect {
-        config.insert_json5("mode", "client").unwrap();
-        config.insert_json5("connect/endpoints", &connect).unwrap();
+        let mut post_connect: String = "['".to_owned();
+        post_connect = post_connect + &connect + "']";
+        config.insert_json5("mode", "'client'").unwrap();
+        config.insert_json5("connect/endpoints", &post_connect).unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 
@@ -33,6 +36,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let start = Instant::now();
 
+    let rec = rerun::RecordingStreamBuilder::new("GPS Example").spawn()?;
+
     while let Ok(msg) = subscriber.recv() {
         if let Some(timeout) = args.timeout {
             if start.elapsed().as_secs() >= timeout {
@@ -40,19 +45,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         let gps: NavSatFix = cdr::deserialize(&msg.payload().to_bytes())?;
-        println!(
-            "Latitude: {} Longitude: {}",
-            gps.latitude,
-            gps.longitude,
-        );
+        let lat = gps.latitude;
+        let long = gps.longitude;
+        println!("Latitude: {} Longitude: {}",lat, long);
+        let _ = rec.log("CurrentLoc", &rerun::GeoPoints::from_lat_lon([(lat, long)]));
     }
 
     Ok(())
 }
-
-// fn decode_gps(gps: &NavSatFix) -> Vec<f64> {
-//     let mut lat_long = Vec::new();
-//     lat_long.push(gps.latitude);
-//     lat_long.push(gps.longitude);
-//     lat_long
-// }

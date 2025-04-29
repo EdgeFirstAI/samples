@@ -1,6 +1,7 @@
 use clap::Parser;
 use edgefirst_schemas::sensor_msgs::{PointCloud2, PointField, point_field};
-use std::{collections::HashMap, error::Error, time::Instant};
+use rerun::{Points3D, Position3D};
+use std::{collections::HashMap, error::Error, path::PathBuf, time::Instant};
 use zenoh::Config;
 #[derive(Parser, Debug, Clone)]
 struct Args {
@@ -11,17 +12,28 @@ struct Args {
     /// Connect to a Zenoh router rather than peer mode.
     #[arg(short, long)]
     connect: Option<String>,
+
+    /// Rerun file
+    #[arg(short, long)]
+    rerun: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+
+    let rec = rerun::RecordingStreamBuilder::new("lidar/points Example")
+        .save(args.rerun.unwrap_or("lidar-points.rrd".into()))?;
+
     // Create the default Zenoh configuration and if the connect argument is
     // provided set the mode to client and add the target to the endpoints.
     let mut config = Config::default();
     if let Some(connect) = args.connect {
-        config.insert_json5("mode", "client").unwrap();
-        config.insert_json5("connect/endpoints", &connect).unwrap();
+        let post_connect = format!("['{connect}']");
+        config.insert_json5("mode", "'client'").unwrap();
+        config
+            .insert_json5("connect/endpoints", &post_connect)
+            .unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 
@@ -60,6 +72,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "Recieved {} lidar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\treflect: [{min_refl:.2}, {max_refl:.2}]",
             points.len(),
         );
+
+        let rr_points = Points3D::new(
+            points
+                .iter()
+                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
+        );
+        let _ = rec.log("lidar/points", &rr_points);
     }
 
     Ok(())

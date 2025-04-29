@@ -1,6 +1,7 @@
 use clap::Parser;
 use edgefirst_schemas::edgefirst_msgs::RadarInfo;
-use std::{error::Error, time::Instant};
+use rerun::{TextLog, TextLogLevel};
+use std::{error::Error, path::PathBuf, time::Instant};
 use zenoh::Config;
 #[derive(Parser, Debug, Clone)]
 struct Args {
@@ -11,17 +12,28 @@ struct Args {
     /// Connect to a Zenoh router rather than peer mode.
     #[arg(short, long)]
     connect: Option<String>,
+
+    /// Rerun file
+    #[arg(short, long)]
+    rerun: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+
+    let rec = rerun::RecordingStreamBuilder::new("radar/info Example")
+        .save(args.rerun.unwrap_or("radar-info.rrd".into()))?;
+
     // Create the default Zenoh configuration and if the connect argument is
     // provided set the mode to client and add the target to the endpoints.
     let mut config = Config::default();
     if let Some(connect) = args.connect {
-        config.insert_json5("mode", "client").unwrap();
-        config.insert_json5("connect/endpoints", &connect).unwrap();
+        let post_connect = format!("['{connect}']");
+        config.insert_json5("mode", "'client'").unwrap();
+        config
+            .insert_json5("connect/endpoints", &post_connect)
+            .unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 
@@ -45,7 +57,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             radar_info.range_toggle,
             radar_info.detection_sensitivity,
             radar_info.cube
-        )
+        );
+        let text = TextLog::new(format!(        
+            "The radar configuration is: center frequency: {}   frequency sweep: {}   range toggle: {}   detection sensitivity: {}   sending cube: {}",
+            radar_info.center_frequency,
+            radar_info.frequency_sweep,
+            radar_info.range_toggle,
+            radar_info.detection_sensitivity,
+            radar_info.cube
+        )).with_level(TextLogLevel::INFO);
+        let _ = rec.log("radar/info", &text);
     }
 
     Ok(())

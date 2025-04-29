@@ -1,6 +1,7 @@
 use clap::Parser;
 use edgefirst_schemas::sensor_msgs::{PointCloud2, PointField, point_field};
-use std::{collections::HashMap, error::Error, time::Instant};
+use rerun::{Points3D, Position3D};
+use std::{collections::HashMap, error::Error, path::PathBuf, time::Instant};
 use zenoh::Config;
 #[derive(Parser, Debug, Clone)]
 struct Args {
@@ -11,22 +12,36 @@ struct Args {
     /// Connect to a Zenoh router rather than peer mode.
     #[arg(short, long)]
     connect: Option<String>,
+
+    /// Rerun file
+    #[arg(short, long)]
+    rerun: Option<PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+
+    let rec = rerun::RecordingStreamBuilder::new("radar/targets Example")
+        .save(args.rerun.unwrap_or("radar-targets.rrd".into()))?;
+
     // Create the default Zenoh configuration and if the connect argument is
     // provided set the mode to client and add the target to the endpoints.
     let mut config = Config::default();
     if let Some(connect) = args.connect {
-        config.insert_json5("mode", "client").unwrap();
-        config.insert_json5("connect/endpoints", &connect).unwrap();
+        let post_connect = format!("['{connect}']");
+        config.insert_json5("mode", "'client'").unwrap();
+        config
+            .insert_json5("connect/endpoints", &post_connect)
+            .unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 
-    // Create a subscriber for "rt/lidar/points"
-    let subscriber = session.declare_subscriber("rt/lidar/points").await.unwrap();
+    // Create a subscriber for "rt/radar/targets"
+    let subscriber = session
+        .declare_subscriber("rt/radar/targets")
+        .await
+        .unwrap();
 
     let start = Instant::now();
 
@@ -57,9 +72,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .fold(f64::NEG_INFINITY, f64::max);
 
         println!(
-            "Recieved {} lidar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\tspeed: [{min_speed:.2}, {max_speed:.2}]",
+            "Recieved {} radar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\tspeed: [{min_speed:.2}, {max_speed:.2}]",
             points.len(),
         );
+
+        let rr_points = Points3D::new(
+            points
+                .iter()
+                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
+        );
+        let _ = rec.log("radar/targets", &rr_points);
     }
 
     Ok(())

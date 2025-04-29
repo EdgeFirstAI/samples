@@ -2,7 +2,8 @@ import zenoh
 from edgefirst.schemas.sensor_msgs import Image
 from argparse import ArgumentParser
 from time import time
-import rerun
+import rerun as rr
+import numpy as np
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - Lidar reflect")
@@ -10,7 +11,12 @@ if __name__ == "__main__":
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,
                       help="Time in seconds to run command before exiting.")
+    args.add_argument('-r', '--rerun', type=str, default=None,
+                      help="Rerun file.")
     args = args.parse_args()
+
+    rr.init("lidar/reflect")
+    rr.save("lidar-reflect.rrd")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
@@ -42,3 +48,6 @@ if __name__ == "__main__":
         print(
             f"Recieved {reflect.width}x{reflect.height} reflect image. reflect: [{min_reflect_mm}, {max_reflect_mm}]",
         )
+
+        data = np.array(reflect_vals).reshape((reflect.height, reflect.width)).astype(np.uint8)
+        rr.log("lidar/depth", rr.Image(data))

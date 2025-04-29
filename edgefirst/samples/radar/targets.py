@@ -3,7 +3,7 @@ from edgefirst.schemas.sensor_msgs import PointCloud2, PointField, PointFieldDat
 import struct
 from argparse import ArgumentParser
 from time import time
-import rerun
+import rerun as rr
 
 
 class Point:
@@ -64,7 +64,7 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
                 elif f.name == "z":
                     point.z = val
                 else:
-                    point.field[f.name] = val
+                    point.fields[f.name] = val
             points.append(point)
     return points
 
@@ -75,7 +75,12 @@ if __name__ == "__main__":
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,
                       help="Time in seconds to run command before exiting.")
+    args.add_argument('-r', '--rerun', type=str, default=None,
+                      help="Rerun file.")
     args = args.parse_args()
+
+    rr.init("radar/targets")
+    rr.save("radar-targets.rrd")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
@@ -110,4 +115,7 @@ if __name__ == "__main__":
         min_rcs = min([p.fields["rcs"] for p in points])
         max_rcs = max([p.fields["rcs"] for p in points])
         print(
-            f"Recieved {len(points)} radar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\trcs: [{min_rcs:.2}, {max_rcs:.2}]")
+            f"Recieved {len(points)} radar points. Values: x: [{min_x:.2f}, {max_x:.2f}]\ty: [{min_y:.2f}, {max_y:.2f}]\tz: [{min_z:.2f}, {max_z:.2f}]\trcs: [{min_rcs:.2f}, {max_rcs:.2f}]")
+
+        pos = [[p.x, p.y, p.z] for p in points]
+        rr.log("radar/targets", rr.Points3D(pos))

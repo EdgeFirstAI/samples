@@ -2,7 +2,7 @@ import zenoh
 from edgefirst.schemas.edgefirst_msgs import RadarInfo
 from argparse import ArgumentParser
 from time import time
-import rerun
+import rerun as rr
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - RadarInfo")
@@ -10,7 +10,12 @@ if __name__ == "__main__":
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,
                       help="Time in seconds to run command before exiting.")
+    args.add_argument('-r', '--rerun', type=str, default=None,
+                      help="Rerun file.")
     args = args.parse_args()
+
+    rr.init("radar/info")
+    rr.save("radar-info.rrd")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
@@ -34,3 +39,6 @@ if __name__ == "__main__":
         radar_info = RadarInfo.deserialize(msg.payload.to_bytes())
         print(
             f"The radar configuration is: center frequency: {radar_info.center_frequency}   frequency sweep: {radar_info.frequency_sweep}   range toggle: {radar_info.range_toggle}   detection sensitivity: {radar_info.detection_sensitivity}   sending cube: {radar_info.cube}")
+
+        rr.log("radar/info", rr.TextLog(
+            f"The radar configuration is: center frequency: {radar_info.center_frequency}   frequency sweep: {radar_info.frequency_sweep}   range toggle: {radar_info.range_toggle}   detection sensitivity: {radar_info.detection_sensitivity}   sending cube: {radar_info.cube}", level="INFO"))

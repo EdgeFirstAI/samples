@@ -3,14 +3,14 @@ from edgefirst.schemas.sensor_msgs import PointCloud2, PointField, PointFieldDat
 import struct
 from argparse import ArgumentParser
 from time import time
-import rerun
+import rerun as rr
 
 
 class Point:
     def __init__(self):
-        self.x = 0
-        self.y = 0
-        self.z = 0
+        self.x = 0.0
+        self.y = 0.0
+        self.z = 0.0
         self.fields = dict()
 
 
@@ -64,7 +64,7 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
                 elif f.name == "z":
                     point.z = val
                 else:
-                    point.field[f.name] = val
+                    point.fields[f.name] = val
             points.append(point)
     return points
 
@@ -75,7 +75,12 @@ if __name__ == "__main__":
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--time', type=float, default=None,
                       help="Time in seconds to run command before exiting.")
+    args.add_argument('-r', '--rerun', type=str, default=None,
+                      help="Rerun file.")
     args = args.parse_args()
+
+    rr.init("lidar/points")
+    rr.save("lidar-points.rrd")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
@@ -85,8 +90,8 @@ if __name__ == "__main__":
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/lidar/cluster"
-    subscriber = session.declare_subscriber('rt/lidar/cluster')
+    # Create a subscriber for "rt/lidar/points"
+    subscriber = session.declare_subscriber('rt/lidar/points')
 
     start = time()
 
@@ -110,4 +115,8 @@ if __name__ == "__main__":
         min_refl = min([p.fields["reflect"] for p in points])
         max_refl = max([p.fields["reflect"] for p in points])
         print(
-            f"Recieved {len(points)} lidar points. Values: x: [{min_x:.2}, {max_x:.2}]\ty: [{min_y:.2}, {max_y:.2}]\tz: [{min_z:.2}, {max_z:.2}]\treflect: [{min_refl:.2}, {max_refl:.2}]")
+            f"Recieved {len(points)} lidar points. Values: x: [{min_x:.2f}, {max_x:.2f}]\ty: [{min_y:.2f}, {max_y:.2f}]\tz: [{min_z:.2f}, {max_z:.2f}]\treflect: [{min_refl}, {max_refl}]")
+
+
+        pos = [[p.x, p.y, p.z] for p in points]
+        rr.log("lidar/points", rr.Points3D(pos))

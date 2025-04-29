@@ -1,5 +1,6 @@
 use clap::Parser;
-use std::{collections::HashSet, time::Instant};
+use edgefirst_schemas::sensor_msgs::{NavSatFix};
+use std::{error::Error, time::Instant};
 use zenoh::Config;
 
 #[derive(Parser, Debug, Clone)]
@@ -14,9 +15,8 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-
     // Create the default Zenoh configuration and if the connect argument is
     // provided set the mode to client and add the target to the endpoints.
     let mut config = Config::default();
@@ -28,12 +28,15 @@ async fn main() {
     }
     let session = zenoh::open(config).await.unwrap();
 
-    // Create a subscriber for all topics matching the pattern "rt/**"
-    let subscriber = session.declare_subscriber("rt/**").await.unwrap();
+    // Create a subscriber for "rt/gps"
+    let subscriber = session
+        .declare_subscriber("rt/gps")
+        .await
+        .unwrap();
 
-    // Keep a list of discovered topics to avoid noise from duplicates
-    let mut topics = HashSet::new();
     let start = Instant::now();
+
+    let rec = rerun::RecordingStreamBuilder::new("GPS Example").spawn()?;
 
     while let Ok(msg) = subscriber.recv() {
         if let Some(timeout) = args.timeout {
@@ -41,16 +44,12 @@ async fn main() {
                 break;
             }
         }
-
-        // Ignore message if the topic is known otherwise save the topic
-        if topics.contains(msg.key_expr().as_str()) {
-            continue;
-        }
-        topics.insert(msg.key_expr().to_string());
-
-        // Capture the message encoding MIME type then split on the first ';' to get the schema
-        let schema = msg.encoding().to_string();
-        let schema = schema.splitn(2, ';').last().unwrap_or_default();
-        println!("topic: {} → {}", msg.key_expr(), schema);
+        let gps: NavSatFix = cdr::deserialize(&msg.payload().to_bytes())?;
+        let lat = gps.latitude;
+        let long = gps.longitude;
+        // println!("Latitude: {} Longitude: {}",lat, long);
+        let _ = rec.log("CurrentLoc", &rerun::GeoPoints::from_lat_lon([(lat, long)]));
     }
+
+    Ok(())
 }

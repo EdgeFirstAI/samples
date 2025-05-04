@@ -30,8 +30,6 @@ if __name__ == "__main__":
 
         # deserialize message
         radar_cube = RadarCube.deserialize(msg.payload.to_bytes())
-        print(
-            f"The radar cube has shape {radar_cube.shape}")
 
         data = np.array(radar_cube.cube).reshape(radar_cube.shape)
         # Take the absolute value of the data to improve visualization.

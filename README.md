@@ -33,15 +33,13 @@ To use the Python examples you will first need a Python installation and to inst
 pip install -r requirements.txt
 ```
 
-The EdgeFirst Python code use the `edgefirst` namespace, so samples can be found under `edgefirst.samples` and the [schemas](https://github.com/EdgeFirstAI/schemas/tree/main/edgefirst/schemas) under `edgefirst.schemas`.
-
-Python samples are found under `edgefirst/samples/...` while demos, which are more elaborate examples, are found under `edgefirst/demos/...`.  In either case the Python code is bundled as a module with a main entry point so it can be executed as follows.
+Python samples are found under `edgefirst/samples/...` and sub-folders.  For example the `list-topics` sample can be run as follows.
 
 ```
-python -m edgefirst.samples.list-topics
+python edgefirst/samples/list-topics.py --help
 ```
 
-The above example runs the `edgefirst/samples/list-topics/__main__.py` script.
+The above example runs the `edgefirst/samples/list-topics.py` script.
 
 ## Rust
 

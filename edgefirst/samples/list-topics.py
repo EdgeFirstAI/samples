@@ -1,22 +1,22 @@
-import zenoh
 from argparse import ArgumentParser
 from time import time
 
+import zenoh
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - List Topics")
-    args.add_argument('-c', '--connect', type=str, default=None,
-                      help="Connect to a Zenoh router rather than peer mode.")
+    args.add_argument('-r', '--remote', type=str, default=None,
+                      help="Connect to the remote endpoint instead of local.")
     args.add_argument('-t', '--time', type=float, default=None,
                       help="Time in seconds to run command before exiting.")
     args = args.parse_args()
 
-    # Create the default Zenoh configuration and if the connect argument is
+    # Create the default Zenoh configuration and if the remote argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
-    if args.connect is not None:
+    if args.remote is not None:
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
+        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
     # Create a subscriber for all topics matching the pattern "rt/**"

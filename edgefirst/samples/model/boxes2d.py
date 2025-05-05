@@ -1,52 +1,44 @@
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Detect
-import struct
+import rerun as rr
 from argparse import ArgumentParser
-import time
-import atexit
 import sys
-
-def handler(sample):
-    # Deserialize message
-    boxes = Detect.deserialize(sample.payload.to_bytes())
-    print(f"Received message: {boxes}")
 
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Boxes2D")
-    args.add_argument('-c', '--connect', type=str, default=None,
-                      help="Connect to a Zenoh router rather than peer mode.")
-    args.add_argument('-t', '--timeout', type=float, default=None,
-                      help="Time in seconds to run command before exiting.")
+    args.add_argument('-r', '--remote', type=str, default=None,
+                      help="Connect to a Zenoh router rather than local.")
+    rr.script_add_args(args)
     args = args.parse_args()
+
+    rr.script_setup(args, "boxes2d")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
-    if args.connect is not None:
+    if args.remote is not None:
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
+        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/model/boxes2d"
-    subscriber = session.declare_subscriber('rt/model/boxes2d', handler)
+    # Create a subscriber for "rt/camera/jpeg"
+    subscriber = session.declare_subscriber('rt/model/boxes2d')
 
-    def _on_exit():
-        session.close()
-    atexit.register(_on_exit)
+    while True:
+        msg = subscriber.recv()
+        detection = Detect.deserialize(msg.payload.to_bytes())
+        centers = []
+        sizes = []
+        labels = []
+        for box in detection.boxes:
+            centers.append((box.center_x, box.center_y))
+            sizes.append((box.width, box.height))
+            labels.append(box.label)
+        rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
 
-    # The declare_subscriber runs asynchronously, so we need to block the main
-    # thread to keep the program running.  We use time.sleep() to do this
-    # but an application could have its main control loop here instead.
-    try:
-        while True:
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("\nExiting...")
-        session.close()
-        sys.exit(0)
 
 if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:
-        sys.exit(0) 
+        sys.exit(0)

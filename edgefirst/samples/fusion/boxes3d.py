@@ -1,18 +1,20 @@
 import zenoh
-from edgefirst.schemas.sensor_msgs import PointCloud2
+from edgefirst.schemas.edgefirst_msgs import Detect
 import struct
 from argparse import ArgumentParser
 import time
 import atexit
 import sys
 
+
 def handler(sample):
     # Deserialize message
-    target = PointCloud2.deserialize(sample.payload.to_bytes())
-    print(f"Received message: {target}")
+    detect = Detect.deserialize(sample.payload.to_bytes())
+    print(f"Received message: {detect}")
+
 
 def main():
-    args = ArgumentParser(description="EdgeFirst Samples - Target")
+    args = ArgumentParser(description="EdgeFirst Samples - Boxes3D")
     args.add_argument('-c', '--connect', type=str, default=None,
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--timeout', type=float, default=None,
@@ -27,8 +29,8 @@ def main():
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/fusion/targets"
-    subscriber = session.declare_subscriber('rt/fusion/targets', handler)
+    # Create a subscriber for "rt/fusion/boxes3d"
+    subscriber = session.declare_subscriber('rt/fusion/boxes3d', handler)
 
     def _on_exit():
         session.close()
@@ -45,8 +47,9 @@ def main():
         session.close()
         sys.exit(0)
 
-if __name__ == "__main__":    
+
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        sys.exit(0) 
+        sys.exit(0)

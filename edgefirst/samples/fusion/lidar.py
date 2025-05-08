@@ -1,5 +1,5 @@
 import zenoh
-from edgefirst.schemas.edgefirst_msgs import Mask
+from edgefirst.schemas.sensor_msgs import PointCloud2
 import struct
 from argparse import ArgumentParser
 import time
@@ -9,13 +9,12 @@ import sys
 
 def handler(sample):
     # Deserialize message
-    target = Mask.deserialize(sample.payload.to_bytes())
+    target = PointCloud2.deserialize(sample.payload.to_bytes())
     print(f"Received message: {target}")
 
 
 def main():
-    args = ArgumentParser(
-        description="EdgeFirst Samples - Mask Output Tracked")
+    args = ArgumentParser(description="EdgeFirst Samples - Lidar")
     args.add_argument('-c', '--connect', type=str, default=None,
                       help="Connect to a Zenoh router rather than peer mode.")
     args.add_argument('-t', '--timeout', type=float, default=None,
@@ -30,9 +29,8 @@ def main():
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/fusion/mask_output_tracked"
-    subscriber = session.declare_subscriber(
-        'rt/fusion/mask_output/tracked', handler)
+    # Create a subscriber for "rt/fusion/lidar"
+    subscriber = session.declare_subscriber('rt/fusion/lidar', handler)
 
     def _on_exit():
         session.close()

@@ -1,17 +1,19 @@
 import zenoh
-from edgefirst.schemas.edgefirst_msgs import Detect
+from edgefirst.schemas.edgefirst_msgs import Mask
 import rerun as rr
 from argparse import ArgumentParser
 import sys
+import numpy as np
+
 
 def main():
-    args = ArgumentParser(description="EdgeFirst Samples - Boxes2D")
+    args = ArgumentParser(description="EdgeFirst Samples - Mask")
     args.add_argument('-r', '--remote', type=str, default=None,
                       help="Connect to a Zenoh router rather than local.")
     rr.script_add_args(args)
     args = args.parse_args()
 
-    rr.script_setup(args, "boxes2d")
+    rr.script_setup(args, "mask")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
@@ -21,23 +23,23 @@ def main():
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/camera/jpeg"
-    subscriber = session.declare_subscriber('rt/model/boxes2d')
+    # Create a subscriber for "rt/camera/mask"
+    subscriber = session.declare_subscriber('rt/model/mask')
 
     while True:
         msg = subscriber.recv()
-        detection = Detect.deserialize(msg.payload.to_bytes())
-        centers = []
-        sizes = []
-        labels = []
-        for box in detection.boxes:
-            centers.append((box.center_x, box.center_y))
-            sizes.append((box.width, box.height))
-            labels.append(box.label)
-        rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
+        mask = Mask.deserialize(msg.payload.to_bytes())
+        np_arr = np.asarray(mask.mask, dtype=np.uint8)
+        np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
+        np_arr = np.argmax(np_arr, axis=2)
+        rr.log(
+            "/", rr.AnnotationContext([
+                (0, "background", (0, 0, 0)),
+                (1, "person", (255, 0, 0))]))
+        rr.log("mask", rr.SegmentationImage(np_arr))
 
 
-if __name__ == "__main__":    
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:

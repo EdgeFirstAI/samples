@@ -2,3 +2,5 @@ eclipse-zenoh
 edgefirst-schemas
 numpy
 rerun-sdk
+edgefirst-client
+pillow

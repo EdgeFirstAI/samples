@@ -24,7 +24,9 @@ async fn main() {
         let mut post_connect: String = "['".to_owned();
         post_connect = post_connect + &connect + "']";
         config.insert_json5("mode", "'client'").unwrap();
-        config.insert_json5("connect/endpoints", &post_connect).unwrap();
+        config
+            .insert_json5("connect/endpoints", &post_connect)
+            .unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 

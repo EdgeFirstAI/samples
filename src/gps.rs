@@ -1,5 +1,5 @@
 use clap::Parser;
-use edgefirst_schemas::sensor_msgs::{NavSatFix};
+use edgefirst_schemas::sensor_msgs::NavSatFix;
 use std::{error::Error, time::Instant};
 use zenoh::Config;
 
@@ -24,15 +24,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut post_connect: String = "['".to_owned();
         post_connect = post_connect + &connect + "']";
         config.insert_json5("mode", "'client'").unwrap();
-        config.insert_json5("connect/endpoints", &post_connect).unwrap();
+        config
+            .insert_json5("connect/endpoints", &post_connect)
+            .unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 
     // Create a subscriber for "rt/gps"
-    let subscriber = session
-        .declare_subscriber("rt/gps")
-        .await
-        .unwrap();
+    let subscriber = session.declare_subscriber("rt/gps").await.unwrap();
 
     let start = Instant::now();
 

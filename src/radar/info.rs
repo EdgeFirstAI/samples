@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             radar_info.detection_sensitivity,
             radar_info.cube
         );
-        let text = TextLog::new(format!(        
+        let text = TextLog::new(format!(
             "The radar configuration is: center frequency: {}   frequency sweep: {}   range toggle: {}   detection sensitivity: {}   sending cube: {}",
             radar_info.center_frequency,
             radar_info.frequency_sweep,

@@ -1,5 +1,5 @@
 use clap::Parser;
-use edgefirst_schemas::sensor_msgs::{IMU};
+use edgefirst_schemas::sensor_msgs::IMU;
 use std::{error::Error, time::Instant};
 use zenoh::Config;
 
@@ -24,20 +24,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut post_connect: String = "['".to_owned();
         post_connect = post_connect + &connect + "']";
         config.insert_json5("mode", "'client'").unwrap();
-        config.insert_json5("connect/endpoints", &post_connect).unwrap();
+        config
+            .insert_json5("connect/endpoints", &post_connect)
+            .unwrap();
     }
     let session = zenoh::open(config).await.unwrap();
 
     // Create a subscriber for "rt/imu"
-    let subscriber = session
-        .declare_subscriber("rt/imu")
-        .await
-        .unwrap();
+    let subscriber = session.declare_subscriber("rt/imu").await.unwrap();
 
     let start = Instant::now();
 
     let rec = rerun::RecordingStreamBuilder::new("Imu Example").spawn()?;
-    let rr_box = rerun::Boxes3D::from_half_sizes([(0.5, 0.5, 0.5)]).with_fill_mode(rerun::FillMode::Solid);
+    let rr_box =
+        rerun::Boxes3D::from_half_sizes([(0.5, 0.5, 0.5)]).with_fill_mode(rerun::FillMode::Solid);
     rec.log("box", &rr_box)?;
     let _ = rec.log("box", &rerun::Transform3D::default().with_axis_length(2.0));
 
@@ -53,8 +53,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let z = imu.orientation.z as f32;
         let w = imu.orientation.w as f32;
         // println!("X: {} Y: {} Z: {} W: {}", x, y, z, w);
-        let my_quat = rerun::Quaternion([x,y,z,w]);
-        let _ = rec.log("box", &rerun::Transform3D::default().with_quaternion(my_quat));
+        let my_quat = rerun::Quaternion([x, y, z, w]);
+        let _ = rec.log(
+            "box",
+            &rerun::Transform3D::default().with_quaternion(my_quat),
+        );
     }
 
     Ok(())

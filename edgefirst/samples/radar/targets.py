@@ -2,7 +2,7 @@ import rerun as rr
 import zenoh
 
 from argparse import ArgumentParser
-from edgefirst.samples import decode_pcd
+from edgefirst.schemas import decode_pcd
 from edgefirst.schemas.sensor_msgs import PointCloud2
 
 

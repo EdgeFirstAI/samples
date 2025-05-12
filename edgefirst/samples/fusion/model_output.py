@@ -1,15 +1,16 @@
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Mask
-import struct
 from argparse import ArgumentParser
 import time
 import atexit
 import sys
 
+
 def handler(sample):
     # Deserialize message
     target = Mask.deserialize(sample.payload.to_bytes())
     print(f"Received message: {target}")
+
 
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Model Output")
@@ -45,8 +46,9 @@ def main():
         session.close()
         sys.exit(0)
 
-if __name__ == "__main__":    
+
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        sys.exit(0) 
+        sys.exit(0)

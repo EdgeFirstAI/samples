@@ -3,7 +3,7 @@ import zenoh
 
 from argparse import ArgumentParser
 from edgefirst.schemas.sensor_msgs import PointCloud2
-from edgefirst.samples import turbo_colormap, colormap, decode_pcd
+from edgefirst.schemas import turbo_colormap, colormap, decode_pcd
 
 
 if __name__ == "__main__":

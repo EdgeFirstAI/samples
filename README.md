@@ -33,17 +33,15 @@ To use the Python examples you will first need a Python installation and to inst
 pip install -r requirements.txt
 ```
 
-Python samples are found under `edgefirst/samples/...` and sub-folders.  For example the `list-topics` sample can be run as follows.
+Python samples are found under `python/...` and sub-folders.  For example the `list-topics` sample can be run as follows.
 
 ```
-python edgefirst/samples/list-topics.py --help
+python python/list-topics.py --help
 ```
-
-The above example runs the `edgefirst/samples/list-topics.py` script.
 
 ## Rust
 
-The Rust code can be found in the `src` folder with the Cargo configuration in the project root.  You will need a Rust toolchain configured to build applications, and a cross-compiler toolchain if building for a foreign operating system and architecture.  The examples can be run using `cargo run --bin APP` where `APP` is the specific example to run.
+The Rust code can be found in the `rust` folder with the Cargo configuration in the project root.  You will need a Rust toolchain configured to build applications, and a cross-compiler toolchain if building for a foreign operating system and architecture.  The examples can be run using `cargo run --bin APP` where `APP` is the specific example to run.
 
 ```
 cargo run --bin list-topics

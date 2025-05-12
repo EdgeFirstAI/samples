@@ -2,51 +2,50 @@
 name = "edgefirst-samples"
 version = "0.0.0"
 edition = "2024"
-exclude = ["./edgefirst/*"]
 
 [[bin]]
 name = "list-topics"
-path = "src/list-topics.rs"
+path = "rust/list-topics.rs"
 
 [[bin]]
 name = "lidar-clusters"
-path = "src/lidar/clusters.rs"
+path = "rust/lidar/clusters.rs"
 
 [[bin]]
 name = "lidar-points"
-path = "src/lidar/points.rs"
+path = "rust/lidar/points.rs"
 
 [[bin]]
 name = "lidar-depth"
-path = "src/lidar/depth.rs"
+path = "rust/lidar/depth.rs"
 
 [[bin]]
 name = "lidar-reflect"
-path = "src/lidar/reflect.rs"
+path = "rust/lidar/reflect.rs"
 
 [[bin]]
 name = "radar-targets"
-path = "src/radar/targets.rs"
+path = "rust/radar/targets.rs"
 
 [[bin]]
 name = "radar-clusters"
-path = "src/radar/clusters.rs"
+path = "rust/radar/clusters.rs"
 
 [[bin]]
 name = "radar-info"
-path = "src/radar/info.rs"
+path = "rust/radar/info.rs"
 
 [[bin]]
 name = "radar-cube"
-path = "src/radar/cube.rs"
+path = "rust/radar/cube.rs"
 
 [[bin]]
 name = "imu"
-path = "src/imu.rs"
+path = "rust/imu.rs"
 
 [[bin]]
 name = "gps"
-path = "src/gps.rs"
+path = "rust/gps.rs"
 
 [features]
 default = ["rerun"]

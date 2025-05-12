@@ -6,6 +6,7 @@ import sys
 import av
 import io
 
+
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - H264")
     args.add_argument('-r', '--remote', type=str, default=None,
@@ -39,13 +40,14 @@ def main():
                     continue
                 frame_position += packet.size  # Update frame position
                 for frame in packet.decode():  # Decode video frames
-                    frame_array = frame.to_ndarray(format='rgb24')  # Convert frame to numpy array
+                    # Convert frame to numpy array
+                    frame_array = frame.to_ndarray(format='rgb24')
                     rr.log('image', rr.Image(frame_array))
             except Exception as e:  # Handle exceptions
                 continue  # Continue processing next packets
-        
 
-if __name__ == "__main__":    
+
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:

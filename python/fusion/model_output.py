@@ -1,50 +1,43 @@
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Mask
+import rerun as rr
 from argparse import ArgumentParser
-import time
-import atexit
 import sys
-
-
-def handler(sample):
-    # Deserialize message
-    target = Mask.deserialize(sample.payload.to_bytes())
-    print(f"Received message: {target}")
+import numpy as np
 
 
 def main():
-    args = ArgumentParser(description="EdgeFirst Samples - Model Output")
-    args.add_argument('-c', '--connect', type=str, default=None,
-                      help="Connect to a Zenoh router rather than peer mode.")
-    args.add_argument('-t', '--timeout', type=float, default=None,
-                      help="Time in seconds to run command before exiting.")
+    args = ArgumentParser(
+        description="EdgeFirst Samples - Fusion Model Output")
+    args.add_argument('-r', '--remote', type=str, default=None,
+                      help="Connect to a Zenoh router rather than local.")
+    rr.script_add_args(args)
     args = args.parse_args()
+
+    rr.script_setup(args, "fusion/model_output")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
-    if args.connect is not None:
+    if args.remote is not None:
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.connect)
+        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
     # Create a subscriber for "rt/fusion/model_output"
-    subscriber = session.declare_subscriber('rt/fusion/model_output', handler)
+    subscriber = session.declare_subscriber('rt/fusion/model_output')
 
-    def _on_exit():
-        session.close()
-    atexit.register(_on_exit)
-
-    # The declare_subscriber runs asynchronously, so we need to block the main
-    # thread to keep the program running.  We use time.sleep() to do this
-    # but an application could have its main control loop here instead.
-    try:
-        while True:
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("\nExiting...")
-        session.close()
-        sys.exit(0)
+    while True:
+        msg = subscriber.recv()
+        mask = Mask.deserialize(msg.payload.to_bytes())
+        np_arr = np.asarray(mask.mask, dtype=np.uint8)
+        np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
+        np_arr = np.argmax(np_arr, axis=2)
+        rr.log(
+            "/", rr.AnnotationContext([
+                (0, "background", (0, 0, 0)),
+                (1, "person", (255, 0, 0))]))
+        rr.log("mask", rr.SegmentationImage(np_arr))
 
 
 if __name__ == "__main__":

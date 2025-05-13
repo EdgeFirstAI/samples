@@ -53,6 +53,8 @@ class Model:
         self.model_path = model_path
         if os.path.splitext(os.path.basename(model_path))[-1] == ".tflite":
             self.model = self.load_tflite_model(model_path, delegate)
+        elif os.path.splitext(os.path.basename(model_path))[-1] == ".onnx":
+            self.model = self.load_onnx_model(model_path)
         else:
             raise NotImplementedError(
                 f"This model {model_path} is currently not supported.")
@@ -65,13 +67,13 @@ class Model:
 
         if os.path.splitext(os.path.basename(self.model_path))[-1] == ".tflite":
             return self.run_tflite(inputs)
+        elif os.path.splitext(os.path.basename(self.model_path))[-1] == ".onnx":
+            return self.run_onnx(inputs)
         else:
             raise NotImplementedError(
                 f"This model {self.model_path} is currently not supported.")
 
     def load_tflite_model(self, model_path: str, delegate: str):
-        if os.path.splitext(os.path.basename(model_path))[-1] == ".tflite":
-
             from tflite_runtime.interpreter import (  # type: ignore
                 Interpreter,
                 load_delegate
@@ -163,6 +165,71 @@ class Model:
             return boxes, classes, scores
         return masks
     
+    def load_onnx_model(self, model_path: str):
+        import onnxruntime # type: ignore
+
+        providers = onnxruntime.get_available_providers()
+        print(f"Providers: {providers}")
+        model = onnxruntime.InferenceSession(model_path, providers=providers)
+
+        inputs = model.get_inputs()
+        self.shape = inputs[0].shape[1:3]
+        self.type = inputs[0].type
+
+        # 3 outputs => multi-task
+        outputs = model.get_outputs()
+        if len(outputs) > 2:
+            self.with_boxes = True
+            self.with_masks = True
+        # 2 outputs => detection
+        elif len(outputs) > 1:
+            self.with_boxes = True
+            self.with_masks = False
+        # 1 outputs => segmentation
+        else:
+            self.with_boxes = False
+            self.with_masks = True
+
+        self.output_names = [x.name for x in outputs]
+
+        return model
+    
+    def run_onnx(self, inputs: np.ndarray):
+        if "float" in self.type:
+            inputs = np.array(inputs, dtype=np.float32)
+        else:
+            inputs = np.array(inputs, dtype=np.uint8)
+
+        outputs = self.model.run(self.output_names,
+                                 {self.model.get_inputs()[0].name: inputs})
+
+        boxes, classes, scores, masks = None, None, None, None
+        if isinstance(outputs, list):
+            for output in outputs:
+                if len(output.shape) == 4:
+                    if output.shape[-2] == 1:
+                        boxes = output
+                    else:
+                        masks = output
+                else:
+                    scores = output
+        else:
+            masks = outputs
+
+        if boxes is not None and scores is not None:
+            boxes, classes, scores = self.nms(
+                boxes, 
+                scores,
+                iou_threshold=self.iou_threshold,
+                score_threshold=self.score_threshold
+            )
+
+        if self.with_boxes and self.with_masks:
+            return boxes, classes, scores, masks
+        elif self.with_boxes:
+            return boxes, classes, scores
+        return masks
+    
     @staticmethod
     def input_preprocess(sample: bytes):
         buffer = sample.get_buffer()
@@ -194,7 +261,7 @@ class Model:
             buffer.unmap(map_info)
 
     def nms(
-        self, 
+        self,
         bboxes: np.ndarray,
         pscores: np.ndarray,
         iou_threshold: float,
@@ -304,10 +371,14 @@ def on_new_sample(app_sink, ctx):
     rr.set_time("camera", sequence=ctx.frame_id)
     rr.log("camera", rr.Image(frame).compress(jpeg_quality=90))
 
+    ctx_labels = ctx.labels
+    if ctx_labels is not None and "background" in ctx_labels:
+        ctx_labels.remove("background") 
+
     labels = []
     for i, box in enumerate(boxes):
         print('    %s [%3d%%]: %3.2f %3.2f %3.2f %3.2f' % (
-            ctx.labels[int(classes[i])] if ctx.labels else int(classes[i]),
+            ctx_labels[int(classes[i])] if ctx_labels else int(classes[i]),
             scores[i] * 100,
             box[0],
             box[1],
@@ -315,7 +386,7 @@ def on_new_sample(app_sink, ctx):
             box[3]))
         
         labels.append("%s, [%3d%%]" % (
-            ctx.labels[int(classes[i])] if ctx.labels else int(classes[i]), 
+            ctx_labels[int(classes[i])] if ctx_labels else int(classes[i]), 
             scores[i] * 100)
         )
 

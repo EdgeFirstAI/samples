@@ -39,6 +39,15 @@ Python samples are found under `python/...` and sub-folders.  For example the `l
 python python/list-topics.py --help
 ```
 
+Running the python **Modelpack** samples on embedded devices requires the GStreamer library.  You can verify the installation using the command.
+
+```
+$ python3
+>>> import gi
+```
+
+Otherwise, follow the [PyGObject installation instructions](https://pygobject.gnome.org/getting_started.html#ubuntu-getting-started).
+
 ## Rust
 
 The Rust code can be found in the `rust` folder with the Cargo configuration in the project root.  You will need a Rust toolchain configured to build applications, and a cross-compiler toolchain if building for a foreign operating system and architecture.  The examples can be run using `cargo run --bin APP` where `APP` is the specific example to run.

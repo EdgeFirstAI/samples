@@ -63,7 +63,8 @@ class Model:
         height, width = self.shape
         image = Image.fromarray(inputs)
         image = image.resize((width, height))
-        inputs = np.expand_dims(np.array(image).astype(np.uint8), 0) # TFLite is quantized with uint8 input.
+        # TFLite is quantized with uint8 input.
+        inputs = np.expand_dims(np.array(image).astype(np.uint8), 0)
 
         if os.path.splitext(os.path.basename(self.model_path))[-1] == ".tflite":
             return self.run_tflite(inputs)
@@ -74,41 +75,41 @@ class Model:
                 f"This model {self.model_path} is currently not supported.")
 
     def load_tflite_model(self, model_path: str, delegate: str):
-            from tflite_runtime.interpreter import (  # type: ignore
-                Interpreter,
-                load_delegate
-            )
-            if delegate and os.path.exists(delegate) and delegate.endswith(".so"):
-                ext_delegate = load_delegate(delegate, {})
-                model = Interpreter(
-                    model_path, experimental_delegates=[ext_delegate])
-            else:
-                model = Interpreter(model_path)
+        from tflite_runtime.interpreter import (  # type: ignore
+            Interpreter,
+            load_delegate
+        )
+        if delegate and os.path.exists(delegate) and delegate.endswith(".so"):
+            ext_delegate = load_delegate(delegate, {})
+            model = Interpreter(
+                model_path, experimental_delegates=[ext_delegate])
+        else:
+            model = Interpreter(model_path)
 
-            # Loading the model
-            model.allocate_tensors()
+        # Loading the model
+        model.allocate_tensors()
 
-            # Get input and output tensors.
-            input_details = model.get_input_details()
-            output_details = model.get_output_details()
+        # Get input and output tensors.
+        input_details = model.get_input_details()
+        output_details = model.get_output_details()
 
-            # return [height, width]
-            self.shape = input_details[0]['shape'][1:3]
+        # return [height, width]
+        self.shape = input_details[0]['shape'][1:3]
 
-            # 3 outputs => multi-task
-            if len(output_details) > 2:
-                self.with_boxes = True
-                self.with_masks = True
-            # 2 outputs => detection
-            elif len(output_details) > 1:
-                self.with_boxes = True
-                self.with_masks = False
-            # 1 outputs => segmentation
-            else:
-                self.with_boxes = False
-                self.with_masks = True
+        # 3 outputs => multi-task
+        if len(output_details) > 2:
+            self.with_boxes = True
+            self.with_masks = True
+        # 2 outputs => detection
+        elif len(output_details) > 1:
+            self.with_boxes = True
+            self.with_masks = False
+        # 1 outputs => segmentation
+        else:
+            self.with_boxes = False
+            self.with_masks = True
 
-            return model
+        return model
 
     def run_tflite(self, inputs: np.ndarray):
         input_details = self.model.get_input_details()
@@ -164,9 +165,9 @@ class Model:
         elif self.with_boxes:
             return boxes, classes, scores
         return masks
-    
+
     def load_onnx_model(self, model_path: str):
-        import onnxruntime # type: ignore
+        import onnxruntime  # type: ignore
 
         providers = onnxruntime.get_available_providers()
         print(f"Providers: {providers}")
@@ -193,7 +194,7 @@ class Model:
         self.output_names = [x.name for x in outputs]
 
         return model
-    
+
     def run_onnx(self, inputs: np.ndarray):
         if "float" in self.type:
             inputs = np.array(inputs, dtype=np.float32)
@@ -218,7 +219,7 @@ class Model:
 
         if boxes is not None and scores is not None:
             boxes, classes, scores = self.nms(
-                boxes, 
+                boxes,
                 scores,
                 iou_threshold=self.iou_threshold,
                 score_threshold=self.score_threshold
@@ -229,7 +230,7 @@ class Model:
         elif self.with_boxes:
             return boxes, classes, scores
         return masks
-    
+
     @staticmethod
     def input_preprocess(sample: bytes):
         buffer = sample.get_buffer()
@@ -255,7 +256,7 @@ class Model:
                 inputs = inputs[:, :, ::-1]  # convert BGR to RGB
             else:
                 raise ValueError(f"Unsupported format: {format_str}")
-            
+
             return inputs
         finally:
             buffer.unmap(map_info)
@@ -271,7 +272,7 @@ class Model:
         # Reshape boxes and scores and compute classes
         bboxes = np.reshape(bboxes, (-1, 4))
 
-        if self.with_masks: # Multitask
+        if self.with_masks:  # Multitask
             pscores = pscores[0][..., 1:]  # remove background boxes first
         else:
             pscores = pscores[0]
@@ -322,7 +323,7 @@ class Model:
         classes = classes[keep]
 
         return boxes, classes, scores
-    
+
     @staticmethod
     def softmax(x: np.ndarray):
         # Subtract the maximum for numerical stability
@@ -330,7 +331,14 @@ class Model:
         return e_x / np.sum(e_x, axis=-1, keepdims=True)
 
 
-def login(username: str, password: str, server: str, session_id: str, model_path: str, labels_path: str):
+def login(
+    username: str, 
+    password: str, 
+    server: str, 
+    session_id: str, 
+    model_path: str, 
+    labels_path: str
+):
     """
     Only login to EdgeFirst Client if the model and labels.txt does not
     exist and the client is needed to fetch the artifacts. 
@@ -373,7 +381,7 @@ def on_new_sample(app_sink, ctx):
 
     ctx_labels = ctx.labels
     if ctx_labels is not None and "background" in ctx_labels:
-        ctx_labels.remove("background") 
+        ctx_labels.remove("background")
 
     labels = []
     for i, box in enumerate(boxes):
@@ -384,9 +392,9 @@ def on_new_sample(app_sink, ctx):
             box[1],
             box[2],
             box[3]))
-        
+
         labels.append("%s, [%3d%%]" % (
-            ctx_labels[int(classes[i])] if ctx_labels else int(classes[i]), 
+            ctx_labels[int(classes[i])] if ctx_labels else int(classes[i]),
             scores[i] * 100)
         )
 
@@ -407,11 +415,11 @@ def on_new_sample(app_sink, ctx):
             "camera/mask",
             rr.SegmentationImage(resized_mask)
         )
-        
+
     rr.log(
-        "camera/boxes", 
-        rr.Boxes2D(array=boxes, 
-                   array_format=rr.Box2DFormat.XYXY, 
+        "camera/boxes",
+        rr.Boxes2D(array=boxes,
+                   array_format=rr.Box2DFormat.XYXY,
                    class_ids=classes, labels=labels)
     )
     ctx.frame_id += 1
@@ -429,8 +437,8 @@ def on_error(bus, msg, loop, pipeline):
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Deploying Modelpack",
                           formatter_class=RawTextHelpFormatter)
-    args.add_argument('-u', '--user' \
-    'name', type=str, default=None,
+    args.add_argument('-u', '--user'
+                      'name', type=str, default=None,
                       help=("Specify EdgeFirst Studio username. "
                             "Optionally using the edgefirst-client to fetch the artifacts."))
     args.add_argument('-p', '--password', type=str, default=None,
@@ -459,11 +467,7 @@ def main():
                       help="NMS score threshold.")
     args.add_argument('--iou-threshold', type=float, default=0.50,
                       help="NMS IoU threshold.")
-    
-    # rr.script_add_args(args)
     args = args.parse_args()
-
-    # rr.script_setup(args, "modelpack")
 
     model_path = args.model
     if model_path and not os.path.exists(model_path):
@@ -515,6 +519,26 @@ def main():
 
 
 if __name__ == '__main__':
+    """
+    If the model needs to be downloaded from EdgeFirst Studio, run the command.
+
+    ```
+    python3 python/model/modelpack.py \
+        --model modelpack.tflite \
+        --server <server> \
+        --username <username> \
+        --password <password> \
+        --trainer <trainer session ID>
+    ```
+
+    Otherwise, if the model artifacts is already downloaded, run the command.
+
+    ```
+    python3 python/model/modelpack.py \
+        --model <path to the TFLite or ONNX model> \
+        --labels <path to the labels.txt>
+    ```
+    """
     try:
         main()
     except KeyboardInterrupt:

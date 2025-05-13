@@ -1,34 +1,11 @@
-use clap::Parser;
-use std::{collections::HashSet, time::Instant};
-use zenoh::Config;
-
-#[derive(Parser, Debug, Clone)]
-struct Args {
-    /// Time in seconds to run command before exiting.
-    #[arg(short, long)]
-    pub timeout: Option<u64>,
-
-    /// Connect to a Zenoh router rather than peer mode.
-    #[arg(short, long)]
-    connect: Option<String>,
-}
+use clap::Parser as _;
+use edgefirst_samples::Args;
+use std::{collections::HashSet, error::Error, time::Instant};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-
-    // Create the default Zenoh configuration and if the connect argument is
-    // provided set the mode to client and add the target to the endpoints.
-    let mut config = Config::default();
-    if let Some(connect) = args.connect {
-        let mut post_connect: String = "['".to_owned();
-        post_connect = post_connect + &connect + "']";
-        config.insert_json5("mode", "'client'").unwrap();
-        config
-            .insert_json5("connect/endpoints", &post_connect)
-            .unwrap();
-    }
-    let session = zenoh::open(config).await.unwrap();
+    let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create a subscriber for all topics matching the pattern "rt/**"
     let subscriber = session.declare_subscriber("rt/**").await.unwrap();
@@ -38,10 +15,8 @@ async fn main() {
     let start = Instant::now();
 
     while let Ok(msg) = subscriber.recv() {
-        if let Some(timeout) = args.timeout {
-            if start.elapsed().as_secs() >= timeout {
-                break;
-            }
+        if start.elapsed().as_secs() >= 5 {
+            break;
         }
 
         // Ignore message if the topic is known otherwise save the topic
@@ -55,4 +30,6 @@ async fn main() {
         let schema = schema.splitn(2, ';').last().unwrap_or_default();
         println!("topic: {} → {}", msg.key_expr(), schema);
     }
+
+    Ok(())
 }

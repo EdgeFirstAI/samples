@@ -5,9 +5,9 @@ use zenoh::config::{Config, WhatAmI};
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    /// Time in seconds to run command before automatically exiting.
-    #[arg(short, long)]
-    pub timeout: Option<u64>,
+    /// Rerun parameters
+    #[command(flatten)]
+    pub rerun: rerun::clap::RerunArgs,
 
     /// zenoh connection mode
     #[arg(long, default_value = "peer")]
@@ -15,7 +15,7 @@ pub struct Args {
 
     /// connect to zenoh endpoints
     #[arg(short, long)]
-    connect: Vec<String>,
+    remote: Vec<String>,
 
     /// listen to zenoh endpoints
     #[arg(short, long)]
@@ -34,9 +34,9 @@ impl From<Args> for Config {
             .insert_json5("mode", &json!(args.mode).to_string())
             .unwrap();
 
-        if !args.connect.is_empty() {
+        if !args.remote.is_empty() {
             config
-                .insert_json5("connect/endpoints", &json!(args.connect).to_string())
+                .insert_json5("connect/endpoints", &json!(args.remote).to_string())
                 .unwrap();
         }
 

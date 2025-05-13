@@ -4,7 +4,7 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 import numpy as np
 from PIL import Image
-# import rerun as rr
+import rerun as rr
 
 # Note autopep8 and other auto-formatters can break this piece of code so we
 # include a comment of the appropriate layout for reference.  This is required
@@ -36,6 +36,7 @@ class Model:
         self.with_boxes = True
         self.labels = None
         self.model = None
+        self.frame_id = 0
 
     def load_labels(self, labels_path: str):
         # Loading the labels to assign to bounding boxes
@@ -254,6 +255,12 @@ class Model:
         classes = classes[keep]
 
         return boxes, classes, scores
+    
+    @staticmethod
+    def softmax(x: np.ndarray):
+        # Subtract the maximum for numerical stability
+        e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
+        return e_x / np.sum(e_x, axis=-1, keepdims=True)
 
 
 def login(username: str, password: str, server: str, session_id: str, model_path: str, labels_path: str):
@@ -278,17 +285,26 @@ def login(username: str, password: str, server: str, session_id: str, model_path
 
 def on_new_sample(app_sink, ctx):
     sample = app_sink.pull_sample()
-    outputs = ctx.run_model(ctx.input_preprocess(sample))
+    frame = ctx.input_preprocess(sample)
+    h, w = frame.shape[:2]
+    outputs = ctx.run_model(frame)
 
     boxes, classes, scores = [], [], []
     masks = None
     if ctx.with_boxes and ctx.with_masks:
         boxes, classes, scores, masks = outputs
+        boxes = boxes * [w, h, w, h]
     elif ctx.with_boxes:
         boxes, classes, scores = outputs
+        boxes = boxes * [w, h, w, h]
     else:
         masks = outputs
 
+    # Start a new frame log
+    rr.set_time("camera", sequence=ctx.frame_id)
+    rr.log("camera", rr.Image(frame).compress(jpeg_quality=90))
+
+    labels = []
     for i, box in enumerate(boxes):
         print('    %s [%3d%%]: %3.2f %3.2f %3.2f %3.2f' % (
             ctx.labels[int(classes[i])] if ctx.labels else int(classes[i]),
@@ -297,6 +313,37 @@ def on_new_sample(app_sink, ctx):
             box[1],
             box[2],
             box[3]))
+        
+        labels.append("%s, [%3d%%]" % (
+            ctx.labels[int(classes[i])] if ctx.labels else int(classes[i]), 
+            scores[i] * 100)
+        )
+
+    if masks is not None:
+        nc = masks.shape[0]
+        resized_mask = np.zeros((nc, h, w), dtype=np.uint8)
+        masks = ctx.softmax(masks)
+        masks = np.argmax(masks, axis=-1).astype(np.uint8)
+        print(f"Mask Labels: {np.unique(masks)}")
+
+        for i, mask in enumerate(masks):
+            mask = Image.fromarray(mask)
+            mask = mask.resize((w, h), resample=Image.NEAREST)
+            mask = np.asarray(mask)
+            resized_mask[i] = mask
+
+        rr.log(
+            "camera/mask",
+            rr.SegmentationImage(resized_mask)
+        )
+        
+    rr.log(
+        "camera/boxes", 
+        rr.Boxes2D(array=boxes, 
+                   array_format=rr.Box2DFormat.XYXY, 
+                   class_ids=classes, labels=labels)
+    )
+    ctx.frame_id += 1
 
     return False
 
@@ -311,7 +358,8 @@ def on_error(bus, msg, loop, pipeline):
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Deploying Modelpack",
                           formatter_class=RawTextHelpFormatter)
-    args.add_argument('-u', '--username', type=str, default=None,
+    args.add_argument('-u', '--user' \
+    'name', type=str, default=None,
                       help=("Specify EdgeFirst Studio username. "
                             "Optionally using the edgefirst-client to fetch the artifacts."))
     args.add_argument('-p', '--password', type=str, default=None,
@@ -323,9 +371,9 @@ def main():
     args.add_argument('-t', '--trainer', type=str,
                       help="Specify trainer session ID to fetch model artifacts.")
     args.add_argument('-c', '--camera', type=str, default="/dev/video3",
-                      help="video4linux2 camera device for capture.")
+                      help="Specify the video4linux2 camera device for capture.")
     args.add_argument('-r', '--resolution', type=str, default='640x480',
-                      help='camera capture resolution.')
+                      help='Specify the camera capture resolution.')
     args.add_argument('-m', '--model', type=str, required=True,
                       help=("Specify the path to the model or the model to download. "
                             "Examples include modelpack.tflite, modelpack.onnx"))
@@ -334,10 +382,13 @@ def main():
                             "indices to string."))
     args.add_argument('-d', '--delegate', type=str, default='/usr/lib/libvx_delegate.so',
                       help="Specify the path to the NPU delegate for the TFLite.")
+    args.add_argument('--rerun', type=str, default='modelpack-sample.rrd',
+                      help="Specify the path to save the rerun file.")
     args.add_argument('--score-threshold', type=float, default=0.25,
                       help="NMS score threshold.")
     args.add_argument('--iou-threshold', type=float, default=0.50,
                       help="NMS IoU threshold.")
+    
     # rr.script_add_args(args)
     args = args.parse_args()
 
@@ -362,6 +413,11 @@ def main():
     ctx = Model(score_threshold=args.score_threshold,
                 iou_threshold=args.iou_threshold)
     ctx.load_model(model_path=model_path, delegate=args.delegate)
+    ctx.load_labels(labels_path=args.labels)
+
+    rr.init("ModelPack", spawn=False)
+    rr.save(args.rerun)
+    ctx.frame_id = 0
 
     # This is needed to expose the app_sink.pull_sample() function.
     _ = GstApp

@@ -41,27 +41,27 @@ path = "rust/radar/cube.rs"
 
 [[bin]]
 name = "fusion-radar"
-path = "src/fusion/radar.rs"
+path = "rust/fusion/radar.rs"
 
 [[bin]]
 name = "fusion-lidar"
-path = "src/fusion/lidar.rs"
+path = "rust/fusion/lidar.rs"
 
 [[bin]]
 name = "fusion-boxes3d"
-path = "src/fusion/boxes3d.rs"
+path = "rust/fusion/boxes3d.rs"
 
 [[bin]]
 name = "fusion-occupancy"
-path = "src/fusion/occupancy.rs"
+path = "rust/fusion/occupancy.rs"
 
 [[bin]]
 name = "fusion-model-output"
-path = "src/fusion/model_output.rs"
+path = "rust/fusion/model_output.rs"
 
 [[bin]]
 name = "fusion-model-output-tracked"
-path = "src/fusion/model_output_tracked.rs"
+path = "rust/fusion/model_output_tracked.rs"
 
 [[bin]]
 name = "imu"

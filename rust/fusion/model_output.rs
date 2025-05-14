@@ -1,43 +1,18 @@
 use clap::Parser;
+use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Mask;
 use rerun::{
     AnnotationContext, SegmentationImage, datatypes::ClassDescriptionMapElem, external::ndarray,
 };
-use std::{error::Error, path::PathBuf, time::Instant};
-use zenoh::Config;
-#[derive(Parser, Debug, Clone)]
-struct Args {
-    /// Time in seconds to run command before exiting.
-    #[arg(short, long)]
-    pub timeout: Option<u64>,
-
-    /// Connect to a Zenoh router rather than peer mode.
-    #[arg(short, long)]
-    connect: Option<String>,
-
-    /// Rerun file
-    #[arg(short, long)]
-    rerun: Option<PathBuf>,
-}
+use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+    let session = zenoh::open(args.clone()).await.unwrap();
 
-    let rec = rerun::RecordingStreamBuilder::new("fusion/model_output Example")
-        .save(args.rerun.unwrap_or("fusion-model-output.rrd".into()))?;
-
-    // Create the default Zenoh configuration and if the connect argument is
-    // provided set the mode to client and add the target to the endpoints.
-    let mut config = Config::default();
-    if let Some(connect) = args.connect {
-        let post_connect = format!("['{connect}']");
-        config.insert_json5("mode", "'client'").unwrap();
-        config
-            .insert_json5("connect/endpoints", &post_connect)
-            .unwrap();
-    }
-    let session = zenoh::open(config).await.unwrap();
+    // Create Rerun logger using the provided parameters
+    let (rec, _serve_guard) = args.rerun.init("fusion/model_output Example")?;
 
     // Create a subscriber for "rt/fusion/model_output"
     let subscriber = session
@@ -45,7 +20,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .unwrap();
 
-    let start = Instant::now();
     let _ = rec.log_static(
         "/",
         &AnnotationContext::new([
@@ -54,11 +28,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ]),
     );
     while let Ok(msg) = subscriber.recv() {
-        if let Some(timeout) = args.timeout {
-            if start.elapsed().as_secs() >= timeout {
-                break;
-            }
-        }
         let bytes = &msg.payload().to_bytes();
         let mask: Mask = cdr::deserialize(bytes)?;
         println!(

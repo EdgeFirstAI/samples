@@ -10,7 +10,7 @@ def main():
     """
     This demo requires lidar output to be enabled on `fusion` to work.
     By default the rt/fusion/lidar output is not enabled for `fusion`.
-    To enable it, configure LIDAR_OUTPUT_TOPIC="rt/fusion/lidar" to set 
+    To enable it, configure LIDAR_OUTPUT_TOPIC="rt/fusion/lidar" or set 
     command line argument --lidar-output-topic=rt/fusion/lidar
     """
     args = ArgumentParser(description="EdgeFirst Samples - Lidar")
@@ -44,6 +44,18 @@ def main():
         colors = [
             colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
         rr.log("fusion/lidar", rr.Points3D(positions=pos, colors=colors))
+        points = [p for p in points if p.fields["vision_class"] != 0]
+
+        min_x = min([p.x for p in points], default=float("inf"))
+        max_x = max([p.x for p in points], default=float("-inf"))
+
+        min_y = min([p.y for p in points], default=float("inf"))
+        max_y = max([p.y for p in points], default=float("-inf"))
+
+        min_z = min([p.z for p in points], default=float("inf"))
+        max_z = max([p.z for p in points], default=float("-inf"))
+        print(
+            f"Recieved {len(points)} lidar points with non-background vision_class. Values: x: [{min_x:.2f}, {max_x:.2f}]\ty: [{min_y:.2f}, {max_y:.2f}]\tz: [{min_z:.2f}, {max_z:.2f}]")
 
 
 if __name__ == "__main__":

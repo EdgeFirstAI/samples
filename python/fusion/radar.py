@@ -39,6 +39,19 @@ def main():
             colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
         rr.log("fusion/radar", rr.Points3D(positions=pos, colors=colors))
 
+        points = [p for p in points if p.fields["vision_class"] != 0]
+
+        min_x = min([p.x for p in points], default=float("inf"))
+        max_x = max([p.x for p in points], default=float("-inf"))
+
+        min_y = min([p.y for p in points], default=float("inf"))
+        max_y = max([p.y for p in points], default=float("-inf"))
+
+        min_z = min([p.z for p in points], default=float("inf"))
+        max_z = max([p.z for p in points], default=float("-inf"))
+        print(
+            f"Recieved {len(points)} radar points with non-background vision_class. Values: x: [{min_x:.2f}, {max_x:.2f}]\ty: [{min_y:.2f}, {max_y:.2f}]\tz: [{min_z:.2f}, {max_z:.2f}]")
+
 
 if __name__ == "__main__":
     try:

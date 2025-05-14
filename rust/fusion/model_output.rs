@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create Rerun logger using the provided parameters
-    let (rec, _serve_guard) = args.rerun.init("fusion/model_output Example")?;
+    let (rec, _serve_guard) = args.rerun.init("fusion-model_output")?;
 
     // Create a subscriber for "rt/fusion/model_output"
     let subscriber = session

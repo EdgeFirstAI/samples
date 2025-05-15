@@ -1,11 +1,10 @@
+#![cfg_attr(not(target_os = "linux"), allow(dead_code, unused_imports))]
+
 use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::DmaBuf;
 use fourcc::FourCC;
-use std::{
-    error::Error, ffi::c_void, os::fd::AsRawFd, ptr::null_mut, slice::from_raw_parts_mut,
-    time::Duration,
-};
+use std::{error::Error, ffi::c_void, ptr::null_mut, slice::from_raw_parts_mut, time::Duration};
 mod fourcc;
 use fourcc::image_size;
 
@@ -15,8 +14,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     use async_pidfd::PidFd;
     use libc::{MAP_SHARED, PROT_READ, PROT_WRITE, mmap, munmap};
     use pidfd_getfd::{GetFdFlags, get_file_from_pidfd};
+    use std::os::fd::AsRawFd;
 
     let args = Args::parse();
+    if !args.remote.is_empty() {
+        eprintln!("WARNING: Camera DMA example will not work over remote connections");
+    }
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create Rerun logger using the provided parameters
@@ -33,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 Ok(msg) => match msg {
                     Some(v) => v,
                     None => {
-                        println!(
+                        eprintln!(
                             "timeout receiving camera frame on {}",
                             subscriber.key_expr()
                         );
@@ -41,7 +44,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 },
                 Err(e) => {
-                    println!(
+                    eprintln!(
                         "error receiving camera frame on {}: {:?}",
                         subscriber.key_expr(),
                         e
@@ -55,22 +58,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let pidfd: PidFd = match PidFd::from_pid(dma_buf.pid as i32) {
             Ok(v) => v,
             Err(e) => {
-                println!(
-                    "Err getting PidFd: {:?}. Check if sample is running on same device with same permissions as camera",
+                eprintln!(
+                    "Error getting PidFd: {:?}. Check if sample is running on same device with same permissions as camera",
                     e
                 );
-                continue;
+                break;
             }
         };
 
         let fd = match get_file_from_pidfd(pidfd.as_raw_fd(), dma_buf.fd, GetFdFlags::empty()) {
             Ok(v) => v,
             Err(e) => {
-                println!(
-                    "Err getting fd: {:?}. Check if sample is running on same device with same permissions as camera",
+                eprintln!(
+                    "Error getting fd: {:?}. Check if sample is running on same device with same permissions as camera",
                     e
                 );
-                continue;
+                break;
             }
         };
         let fourcc: FourCC = dma_buf.fourcc.into();
@@ -105,6 +108,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(not(target_os = "linux"))]
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() {
     eprintln!("Only Linux is supported for camera DMA example");
 }

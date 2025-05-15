@@ -4,7 +4,6 @@ import rerun as rr
 from argparse import ArgumentParser
 import sys
 
-
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Boxes2D")
     args.add_argument('-r', '--remote', type=str, default=None,
@@ -38,7 +37,7 @@ def main():
         rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:

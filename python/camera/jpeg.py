@@ -6,12 +6,10 @@ import numpy as np
 import sys
 import cv2
 
-
 def handler(sample):
     # Deserialize message
     target = CompressedImage.deserialize(sample.payload.to_bytes())
     print(f"Received message: {target}")
-
 
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - JPEG")
@@ -35,14 +33,14 @@ def main():
 
     while True:
         msg = subscriber.recv()
+        print(msg.timestamp)
         image = CompressedImage.deserialize(msg.payload.to_bytes())
         np_arr = np.frombuffer(bytearray(image.data), np.uint8)
         im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         rr.log('image', rr.Image(im))
 
-
-if __name__ == "__main__":
+if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:

@@ -6,7 +6,6 @@ import sys
 import av
 import io
 
-
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - H264")
     args.add_argument('-r', '--remote', type=str, default=None,
@@ -28,26 +27,25 @@ def main():
     subscriber = session.declare_subscriber('rt/camera/h264')
     raw_data = io.BytesIO()
     container = av.open(raw_data, format='h264', mode='r')
-    frame_position = 0
 
     while True:
         msg = subscriber.recv()
         raw_data.write(msg.payload.to_bytes())
-        raw_data.seek(frame_position)
+        raw_data.seek(0)
         for packet in container.demux():
             try:
                 if packet.size == 0:  # Skip empty packets
                     continue
-                frame_position += packet.size  # Update frame position
+                raw_data.seek(0)
+                raw_data.truncate(0)
                 for frame in packet.decode():  # Decode video frames
-                    # Convert frame to numpy array
-                    frame_array = frame.to_ndarray(format='rgb24')
+                    frame_array = frame.to_ndarray(format='rgb24')  # Convert frame to numpy array
                     rr.log('image', rr.Image(frame_array))
             except Exception as e:  # Handle exceptions
                 continue  # Continue processing next packets
+        
 
-
-if __name__ == "__main__":
+if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:

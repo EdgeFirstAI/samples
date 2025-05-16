@@ -115,7 +115,13 @@ class Model:
         input_details = self.model.get_input_details()
         output_details = self.model.get_output_details()
 
-        inputs = np.array(inputs, dtype=np.uint8)
+        int8 = input_details[0]["dtype"] == np.int8  # is TFLite quantized uint8 model
+        uint8 = input_details[0]["dtype"] == np.uint8  # is TFLite quantized uint8 model
+        if int8 or uint8:
+            scale, zero_point = input_details[0]["quantization"]
+            inputs = np.round(inputs / scale + zero_point) # de-scale
+            inputs = inputs.astype(np.uint8) if uint8 else inputs.astype(np.int8)
+
         self.model.set_tensor(input_details[0]['index'], inputs)
         self.model.invoke()
 

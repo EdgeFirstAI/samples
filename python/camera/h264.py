@@ -18,6 +18,7 @@ def main():
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
@@ -41,7 +42,7 @@ def main():
                 for frame in packet.decode():  # Decode video frames
                     frame_array = frame.to_ndarray(format='rgb24')  # Convert frame to numpy array
                     rr.log('image', rr.Image(frame_array))
-            except Exception as e:  # Handle exceptions
+            except Exception:  # Handle exceptions
                 continue  # Continue processing next packets
         
 

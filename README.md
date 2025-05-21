@@ -50,6 +50,25 @@ cargo run --bin list-topics
 > [!TIP]
 > Rust binaries will run significantly faster when built with the `--release` flag, though they will take much longer to compile!
 
+## Cross Compiling
+
+When building from a non-Linux aarch64 (ARM64) machine to target a Linux aarch64 machine you will need to cross-compile the packages.  This is fairly easy to do with Rust though some package dependencies do require some special handling.
+
+Assuming you have a working Rust toolchain simply follow these instructions.  These assume an Ubuntu compatible Linux distribution, otherwise you will need to follow alternative instructions.
+
+First add the `aarch64-unknown-linux-gnu` target.  We provide the `.cargo/config.toml` file required to properly configure the cross-linker but if building from your own project you should copy this over to your project.
+
+```bash
+rustup target add aarch64-unknown-linux-gnu
+sudo apt install gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+```
+
+Now you can compile for the new target.
+
+```bash
+cargo build --target aarch64-unknown-linux-gnu
+```
+
 # License
 
 This project is licensed under the AGPL-3.0 or under the terms of the EdgeFirst AI Middleware Commercial License.

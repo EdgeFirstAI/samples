@@ -1,16 +1,8 @@
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Detect
-import struct
 from argparse import ArgumentParser
-import time
-import atexit
 import sys
 import rerun as rr
-
-
-def handler(sample):
-    # Deserialize message
-    detect = Detect.deserialize(sample.payload.to_bytes())
 
 
 def main():
@@ -39,7 +31,10 @@ def main():
         msg = subscriber.recv()
         detection = Detect.deserialize(msg.payload.to_bytes())
         print(f"Recieved {len(detection.boxes)} 3D boxes.")
-        centers = [(x.distance, x.center_x, x.center_y)
+
+        # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
+        # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
+        centers = [(x.distance, -x.center_x, -x.center_y)
                    for x in detection.boxes]
         sizes = [(x.width, x.width, x.height)
                  for x in detection.boxes]

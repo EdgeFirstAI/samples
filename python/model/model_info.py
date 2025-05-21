@@ -30,10 +30,6 @@ def main():
         info = ModelInfo.deserialize(msg.payload.to_bytes())
         m_type = info.model_type
         m_name = info.model_name
-        input_shape = info.input_shape  # Input Shape
-        input_type = info.input_type  # Input Type
-        output_shape = info.output_shape  # Output Shape
-        output_type = info.output_type  # Output Type
         rr.log("ModelInfo", rr.TextLog("Model Name: %s Model Type: %s" % (m_name, m_type)))
 
 if __name__ == "__main__":    

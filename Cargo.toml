@@ -16,6 +16,10 @@ name = "camera-info"
 path = "rust/camera/camera_info.rs"
 
 [[bin]]
+name = "camera-h264"
+path = "rust/camera/h264.rs"
+
+[[bin]]
 name = "fusion-occupancy"
 path = "rust/fusion/occupancy.rs"
 
@@ -94,3 +98,4 @@ serde_json = "1.0.140"
 tokio = { version = "1.45.0", default-features = false, features = ["rt"] }
 zenoh = "1.3.4"
 zstd = "0.13.3"
+openh264 = { git = "https://github.com/ralfbiedert/openh264-rs.git", rev = "refs/pull/79/head" }

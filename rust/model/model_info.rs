@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let _input_type = info.input_type; // Input Type
         let _output_shape = info.output_shape; // Output Shape
         let _output_type = info.output_type; // Output Type
-        let text = "Model Name: ".to_owned() + &m_name.to_string() + " Model Type: " + &m_type.to_string();
+        let text = "Model Name: ".to_owned() + &m_name + " Model Type: " + &m_type;
         let _ = rr.log("ModelInfo", &rerun::TextLog::new(text));
     }
 

@@ -19,11 +19,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let width = info.width;
         let height = info.height;
-        let _distortion_model = info.distortion_model;
-        let _d = info.d; // Distortion parameters
-        let _k = info.k; // Intrinsic camera matrix
-        let _r = info.r; // Rectification matrix
-        let _p = info.p; // Projection matrix
         let text = "Camera Width: ".to_owned() + &width.to_string() + " Camera Height: " + &height.to_string();
         let _ = rr.log("CameraInfo", &rerun::TextLog::new(text));
     }

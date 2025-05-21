@@ -4,7 +4,7 @@ import rerun as rr
 from argparse import ArgumentParser
 import sys
 import numpy as np
-
+import cv2
 
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Mask")
@@ -18,6 +18,7 @@ def main():
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
@@ -32,14 +33,11 @@ def main():
         np_arr = np.asarray(mask.mask, dtype=np.uint8)
         np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
         np_arr = np.argmax(np_arr, axis=2)
-        rr.log(
-            "/", rr.AnnotationContext([
-                (0, "background", (0, 0, 0)),
-                (1, "person", (255, 0, 0))]))
+        rr.log("/", rr.AnnotationContext([(0, "background", (0,0,0)), (1, "person", (0,255,0))]))
         rr.log("mask", rr.SegmentationImage(np_arr))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:

@@ -16,6 +16,22 @@ name = "list-topics"
 path = "rust/list-topics.rs"
 
 [[bin]]
+name = "camera-info"
+path = "rust/camera/camera_info.rs"
+
+[[bin]]
+name = "camera-h264"
+path = "rust/camera/h264.rs"
+
+[[bin]]
+name = "fusion-occupancy"
+path = "rust/fusion/occupancy.rs"
+
+[[bin]]
+name = "fusion-target"
+path = "rust/fusion/target.rs"
+
+[[bin]]
 name = "lidar-clusters"
 path = "rust/lidar/clusters.rs"
 
@@ -30,6 +46,22 @@ path = "rust/lidar/depth.rs"
 [[bin]]
 name = "lidar-reflect"
 path = "rust/lidar/reflect.rs"
+
+[[bin]]
+name = "model-boxes"
+path = "rust/model/boxes2d.rs"
+
+[[bin]]
+name = "model-info"
+path = "rust/model/model_info.rs"
+
+[[bin]]
+name = "model-compressed_mask"
+path = "rust/model/compressed_mask.rs"
+
+[[bin]]
+name = "model-mask"
+path = "rust/model/mask.rs"
 
 [[bin]]
 name = "radar-targets"
@@ -85,14 +117,17 @@ rerun = ["dep:rerun"]
 
 [dependencies]
 cdr = "0.2.4"
-colorous = "1.0.16"
 clap = { version = "4.5.38", features = ["derive"] }
-edgefirst-schemas = "1.3.0"
+colorous = "1.0.16"
+edgefirst-schemas = "1.3.1"
+ndarray = "0.16.1"
 rerun = { version = "0.23.2", optional = true, features = ["clap"] }
 serde_json = "1.0.140"
 tokio = { version = "1.45.0", default-features = false, features = ["rt"] }
 zenoh = "1.3.4"
 itertools = "0.14.0"
+zstd = "0.13.3"
+openh264 = { git = "https://github.com/ralfbiedert/openh264-rs.git", rev = "refs/pull/79/head" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 async-pidfd = "0.1.4"

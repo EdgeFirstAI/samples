@@ -4,7 +4,6 @@ import rerun as rr
 from argparse import ArgumentParser
 import sys
 
-
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Boxes2D")
     args.add_argument('-r', '--remote', type=str, default=None,
@@ -17,6 +16,7 @@ def main():
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
@@ -38,7 +38,7 @@ def main():
         rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:

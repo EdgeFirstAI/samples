@@ -2,10 +2,7 @@ import zenoh
 from edgefirst.schemas.sensor_msgs import CameraInfo
 import rerun as rr
 from argparse import ArgumentParser
-import numpy as np
 import sys
-import cv2
-
 
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - Camera Info")
@@ -19,6 +16,7 @@ def main():
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
     config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
@@ -37,11 +35,9 @@ def main():
         K = info.k  # Intrinsic camera matrix
         R = info.r  # Rectification matrix
         P = info.p  # Projection matrix
-        rr.log("CameraInfo", rr.TextLog(
-            "Camera Width: %d Camera Height: %d" % (width, height)))
+        rr.log("CameraInfo", rr.TextLog("Camera Width: %d Camera Height: %d" % (width, height)))
 
-
-if __name__ == "__main__":
+if __name__ == "__main__":    
     try:
         main()
     except KeyboardInterrupt:

@@ -24,14 +24,6 @@ name = "camera-h264"
 path = "rust/camera/h264.rs"
 
 [[bin]]
-name = "fusion-occupancy"
-path = "rust/fusion/occupancy.rs"
-
-[[bin]]
-name = "fusion-target"
-path = "rust/fusion/target.rs"
-
-[[bin]]
 name = "lidar-clusters"
 path = "rust/lidar/clusters.rs"
 

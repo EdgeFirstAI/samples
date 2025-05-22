@@ -11,19 +11,19 @@ pub struct Args {
 
     /// zenoh connection mode
     #[arg(long, default_value = "peer")]
-    mode: WhatAmI,
+    pub mode: WhatAmI,
 
     /// connect to zenoh endpoints
     #[arg(short, long)]
-    remote: Vec<String>,
+    pub remote: Vec<String>,
 
     /// listen to zenoh endpoints
     #[arg(short, long)]
-    listen: Vec<String>,
+    pub listen: Vec<String>,
 
     /// disable zenoh multicast scouting
     #[arg(long)]
-    no_multicast_scouting: bool,
+    pub no_multicast_scouting: bool,
 }
 
 impl From<Args> for Config {

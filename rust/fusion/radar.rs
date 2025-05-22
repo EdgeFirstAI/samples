@@ -10,13 +10,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create Rerun logger using the provided parameters
-    let (rec, _serve_guard) = args.rerun.init("fusion-occupancy")?;
+    let (rec, _serve_guard) = args.rerun.init("fusion-radar")?;
 
-    // Create a subscriber for "rt/fusion/occupancy"
-    let subscriber = session
-        .declare_subscriber("rt/fusion/occupancy")
-        .await
-        .unwrap();
+    // Create a subscriber for "rt/fusion/radar"
+    let subscriber = session.declare_subscriber("rt/fusion/radar").await.unwrap();
 
     while let Ok(msg) = subscriber.recv() {
         let pcd: PointCloud2 = cdr::deserialize(&msg.payload().to_bytes())?;
@@ -39,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));
-        let _ = rec.log("fusion/occupancy", &rr_points);
+        let _ = rec.log("fusion/radar", &rr_points);
     }
 
     Ok(())

@@ -7,7 +7,13 @@ import rerun as rr
 
 
 def main():
-    args = ArgumentParser(description="EdgeFirst Samples - Occupancy")
+    """
+    This demo requires lidar output to be enabled on `fusion` to work.
+    By default the rt/fusion/lidar output is not enabled for `fusion`.
+    To enable it, configure LIDAR_OUTPUT_TOPIC="rt/fusion/lidar" or set 
+    command line argument --lidar-output-topic=rt/fusion/lidar
+    """
+    args = ArgumentParser(description="EdgeFirst Samples - Lidar")
     args.add_argument('-r', '--remote', type=str, default=None,
                       help="Connect to a Zenoh router rather than local.")
     args.add_argument('-t', '--timeout', type=float, default=None,
@@ -15,7 +21,7 @@ def main():
     rr.script_add_args(args)
     args = args.parse_args()
 
-    rr.script_setup(args, "fusion/occupancy Example")
+    rr.script_setup(args, "fusion/lidar Example")
 
     # Create the default Zenoh configuration and if the connect argument is
     # provided set the mode to client and add the target to the endpoints.
@@ -26,8 +32,8 @@ def main():
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/fusion/occupancy"
-    subscriber = session.declare_subscriber('rt/fusion/occupancy')
+    # Create a subscriber for "rt/fusion/lidar"
+    subscriber = session.declare_subscriber('rt/fusion/lidar')
 
     while True:
         msg = subscriber.recv()
@@ -38,7 +44,7 @@ def main():
         pos = [[p.x, p.y, p.z] for p in points]
         colors = [
             colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
-        rr.log("fusion/occupancy", rr.Points3D(positions=pos, colors=colors))
+        rr.log("fusion/lidar", rr.Points3D(positions=pos, colors=colors))
 
 
 if __name__ == "__main__":

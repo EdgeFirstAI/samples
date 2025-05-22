@@ -31,7 +31,6 @@ def main():
     while True:
         msg = subscriber.recv()
         detection = Detect.deserialize(msg.payload.to_bytes())
-        print(f"Recieved {len(detection.boxes)} 3D boxes.")
 
         # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
         # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up

@@ -3,14 +3,13 @@
 use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::DmaBuf;
-use fourcc::FourCC;
-use std::{error::Error, ffi::c_void, ptr::null_mut, slice::from_raw_parts_mut, time::Duration};
-mod fourcc;
-use fourcc::image_size;
-
+use std::{error::Error, ffi::c_void, ptr::null_mut, slice::from_raw_parts_mut};
 #[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // This sample needs to run on the device, with the same permissions as the camera command.
+    // We assume the camera is running with YUYV format output.
+
     use async_pidfd::PidFd;
     use libc::{MAP_SHARED, PROT_READ, PROT_WRITE, mmap, munmap};
     use pidfd_getfd::{GetFdFlags, get_file_from_pidfd};
@@ -28,32 +27,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a subscriber for "rt/camera/dma"
     let subscriber = session.declare_subscriber("rt/camera/dma").await.unwrap();
 
-    loop {
-        let dma_buf = if let Some(v) = subscriber.drain().last() {
-            v
-        } else {
-            match subscriber.recv_timeout(Duration::from_secs(2)) {
-                Ok(msg) => match msg {
-                    Some(v) => v,
-                    None => {
-                        eprintln!(
-                            "timeout receiving camera frame on {}",
-                            subscriber.key_expr()
-                        );
-                        continue;
-                    }
-                },
-                Err(e) => {
-                    eprintln!(
-                        "error receiving camera frame on {}: {:?}",
-                        subscriber.key_expr(),
-                        e
-                    );
-                    break;
-                }
-            }
-        };
-        let dma_buf: DmaBuf = cdr::deserialize(&dma_buf.payload().to_bytes()).unwrap();
+    while let Ok(msg) = subscriber.recv() {
+        let dma_buf: DmaBuf = cdr::deserialize(&msg.payload().to_bytes()).unwrap();
 
         let pidfd: PidFd = match PidFd::from_pid(dma_buf.pid as i32) {
             Ok(v) => v,
@@ -76,8 +51,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 break;
             }
         };
-        let fourcc: FourCC = dma_buf.fourcc.into();
-        let image_size = image_size(dma_buf.width, dma_buf.height, fourcc);
+
+        // YUYV has 2 bytes per pixel.
+        let image_size = (dma_buf.width * dma_buf.height * 2) as usize;
         let mmap = unsafe {
             from_raw_parts_mut(
                 mmap(

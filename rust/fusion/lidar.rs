@@ -28,15 +28,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .max()
             .unwrap_or(1)
             .max(1);
-        let points_with_vision_class: Vec<_> = points
-            .iter()
-            .filter(|x| x.fields["vision_class"] > 0.0)
-            .collect();
-        println!(
-            "Recieved {} lidar points. {} of them have vision class",
-            points.len(),
-            points_with_vision_class.len()
-        );
 
         let rr_points = Points3D::new(
             points

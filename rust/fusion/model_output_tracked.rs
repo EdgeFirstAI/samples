@@ -30,10 +30,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Ok(msg) = subscriber.recv() {
         let bytes = &msg.payload().to_bytes();
         let mask: Mask = cdr::deserialize(bytes)?;
-        println!(
-            "Recieved fusion mask output of shape {}x{}",
-            mask.width, mask.height,
-        );
 
         let mask_classes = mask.mask.len() / mask.width as usize / mask.height as usize;
         let mask_argmax: Vec<u8> = mask

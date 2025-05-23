@@ -40,5 +40,5 @@ if __name__ == "__main__":
         depth_vals = list(struct.unpack(
             f"{endian_format}{depth.width*depth.height}H", bytes(depth.data)))
         data = (np.array(depth_vals).reshape(
-            (depth.height, depth.width)) / 255).astype(np.uint8)
+            (depth.height, depth.width)) / 256).astype(np.uint8)
         rr.log("lidar/depth", rr.Image(data))

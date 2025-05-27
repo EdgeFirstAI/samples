@@ -4,19 +4,20 @@ use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
 use rerun::{Color, Points3D, Position3D};
 use std::error::Error;
 
+///    This demo requires lidar output to be enabled on `fusion` to work.
+///    By default the rt/fusion/lidar output is not enabled for `fusion`.
+///    To enable it, configure LIDAR_OUTPUT_TOPIC="rt/fusion/lidar" or set
+///    command line argument --lidar-output-topic=rt/fusion/lidar
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create Rerun logger using the provided parameters
-    let (rec, _serve_guard) = args.rerun.init("fusion-occupancy")?;
+    let (rec, _serve_guard) = args.rerun.init("fusion-lidar")?;
 
-    // Create a subscriber for "rt/fusion/occupancy"
-    let subscriber = session
-        .declare_subscriber("rt/fusion/occupancy")
-        .await
-        .unwrap();
+    // Create a subscriber for "rt/fusion/lidar"
+    let subscriber = session.declare_subscriber("rt/fusion/lidar").await.unwrap();
 
     while let Ok(msg) = subscriber.recv() {
         let pcd: PointCloud2 = cdr::deserialize(&msg.payload().to_bytes())?;
@@ -39,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));
-        let _ = rec.log("fusion/occupancy", &rr_points);
+        let _ = rec.log("fusion/lidar", &rr_points);
     }
 
     Ok(())

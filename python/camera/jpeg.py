@@ -6,11 +6,6 @@ import numpy as np
 import sys
 import cv2
 
-def handler(sample):
-    # Deserialize message
-    target = CompressedImage.deserialize(sample.payload.to_bytes())
-    print(f"Received message: {target}")
-
 def main():
     args = ArgumentParser(description="EdgeFirst Samples - JPEG")
     args.add_argument('-r', '--remote', type=str, default=None,

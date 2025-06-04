@@ -42,8 +42,6 @@ def boxes2d_callback(msg):
     for box in detection.boxes:
         centers.append((int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1])))
         sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
-        print(centers)
-        print(sizes)
         labels.append(box.label)
     rr.log("camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
 

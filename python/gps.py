@@ -27,7 +27,6 @@ if __name__ == "__main__":
 
     while True:
         msg = subscriber.recv()
-
         # deserialize message
         gps = NavSatFix.deserialize(msg.payload.to_bytes())
         rr.log("CurrentLoc",

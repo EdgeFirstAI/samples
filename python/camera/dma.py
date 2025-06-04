@@ -8,8 +8,8 @@ import ctypes
 import os
 
 # Constants for syscall
-SYS_pidfd_open = 434  # On EdgeFirst Platforms
-SYS_pidfd_getfd = 438 # On EdgeFirst Platforms
+SYS_pidfd_open = 434  # From syscall.h
+SYS_pidfd_getfd = 438 # From syscall.h
 GETFD_FLAGS = 0
 
 # C bindings to syscall (Linux only)

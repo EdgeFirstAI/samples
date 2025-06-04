@@ -27,15 +27,17 @@ if __name__ == "__main__":
     # Create a subscriber for "rt/imu"
     subscriber = session.declare_subscriber('rt/imu')
 
+    rr.log("/imu", rr.Boxes3D(half_sizes=[[0.5, 0.5, 0.5]], fill_mode="solid"))
+    rr.log("/imu", rr.Transform3D(axis_length=2))
+
     while True:
         msg = subscriber.recv()
-
         # deserialize message
         imu = Imu.deserialize(msg.payload.to_bytes())
         x = imu.orientation.x
         y = imu.orientation.y
         z = imu.orientation.z
         w = imu.orientation.w
-        rr.log("box",
+        rr.log("/imu",
                rr.Transform3D(clear=False,
                               quaternion=Quaternion(xyzw=[x, y, z, w])))

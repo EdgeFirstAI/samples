@@ -29,7 +29,6 @@ def main():
 
     while True:
         msg = subscriber.recv()
-        print(msg.timestamp)
         image = CompressedImage.deserialize(msg.payload.to_bytes())
         np_arr = np.frombuffer(bytearray(image.data), np.uint8)
         im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)

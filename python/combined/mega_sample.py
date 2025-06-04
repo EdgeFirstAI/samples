@@ -265,13 +265,6 @@ def main():
     )
     rr.send_blueprint(blueprint)
 
-    print(camera_topics)
-    print(model_topics)
-    print(radar_topics)
-    print(fusion_topics)
-    print(lidar_topics)
-    print(misc_topics)
-
     cam_subscriber = None
     boxes2d_subscriber = None
     mask_subscriber = None

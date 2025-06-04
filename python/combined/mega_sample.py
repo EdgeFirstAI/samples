@@ -8,6 +8,7 @@ import zenoh
 import ctypes
 import os
 import sys
+from edgefirst.schemas.sensor_msgs import PointCloud2
 
 raw_data = io.BytesIO()
 container = av.open(raw_data, format='h264', mode='r')
@@ -98,7 +99,7 @@ def boxes2d_callback(msg):
         sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
         labels.append(box.label)
     rr.log("/camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
-    rr.log("/metrics/detection_inference", rr.Scalar(float(detection.model_time.sec) + float(detection.model_time.nanosec / 1e9)))
+    rr.log("/metrics/detection_inference", rr.Scalars(float(detection.model_time.sec) + float(detection.model_time.nanosec / 1e9)))
 
 def boxes3d_callback(msg):
     from edgefirst.schemas.edgefirst_msgs import Detect
@@ -160,7 +161,7 @@ def gps_callback(msg):
             rr.GeoPoints(lat_lon=[gps.latitude, gps.longitude]))
     
 def fusion_radar_callback(msg):
-    from edgefirst.schemas.sensor_msgs import PointCloud2
+    # from edgefirst.schemas.sensor_msgs import PointCloud2
     from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
@@ -174,7 +175,7 @@ def fusion_radar_callback(msg):
     rr.log("/pointcloud/fusion/radar", rr.Points3D(positions=pos, colors=colors))
 
 def radar_clusters_callback(msg):
-    from edgefirst.schemas.sensor_msgs import PointCloud2
+    # from edgefirst.schemas.sensor_msgs import PointCloud2
     from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
@@ -185,7 +186,7 @@ def radar_clusters_callback(msg):
     rr.log("/pointcloud/radar/clusters", rr.Points3D(pos, colors=colors))
 
 def lidar_clusters_callback(msg):
-    from edgefirst.schemas.sensor_msgs import PointCloud2
+    # from edgefirst.schemas.sensor_msgs import PointCloud2
     from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
@@ -325,7 +326,7 @@ def main():
 
     while True:
         try:
-            time.sleep(0.1)
+            time.sleep(0.01)
         except KeyboardInterrupt:
             if cam_subscriber:
                 cam_subscriber.undeclare()

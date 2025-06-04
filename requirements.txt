@@ -3,3 +3,5 @@ edgefirst-schemas
 numpy
 rerun-sdk
 zstd
+av
+opencv-python

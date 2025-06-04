@@ -34,6 +34,9 @@ def main():
 
         pcd = PointCloud2.deserialize(msg.payload.to_bytes())
         points = decode_pcd(pcd)
+        if not points:
+            rr.log("fusion/occupancy", rr.Points3D(positions=[], colors=[])) 
+            continue
         max_class = max(max([p.fields["vision_class"] for p in points]), 1)
         pos = [[p.x, p.y, p.z] for p in points]
         colors = [

@@ -10,25 +10,32 @@ from edgefirst.schemas.edgefirst_msgs import Detect
 from edgefirst.schemas.sensor_msgs import PointCloud2
 from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
 
+class MessageDrain:
+    def __init__(self, loop):
+        self._queue = asyncio.Queue()
+        self._loop = loop
+
+    def callback(self, msg):
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
+
+    async def read(self):
+        return await self._queue.get()
+
+    async def get_latest(self):
+        latest = await self._queue.get()
+        while not self._queue.empty():
+            latest = self._queue.get_nowait()
+        return latest
+
 raw_data = io.BytesIO()
 container = av.open(raw_data, format='h264', mode='r')
 frame_size = []
-last_h264_msg = None
-last_boxes2d_msg = None
-last_radar_msg = None
 
-def h264_callback(msg):
-    global last_h264_msg
-    last_h264_msg = msg
-
-async def h264_processing():
-    global last_h264_msg, frame_size
+async def h264_processing(drain):
+    global frame_size
     while True:
-        if last_h264_msg is None:
-            await asyncio.sleep(0.001)
-            continue
-
-        raw_data.write(last_h264_msg.payload.to_bytes())
+        msg = await drain.get_latest()
+        raw_data.write(msg.payload.to_bytes())
         raw_data.seek(0)
         for packet in container.demux():
             try:
@@ -39,65 +46,45 @@ async def h264_processing():
                 for frame in packet.decode():
                     frame_array = frame.to_ndarray(format='rgb24')
                     frame_size = [frame_array.shape[1], frame_array.shape[0]]
-                    rr.log('camera', rr.Image(frame_array))
+                    rr.log('/camera', rr.Image(frame_array))
             except Exception:
                 continue
-        last_h264_msg = None
-        await asyncio.sleep(0)  # Yield control
 
-def boxes2d_callback(msg):
-    global last_boxes2d_msg
-    last_boxes2d_msg = msg
 
-async def boxes2d_processing():
-    global last_boxes2d_msg, frame_size
+async def boxes2d_processing(drain):
+    global frame_size
     while True:
-        if last_boxes2d_msg is None:
-            await asyncio.sleep(0.001)
-            continue
-
+        msg = await drain.get_latest()
         if len(frame_size) != 2:
             await asyncio.sleep(0.001)
             continue
 
         centers, sizes, labels = [], [], []
+        detection = Detect.deserialize(msg.payload.to_bytes())
 
-        detection = Detect.deserialize(last_boxes2d_msg.payload.to_bytes())
         for box in detection.boxes:
             centers.append((int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1])))
             sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
             labels.append(box.label)
-        rr.log("camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
-        last_boxes2d_msg = None
-        await asyncio.sleep(0)
 
-def radar_clusters_callback(msg):
-    global last_radar_msg
-    last_radar_msg = msg
+        rr.log("/camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
 
-async def radar_processing():
-    global last_radar_msg
+
+async def radar_processing(drain):
     while True:
-        if last_radar_msg is None:
-            await asyncio.sleep(0.001)
-            continue
-
-        pcd = PointCloud2.deserialize(last_radar_msg.payload.to_bytes())
+        msg = await drain.get_latest()
+        pcd = PointCloud2.deserialize(msg.payload.to_bytes())
         points = decode_pcd(pcd)
         clusters = [p for p in points if p.id > 0]
-        if not clusters:
-            last_radar_msg = None
-            await asyncio.sleep(0)
-            continue
-
         max_id = max(p.id for p in clusters)
         pos = [[p.x, p.y, p.z] for p in clusters]
         colors = [colormap(turbo_colormap, p.id / max_id) for p in clusters]
         rr.log("/pointcloud/radar/clusters", rr.Points3D(pos, colors=colors))
-        last_radar_msg = None
-        await asyncio.sleep(0)
+
 
 async def main_async(args):
+    loop = asyncio.get_running_loop()
+
     # Setup rerun
     args.memory_limit = 10
     rr.script_setup(args, "camera_radar")
@@ -118,16 +105,21 @@ async def main_async(args):
         config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
     session = zenoh.open(config)
 
+    # Create drains
+    h264_drain = MessageDrain(loop)
+    boxes2d_drain = MessageDrain(loop)
+    radar_drain = MessageDrain(loop)
+
     # Declare subscribers
-    session.declare_subscriber('rt/camera/h264', h264_callback)
-    session.declare_subscriber('rt/model/boxes2d', boxes2d_callback)
-    session.declare_subscriber('rt/radar/clusters', radar_clusters_callback)
+    session.declare_subscriber('rt/camera/h264', h264_drain.callback)
+    session.declare_subscriber('rt/model/boxes2d', boxes2d_drain.callback)
+    session.declare_subscriber('rt/radar/clusters', radar_drain.callback)
 
     # Launch concurrent processing tasks
     await asyncio.gather(
-        h264_processing(),
-        boxes2d_processing(),
-        radar_processing()
+        h264_processing(h264_drain),
+        boxes2d_processing(boxes2d_drain),
+        radar_processing(radar_drain),
     )
 
 def main():

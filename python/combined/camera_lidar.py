@@ -82,7 +82,6 @@ def main():
 
     cam_subscriber = session.declare_subscriber('rt/camera/h264', h264_callback)
     boxes2d_subscriber = session.declare_subscriber('rt/model/boxes2d', boxes2d_callback)
-
     lidar_clusters_subscriber = session.declare_subscriber('rt/lidar/clusters', lidar_clusters_callback)
 
     while True:

@@ -1,66 +1,95 @@
-import zenoh
-import rerun as rr
 from argparse import ArgumentParser
+import asyncio
+import io
 import sys
 import av
-import io
+import zenoh
 import time
+import rerun as rr
+import rerun.blueprint as rrb
 
-raw_data = io.BytesIO()
-container = av.open(raw_data, format='h264', mode='r')
-received_messages = []
+class MessageDrain:
+    def __init__(self, loop):
+        self._queue = asyncio.Queue()
+        self._loop = loop
 
-def h264_callback(msg):
-    global received_messages
-    received_messages.append(msg.payload.to_bytes())
+    def callback(self, msg):
+        if not self._loop.is_closed():
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
 
-def main():
-    global received_messages
-    args = ArgumentParser(description="EdgeFirst Samples - H264")
-    args.add_argument('-r', '--remote', type=str, default=None,
-                      help="Connect to a Zenoh router rather than local.")
-    rr.script_add_args(args)
-    args = args.parse_args()
+    async def read(self):
+        return await self._queue.get()
 
-    rr.script_setup(args, "h264")
+    async def get_latest(self):
+        latest = await self._queue.get()
+        while not self._queue.empty():
+            latest = self._queue.get_nowait()
+        return latest
 
-    # Create the default Zenoh configuration and if the connect argument is
-    # provided set the mode to client and add the target to the endpoints.
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote is not None:
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
-    session = zenoh.open(config)
 
-    # Create a subscriber for "rt/camera/h264"
-    subscriber = session.declare_subscriber('rt/camera/h264', h264_callback)
+async def h264_processing(drain):
     raw_data = io.BytesIO()
     container = av.open(raw_data, format='h264', mode='r')
 
     while True:
-        if not received_messages:
-            time.sleep(0.001)
-            continue
-        raw_data.write(received_messages.pop())
-        # print("Skipping %d frames" % len(received_messages))
-        received_messages = []
+        msg = await drain.get_latest()
+        raw_data.write(msg.payload.to_bytes())
         raw_data.seek(0)
         for packet in container.demux():
             try:
-                if packet.size == 0:  # Skip empty packets
+                if packet.size == 0:
                     continue
                 raw_data.seek(0)
                 raw_data.truncate(0)
-                for frame in packet.decode():  # Decode video frames
-                    frame_array = frame.to_ndarray(format='rgb24')  # Convert frame to numpy array
-                    rr.log('image', rr.Image(frame_array))
-            except Exception:  # Handle exceptions
-                continue  # Continue processing next packets
-              
+                for frame in packet.decode():
+                    frame_array = frame.to_ndarray(format='rgb24')
+                    rr.log('/camera', rr.Image(frame_array))
+            except Exception:
+                continue
+    
+async def main_async(args):
+    # Setup rerun
+    args.memory_limit = 10
+    rr.script_setup(args, "h264")
 
-if __name__ == "__main__":    
+    blueprint = rrb.Blueprint(
+        rrb.Grid(contents=[
+            rrb.Spatial2DView(origin="/camera", name="Camera Feed")
+        ])
+    )
+    rr.send_blueprint(blueprint)
+
+    # Zenoh config
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote:
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+    session = zenoh.open(config)
+
+    # Create drains
+    loop = asyncio.get_running_loop()
+    h264_drain = MessageDrain(loop)
+
+    session.declare_subscriber('rt/camera/h264', h264_drain.callback)
+    await asyncio.gather((h264_processing(h264_drain)))
+
+    while True:
+        time.sleep(0.001)
+
+
+def main():
+    parser = ArgumentParser(description="EdgeFirst Samples - H264")
+    parser.add_argument('-r', '--remote', type=str, default=None,
+                        help="Connect to the remote endpoint instead of local.")
+    rr.script_add_args(parser)
+    args = parser.parse_args()
+
     try:
-        main()
+        asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
+if __name__ == "__main__":
+    main()
+

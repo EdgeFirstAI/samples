@@ -17,7 +17,8 @@ class MessageDrain:
         self._loop = loop
 
     def callback(self, msg):
-        self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
+        if not self._loop.is_closed():
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
 
     async def read(self):
         return await self._queue.get()
@@ -47,7 +48,6 @@ class FrameSize:
 async def h264_processing(drain, frame_storage):
     raw_data = io.BytesIO()
     container = av.open(raw_data, format='h264', mode='r')
-    frame_size_set = False
 
     while True:
         msg = await drain.get_latest()
@@ -61,9 +61,7 @@ async def h264_processing(drain, frame_storage):
                 raw_data.truncate(0)
                 for frame in packet.decode():
                     frame_array = frame.to_ndarray(format='rgb24')
-                    if not frame_size_set:
-                        frame_storage.set(frame_array.shape[1], frame_array.shape[0])
-                        frame_size_set = True
+                    frame_storage.set(frame_array.shape[1], frame_array.shape[0])
                     rr.log('/camera', rr.Image(frame_array))
             except Exception:
                 continue
@@ -73,6 +71,7 @@ async def boxes2d_processing(drain, frame_storage):
     frame_size = await frame_storage.get()
     while True:
         msg = await drain.get_latest()
+        frame_size = await frame_storage.get()
         centers, sizes, labels = [], [], []
         detection = Detect.deserialize(msg.payload.to_bytes())
 
@@ -89,6 +88,7 @@ async def mask_processing(drain, frame_storage, remote):
     rr.log("/", rr.AnnotationContext([(0, "background", (0, 0, 0, 0)), (1, "person", (0, 255, 0))]))
     while True:
         msg = await drain.get_latest()
+        frame_size = await frame_storage.get()
         mask = Mask.deserialize(msg.payload.to_bytes())
         if remote:
             decoded_array = zstd.decompress(bytes(mask.mask))
@@ -96,9 +96,9 @@ async def mask_processing(drain, frame_storage, remote):
         else:
             np_arr = np.asarray(mask.mask, dtype=np.uint8)
             np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
-        np_arr = cv2.resize(np_arr, frame_size)
+        # np_arr = cv2.resize(np_arr, frame_size)
         np_arr = np.argmax(np_arr, axis=2)
-
+        
         rr.log("/camera/mask", rr.SegmentationImage(np_arr))
 
 

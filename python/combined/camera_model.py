@@ -28,12 +28,27 @@ class MessageDrain:
             latest = self._queue.get_nowait()
         return latest
 
-raw_data = io.BytesIO()
-container = av.open(raw_data, format='h264', mode='r')
-frame_size = []
 
-async def h264_processing(drain):
-    global frame_size
+class FrameSize:
+    def __init__(self):
+        self._size = []
+        self._event = asyncio.Event()
+
+    def set(self, width, height):
+        self._size = [width, height]
+        if not self._event.is_set():
+            self._event.set()
+    
+    async def get(self):
+        await self._event.wait()
+        return self._size
+
+
+async def h264_processing(drain, frame_storage):
+    raw_data = io.BytesIO()
+    container = av.open(raw_data, format='h264', mode='r')
+    frame_size_set = False
+
     while True:
         msg = await drain.get_latest()
         raw_data.write(msg.payload.to_bytes())
@@ -46,20 +61,18 @@ async def h264_processing(drain):
                 raw_data.truncate(0)
                 for frame in packet.decode():
                     frame_array = frame.to_ndarray(format='rgb24')
-                    frame_size = [frame_array.shape[1], frame_array.shape[0]]
+                    if not frame_size_set:
+                        frame_storage.set(frame_array.shape[1], frame_array.shape[0])
+                        frame_size_set = True
                     rr.log('/camera', rr.Image(frame_array))
             except Exception:
                 continue
 
 
-async def boxes2d_processing(drain):
-    global frame_size
+async def boxes2d_processing(drain, frame_storage):
+    frame_size = await frame_storage.get()
     while True:
         msg = await drain.get_latest()
-        if len(frame_size) != 2:
-            await asyncio.sleep(0.001)
-            continue
-
         centers, sizes, labels = [], [], []
         detection = Detect.deserialize(msg.payload.to_bytes())
 
@@ -71,14 +84,11 @@ async def boxes2d_processing(drain):
         rr.log("/camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
 
 
-async def mask_processing(drain, remote):
-    global frame_size
+async def mask_processing(drain, frame_storage, remote):
+    frame_size = await frame_storage.get()
+    rr.log("/", rr.AnnotationContext([(0, "background", (0, 0, 0, 0)), (1, "person", (0, 255, 0))]))
     while True:
         msg = await drain.get_latest()
-        if len(frame_size) != 2:
-            await asyncio.sleep(0.001)
-            continue
-
         mask = Mask.deserialize(msg.payload.to_bytes())
         if remote:
             decoded_array = zstd.decompress(bytes(mask.mask))
@@ -89,7 +99,6 @@ async def mask_processing(drain, remote):
         np_arr = cv2.resize(np_arr, frame_size)
         np_arr = np.argmax(np_arr, axis=2)
 
-        rr.log("/", rr.AnnotationContext([(0, "background", (0, 0, 0, 0)), (1, "person", (0, 255, 0))]))
         rr.log("/camera/mask", rr.SegmentationImage(np_arr))
 
 
@@ -120,6 +129,8 @@ async def main_async(args):
     boxes2d_drain = MessageDrain(loop)
     mask_drain = MessageDrain(loop)
 
+    frame_size_storage = FrameSize()
+
     # Declare subscribers
     session.declare_subscriber('rt/camera/h264', h264_drain.callback)
     session.declare_subscriber('rt/model/boxes2d', boxes2d_drain.callback)
@@ -130,9 +141,9 @@ async def main_async(args):
 
     # Launch concurrent processing tasks
     await asyncio.gather(
-        h264_processing(h264_drain),
-        boxes2d_processing(boxes2d_drain),
-        mask_processing(mask_drain, args.remote),
+        h264_processing(h264_drain, frame_size_storage),
+        boxes2d_processing(boxes2d_drain, frame_size_storage),
+        mask_processing(mask_drain, frame_size_storage, args.remote),
     )
 
 def main():

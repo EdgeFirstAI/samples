@@ -5,7 +5,9 @@ import sys
 import rerun as rr
 import asyncio
 import time
+import numpy as np
 import threading
+
 
 class MessageDrain:
     def __init__(self, loop):
@@ -25,21 +27,31 @@ class MessageDrain:
             latest = self._queue.get_nowait()
         return latest
 
-def boxes2d_worker(msg):
+def boxes2d_worker(msg, boxes_tracked):
     detection = Detect.deserialize(msg.payload.to_bytes())
     centers = []
     sizes = []
     labels = []
+    colors = []
     for box in detection.boxes:
+        if box.track.id and box.track.id not in boxes_tracked:
+            boxes_tracked[box.track.id] = [box.label + ": " + box.track.id[:6], list(np.random.choice(range(256), size=3))]
+        if box.track.id:
+            colors.append(boxes_tracked[box.track.id][1])
+            labels.append(boxes_tracked[box.track.id][0])
+        else:
+            colors.append([0,255,0])
+            labels.append(box.label)
         centers.append((box.center_x, box.center_y))
         sizes.append((box.width, box.height))
-        labels.append(box.label)
-    rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
+    rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors))
 
 async def boxes2d_handler(drain):
+    boxes_tracked = {}
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=boxes2d_worker, args=[msg])
+
+        thread = threading.Thread(target=boxes2d_worker, args=[msg, boxes_tracked])
         thread.start()
         
         while thread.is_alive():
@@ -71,7 +83,7 @@ async def main_async(args):
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Boxes2D")
+    parser = ArgumentParser(description="EdgeFirst Samples - Boxes2D Tracked")
     parser.add_argument('-r', '--remote', type=str, default=None,
                         help="Connect to the remote endpoint instead of local.")
     rr.script_add_args(parser)

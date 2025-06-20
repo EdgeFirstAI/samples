@@ -10,6 +10,7 @@ from edgefirst.schemas.edgefirst_msgs import Detect
 from edgefirst.schemas.sensor_msgs import PointCloud2
 from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue()
@@ -27,7 +28,7 @@ class MessageDrain:
         while not self._queue.empty():
             latest = self._queue.get_nowait()
         return latest
-    
+
 
 class FrameSize:
     def __init__(self):
@@ -38,7 +39,7 @@ class FrameSize:
         self._size = [width, height]
         if not self._event.is_set():
             self._event.set()
-    
+
     async def get(self):
         await self._event.wait()
         return self._size
@@ -60,7 +61,8 @@ async def h264_processing(drain, frame_storage):
                 raw_data.truncate(0)
                 for frame in packet.decode():
                     frame_array = frame.to_ndarray(format='rgb24')
-                    frame_storage.set(frame_array.shape[1], frame_array.shape[0])
+                    frame_storage.set(
+                        frame_array.shape[1], frame_array.shape[0])
                     rr.log('/camera', rr.Image(frame_array))
             except Exception:
                 continue
@@ -75,11 +77,14 @@ async def boxes2d_processing(drain, frame_storage):
         detection = Detect.deserialize(msg.payload.to_bytes())
 
         for box in detection.boxes:
-            centers.append((int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1])))
-            sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
+            centers.append(
+                (int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1])))
+            sizes.append(
+                (int(box.width * frame_size[0]), int(box.height * frame_size[1])))
             labels.append(box.label)
 
-        rr.log("/camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
+        rr.log("/camera/boxes", rr.Boxes2D(centers=centers,
+               sizes=sizes, labels=labels))
 
 
 async def lidar_processing(drain):
@@ -87,10 +92,11 @@ async def lidar_processing(drain):
         msg = await drain.get_latest()
         pcd = PointCloud2.deserialize(msg.payload.to_bytes())
         points = decode_pcd(pcd)
-        clusters = [p for p in points if p.id > 0]
-        max_id = max(p.id for p in clusters)
+        clusters = [p for p in points if p.cluster_id > 0]
+        max_id = max(p.cluster_id for p in clusters)
         pos = [[p.x, p.y, p.z] for p in clusters]
-        colors = [colormap(turbo_colormap, p.id / max_id) for p in clusters]
+        colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+                  for p in clusters]
         rr.log("/pointcloud/lidar/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -136,6 +142,7 @@ async def main_async(args):
         lidar_processing(lidar_drain),
     )
 
+
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Camera Lidar")
     parser.add_argument('-r', '--remote', type=str, default=None,
@@ -147,6 +154,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

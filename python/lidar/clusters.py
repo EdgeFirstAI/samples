@@ -33,8 +33,9 @@ if __name__ == "__main__":
         # deserialize message
         pcd = PointCloud2.deserialize(msg.payload.to_bytes())
         points = decode_pcd(pcd)
-        clusters = [p for p in points if p.id > 0]
-        max_id = max(max([p.id for p in clusters]), 1)
+        clusters = [p for p in points if p.cluster_id > 0]
+        max_id = max(max([p.cluster_id for p in clusters]), 1)
         pos = [[p.x, p.y, p.z] for p in clusters]
-        colors = [colormap(turbo_colormap, p.id/max_id) for p in clusters]
+        colors = [colormap(turbo_colormap, p.cluster_id/max_id)
+                  for p in clusters]
         rr.log("lidar/cluster", rr.Points3D(pos, colors=colors))

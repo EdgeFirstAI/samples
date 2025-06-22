@@ -16,15 +16,17 @@ from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
 
 # Constants for syscall
 SYS_pidfd_open = 434  # From syscall.h
-SYS_pidfd_getfd = 438 # From syscall.h
+SYS_pidfd_getfd = 438  # From syscall.h
 GETFD_FLAGS = 0
 
 # C bindings to syscall (Linux only)
 if sys.platform.startswith('linux'):
     libc = ctypes.CDLL("libc.so.6", use_errno=True)
 
+
 def pidfd_open(pid: int, flags: int = 0) -> int:
     return libc.syscall(SYS_pidfd_open, pid, flags)
+
 
 def pidfd_getfd(pidfd: int, target_fd: int, flags: int = GETFD_FLAGS) -> int:
     return libc.syscall(SYS_pidfd_getfd, pidfd, target_fd, flags)
@@ -39,7 +41,7 @@ class FrameSize:
         self._size = [width, height]
         if not self._event.is_set():
             self._event.set()
-    
+
     async def get(self):
         await self._event.wait()
         return self._size
@@ -265,10 +267,14 @@ async def boxes3d_handler(drain):
 def radar_worker(msg):
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
-    clusters = [p for p in points if p.id > 0]
-    max_id = max(p.id for p in clusters)
+    clusters = [p for p in points if p.cluster_id > 0]
+    if not clusters:
+        rr.log("/pointcloud/radar/clusters", rr.Points3D([], colors=[]))  
+        return
+    max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+            for p in clusters]
     rr.log("/pointcloud/radar/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -286,13 +292,16 @@ async def radar_handler(drain):
 def lidar_worker(msg):
     if not msg:
         return
-    
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
-    clusters = [p for p in points if p.id > 0]
-    max_id = max(p.id for p in clusters)
+    clusters = [p for p in points if p.cluster_id > 0]
+    if not clusters:
+        rr.log("/pointcloud/lidar/clusters", rr.Points3D([], colors=[]))  
+        return
+    max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+            for p in clusters]
     rr.log("/pointcloud/lidar/clusters", rr.Points3D(pos, colors=colors))
 
 async def lidar_handler(drain):
@@ -362,13 +371,14 @@ async def main_async(args):
     subscriber.undeclare()
     del subscriber
 
-    args.memory_limit=10
+    args.memory_limit = 10
     rr.script_setup(args, "mega_sample")
     blueprint = rrb.Blueprint(
         rrb.Grid(contents=[
             rrb.MapView(origin='/gps', name="GPS"),
             rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
-            rrb.Spatial3DView(origin="/pointcloud", name="Pointcloud Clusters"),
+            rrb.Spatial3DView(origin="/pointcloud",
+                              name="Pointcloud Clusters"),
             rrb.TimeSeriesView(origin="/metrics", name="Model Information")
         ])
     )
@@ -413,11 +423,13 @@ async def main_async(args):
     if args.remote is None and 'rt/model/mask' in model_topics:
         session.declare_subscriber('rt/model/mask', mask_drain.callback)
     elif args.remote is not None and 'rt/model/mask_compressed' in model_topics:
-        session.declare_subscriber('rt/model/mask_compressed', mask_drain.callback)
+        session.declare_subscriber(
+            'rt/model/mask_compressed', mask_drain.callback)
     elif 'rt/model/mask' in model_topics:
         session.declare_subscriber('rt/model/mask', mask_drain.callback)
     elif 'rt/model/mask_compressed' in model_topics:
-        session.declare_subscriber('rt/model/mask_compressed', mask_drain.callback)
+        session.declare_subscriber(
+            'rt/model/mask_compressed', mask_drain.callback)
 
     if 'rt/model/mask' in model_topics or 'rt/model/mask_compressed' in model_topics:
         async_funcs.append(mask_handler(mask_drain, frame_size_storage, args.remote))
@@ -449,6 +461,7 @@ async def main_async(args):
     while True:
         time.sleep(0.01)
 
+
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Mega Sample")
     parser.add_argument('-r', '--remote', type=str, default=None,
@@ -460,6 +473,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

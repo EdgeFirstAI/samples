@@ -22,7 +22,7 @@ class FrameSize:
         self._size = [width, height]
         if not self._event.is_set():
             self._event.set()
-    
+
     async def get(self):
         await self._event.wait()
         return self._size
@@ -109,13 +109,14 @@ async def boxes2d_handler(drain, frame_storage):
 def clusters_worker(msg):
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
-    clusters = [p for p in points if p.id > 0]
+    clusters = [p for p in points if p.cluster_id > 0]
     if not clusters:
         rr.log("/pointcloud/clusters", rr.Points3D([], colors=[]))  
         return
-    max_id = max([p.id for p in clusters])
+    max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.id/max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+            for p in clusters]
     rr.log("/pointcloud/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -172,6 +173,7 @@ async def main_async(args):
         time.sleep(0.001)
 
 
+
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Camera-Radar")
     parser.add_argument('-r', '--remote', type=str, default=None,
@@ -183,6 +185,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

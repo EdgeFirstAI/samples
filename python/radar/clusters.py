@@ -30,13 +30,14 @@ class MessageDrain:
 def clusters_worker(msg):
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
-    clusters = [p for p in points if p.id > 0]
+    clusters = [p for p in points if p.cluster_id > 0]
     if not clusters:
         rr.log("radar/clusters", rr.Points3D([], colors=[]))  
         return
-    max_id = max([p.id for p in clusters])
+    max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.id/max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+            for p in clusters]
     rr.log("radar/clusters", rr.Points3D(pos, colors=colors))
 
 

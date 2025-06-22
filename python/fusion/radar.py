@@ -30,14 +30,15 @@ class MessageDrain:
 def radar_worker(msg):
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
-    if not points:
-        rr.log("fusion/radar", rr.Points3D(positions=[], colors=[])) 
+    clusters = [p for p in points if p.cluster_id > 0]
+    if not clusters:
+        rr.log("fusion/radar", rr.Points3D([], colors=[]))  
         return
-    max_class = max(max([p.fields["vision_class"] for p in points]), 1)
-    pos = [[p.x, p.y, p.z] for p in points]
-    colors = [
-        colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
-    rr.log("fusion/radar", rr.Points3D(positions=pos, colors=colors))
+    max_id = max(p.cluster_id for p in clusters)
+    pos = [[p.x, p.y, p.z] for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+            for p in clusters]
+    rr.log("fusion/radar", rr.Points3D(pos, colors=colors))
 
 
 async def radar_handler(drain):

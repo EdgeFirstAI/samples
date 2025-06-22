@@ -33,10 +33,10 @@ def occupancy_worker(msg):
     if not points:
         rr.log("fusion/occupancy", rr.Points3D(positions=[], colors=[])) 
         return
-    max_class = max(max([p.fields["vision_class"] for p in points]), 1)
+    max_class = max(max([p.vision_class for p in points]), 1)
     pos = [[p.x, p.y, p.z] for p in points]
     colors = [
-        colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
+        colormap(turbo_colormap, p.vision_class/max_class) for p in points]
     rr.log("fusion/occupancy", rr.Points3D(positions=pos, colors=colors))
 
 

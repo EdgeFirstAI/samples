@@ -4,47 +4,88 @@ from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
 from argparse import ArgumentParser
 import sys
 import rerun as rr
+import asyncio
+import time
+import threading
+
+class MessageDrain:
+    def __init__(self, loop):
+        self._queue = asyncio.Queue(maxsize=100)
+        self._loop = loop
+
+    def callback(self, msg):
+        if not self._loop.is_closed():
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
+
+    async def read(self):
+        return await self._queue.get()
+
+    async def get_latest(self):
+        latest = await self._queue.get()
+        while not self._queue.empty():
+            latest = self._queue.get_nowait()
+        return latest
+
+
+def radar_worker(msg):
+    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
+    points = decode_pcd(pcd)
+    if not points:
+        rr.log("fusion/radar", rr.Points3D(positions=[], colors=[])) 
+        return
+    max_class = max(max([p.fields["vision_class"] for p in points]), 1)
+    pos = [[p.x, p.y, p.z] for p in points]
+    colors = [
+        colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
+    rr.log("fusion/radar", rr.Points3D(positions=pos, colors=colors))
+
+
+async def radar_handler(drain):
+    while True:
+        msg = await drain.get_latest()
+        thread = threading.Thread(target=radar_worker, args=[msg])
+        thread.start()
+        
+        while thread.is_alive():
+            await asyncio.sleep(0.001)
+        thread.join()
+
+
+async def main_async(args):
+    # Setup rerun
+    args.memory_limit = 10
+    rr.script_setup(args, "fusion/radar")
+
+    # Zenoh config
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote:
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+    session = zenoh.open(config)
+
+    # Create drains
+    loop = asyncio.get_running_loop()
+    drain = MessageDrain(loop)
+
+    session.declare_subscriber('rt/fusion/radar', drain.callback)
+    await asyncio.gather((radar_handler(drain)))
+
+    while True:
+        time.sleep(0.001)
 
 
 def main():
-    args = ArgumentParser(description="EdgeFirst Samples - Radar")
-    args.add_argument('-r', '--remote', type=str, default=None,
-                      help="Connect to a Zenoh router rather than local.")
-    args.add_argument('-t', '--timeout', type=float, default=None,
-                      help="Time in seconds to run command before exiting.")
-    rr.script_add_args(args)
-    args = args.parse_args()
+    parser = ArgumentParser(description="EdgeFirst Samples - Fusion Radar")
+    parser.add_argument('-r', '--remote', type=str, default=None,
+                        help="Connect to the remote endpoint instead of local.")
+    rr.script_add_args(parser)
+    args = parser.parse_args()
 
-    rr.script_setup(args, "fusion/radar Example")
-
-    # Create the default Zenoh configuration and if the connect argument is
-    # provided set the mode to client and add the target to the endpoints.
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote is not None:
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
-    session = zenoh.open(config)
-
-    # Create a subscriber for "rt/fusion/radar"
-    subscriber = session.declare_subscriber('rt/fusion/radar')
-
-    while True:
-        msg = subscriber.recv()
-
-        pcd = PointCloud2.deserialize(msg.payload.to_bytes())
-        points = decode_pcd(pcd)
-        if not points:
-            rr.log("fusion/radar", rr.Points3D(positions=[], colors=[])) 
-        max_class = max(max([p.fields["vision_class"] for p in points]), 1)
-        pos = [[p.x, p.y, p.z] for p in points]
-        colors = [
-            colormap(turbo_colormap, p.fields["vision_class"]/max_class) for p in points]
-        rr.log("fusion/radar", rr.Points3D(positions=pos, colors=colors))
-
-
-if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
+if __name__ == "__main__":
+    main()

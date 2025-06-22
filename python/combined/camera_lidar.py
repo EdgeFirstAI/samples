@@ -124,24 +124,12 @@ def clusters_worker(msg):
 async def clusters_handler(drain):
     while True:
         msg = await drain.get_latest()
-<<<<<<< HEAD
         thread = threading.Thread(target=clusters_worker, args=[msg])
         thread.start()
         
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
-=======
-        pcd = PointCloud2.deserialize(msg.payload.to_bytes())
-        points = decode_pcd(pcd)
-        clusters = [p for p in points if p.cluster_id > 0]
-        max_id = max(p.cluster_id for p in clusters)
-        pos = [[p.x, p.y, p.z] for p in clusters]
-        colors = [colormap(turbo_colormap, p.cluster_id / max_id)
-                  for p in clusters]
-        rr.log("/pointcloud/lidar/clusters", rr.Points3D(pos, colors=colors))
-
->>>>>>> 92e4e7a63b44e7f6b928b50ae62c88b4d2d2a658
 
     
 async def main_async(args):

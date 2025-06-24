@@ -70,7 +70,7 @@ async def main_async(args):
     await asyncio.gather((mask_handler(drain)))
 
     while True:
-        time.sleep(0.001)
+        asyncio.sleep(0.001)
 
 
 def main():

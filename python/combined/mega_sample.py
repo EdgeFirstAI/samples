@@ -178,7 +178,7 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
 
 async def boxes2d_handler(drain, frame_storage):
     boxes_tracked = {}
-    frame_size = await frame_storage.get()
+    _ = await frame_storage.get()
     while True:
         msg = await drain.get_latest()
         frame_size = await frame_storage.get()
@@ -210,7 +210,7 @@ def mask_worker(msg, frame_size, remote):
 
 
 async def mask_handler(drain, frame_storage, remote):
-    frame_size = await frame_storage.get()
+    _ = await frame_storage.get()
     while True:
         msg = await drain.get_latest()
         frame_size = await frame_storage.get()
@@ -399,24 +399,20 @@ async def main_async(args):
     cam_topic = None
     if args.remote is None and 'rt/camera/dma' in camera_topics:
         cam_topic = 'rt/camera/dma'
-        cam_drain = MessageDrain(loop)
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(dma_handler(cam_drain, frame_size_storage))
     elif 'rt/camera/h264' in camera_topics:
         cam_topic = 'rt/camera/h264'
-        cam_drain = MessageDrain(loop)
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(h264_handler(cam_drain, frame_size_storage))
     elif 'rt/camera/jpeg' in camera_topics:
         cam_topic = 'rt/camera/jpeg'
-        cam_drain = MessageDrain(loop)
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(jpeg_handler(cam_drain, frame_size_storage))
     else:
         print("No camera topic available")
 
     if 'rt/model/boxes2d' in model_topics:
-        boxes2d_drain = MessageDrain(loop)
         session.declare_subscriber('rt/model/boxes2d', boxes2d_drain.callback)
         async_funcs.append(boxes2d_handler(boxes2d_drain, frame_size_storage))
 
@@ -433,11 +429,6 @@ async def main_async(args):
 
     if 'rt/model/mask' in model_topics or 'rt/model/mask_compressed' in model_topics:
         async_funcs.append(mask_handler(mask_drain, frame_size_storage, args.remote))
-
-    # if 'rt/imu' in misc_topics:
-    #     rr.log("/imu", rr.Boxes3D(half_sizes=[[0.5, 0.5, 0.5]], fill_mode="solid"))
-    #     rr.log("/imu", rr.Transform3D(axis_length=2))
-    #     imu_subscriber = session.declare_subscriber('rt/imu', imu_callback)
 
     if 'rt/gps' in misc_topics:
         session.declare_subscriber('rt/gps', gps_drain.callback)
@@ -459,7 +450,7 @@ async def main_async(args):
     await asyncio.gather(*async_funcs)
 
     while True:
-        time.sleep(0.01)
+        asyncio.sleep(0.01)
 
 
 def main():

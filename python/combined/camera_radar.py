@@ -95,7 +95,7 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
 
 async def boxes2d_handler(drain, frame_storage):
     boxes_tracked = {}
-    frame_size = await frame_storage.get()
+    _ = await frame_storage.get()
     while True:
         msg = await drain.get_latest()
         frame_size = await frame_storage.get()
@@ -170,7 +170,7 @@ async def main_async(args):
                          clusters_handler(radar_drain))
 
     while True:
-        time.sleep(0.001)
+        asyncio.sleep(0.001)
 
 
 

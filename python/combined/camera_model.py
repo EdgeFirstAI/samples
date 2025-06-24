@@ -95,7 +95,7 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
 
 async def boxes2d_handler(drain, frame_storage):
     boxes_tracked = {}
-    frame_size = await frame_storage.get()
+    _ = await frame_storage.get()
     while True:
         msg = await drain.get_latest()
         frame_size = await frame_storage.get()
@@ -121,7 +121,7 @@ def mask_worker(msg, frame_size, remote):
 
 
 async def mask_handler(drain, frame_storage, remote):
-    frame_size = await frame_storage.get()
+    _ = await frame_storage.get()
     rr.log("/", rr.AnnotationContext([(0, "background", (0, 0, 0, 0)), (1, "person", (0, 255, 0))]))
     while True:
         msg = await drain.get_latest()
@@ -172,7 +172,7 @@ async def main_async(args):
                          mask_handler(mask_drain, frame_size_storage, args.remote))
 
     while True:
-        time.sleep(0.001)
+        asyncio.sleep(0.001)
 
 
 def main():

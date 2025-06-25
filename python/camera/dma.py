@@ -1,13 +1,33 @@
-from argparse import ArgumentParser
-import asyncio
-import io
-import sys
-import av
 import zenoh
-import time
-import threading
+from edgefirst.schemas.edgefirst_msgs import DmaBuffer
 import rerun as rr
 import rerun.blueprint as rrb
+from argparse import ArgumentParser
+import sys
+import mmap
+import ctypes
+import os
+import asyncio
+import time
+import threading
+
+# Constants for syscall
+SYS_pidfd_open = 434  # From syscall.h
+SYS_pidfd_getfd = 438 # From syscall.h
+GETFD_FLAGS = 0
+
+# C bindings to syscall (Linux only)
+if sys.platform.startswith('linux'):
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+else:
+    print("DMA only works on EdgeFirst Platforms")
+    sys.exit(0)
+
+def pidfd_open(pid: int, flags: int = 0) -> int:
+    return libc.syscall(SYS_pidfd_open, pid, flags)
+
+def pidfd_getfd(pidfd: int, target_fd: int, flags: int = GETFD_FLAGS) -> int:
+    return libc.syscall(SYS_pidfd_getfd, pidfd, target_fd, flags)
 
 class MessageDrain:
     def __init__(self, loop):
@@ -29,27 +49,30 @@ class MessageDrain:
             latest = self._queue.get_nowait()
         return latest
 
-def h264_worker(msg, raw_data, container):
-    raw_data.write(msg.payload.to_bytes())
-    raw_data.seek(0)
-    for packet in container.demux():
-        try:
-            if packet.size == 0:
-                continue
-            raw_data.seek(0)
-            raw_data.truncate(0)
-            for frame in packet.decode():
-                frame_array = frame.to_ndarray(format='rgb24')
-                rr.log('/camera', rr.Image(frame_array))
-        except Exception:
-            continue
-    
-async def h264_handler(drain):
-    raw_data = io.BytesIO()
-    container = av.open(raw_data, format='h264', mode='r')
+def dma_worker(msg):
+    dma_buf = DmaBuffer.deserialize(msg.payload.to_bytes())
+    pidfd = pidfd_open(dma_buf.pid)
+    if pidfd < 0:
+        return
+
+    fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
+    if fd < 0:
+        return
+
+    # Now fd can be used as a file descriptor
+    mm = mmap.mmap(fd, dma_buf.length)
+    rr.log("/camera", rr.Image(bytes=mm[:], 
+                                width=dma_buf.width, 
+                                height=dma_buf.height, 
+                                pixel_format=rr.PixelFormat.YUY2))
+    mm.close()
+    os.close(fd)
+    os.close(pidfd)
+
+async def dma_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=h264_worker, args=[msg, raw_data, container])
+        thread = threading.Thread(target=dma_worker, args=[msg])
         thread.start()
         
         while thread.is_alive():
@@ -59,13 +82,17 @@ async def h264_handler(drain):
 async def main_async(args):
     # Setup rerun
     args.memory_limit = 10
-    rr.script_setup(args, "camera-h264")
+    rr.script_setup(args, "camera-dma")
     blueprint = rrb.Blueprint(
         rrb.Grid(contents=[
             rrb.Spatial2DView(origin="/camera", name="Camera Feed")
         ])
     )
     rr.send_blueprint(blueprint) 
+
+    if args.remote:
+        print("DMA example is only functional when run on an EdgeFirst Platform")
+        return
 
     # Zenoh config
     config = zenoh.Config()
@@ -79,15 +106,15 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/camera/h264', drain.callback)
-    await asyncio.gather((h264_handler(drain)))
+    session.declare_subscriber('rt/camera/dma', drain.callback)
+    await asyncio.gather((dma_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - H264")
+    parser = ArgumentParser(description="EdgeFirst Samples - DMA")
     parser.add_argument('-r', '--remote', type=str, default=None,
                         help="Connect to the remote endpoint instead of local.")
     rr.script_add_args(parser)

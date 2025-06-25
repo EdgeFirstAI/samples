@@ -1,12 +1,13 @@
-from argparse import ArgumentParser
-import numpy as np
-import rerun as rr
 import zenoh
+from edgefirst.schemas.edgefirst_msgs import Detect
+from argparse import ArgumentParser
 import sys
+import rerun as rr
 import asyncio
 import time
-from edgefirst.schemas.edgefirst_msgs import RadarCube
+import numpy as np
 import threading
+
 
 class MessageDrain:
     def __init__(self, loop):
@@ -26,31 +27,41 @@ class MessageDrain:
             latest = self._queue.get_nowait()
         return latest
 
+def boxes2d_worker(msg, boxes_tracked):
+    detection = Detect.deserialize(msg.payload.to_bytes())
+    centers = []
+    sizes = []
+    labels = []
+    colors = []
+    for box in detection.boxes:
+        if box.track.id and box.track.id not in boxes_tracked:
+            boxes_tracked[box.track.id] = [box.label + ": " + box.track.id[:6], list(np.random.choice(range(256), size=3))]
+        if box.track.id:
+            colors.append(boxes_tracked[box.track.id][1])
+            labels.append(boxes_tracked[box.track.id][0])
+        else:
+            colors.append([0,255,0])
+            labels.append(box.label)
+        centers.append((box.center_x, box.center_y))
+        sizes.append((box.width, box.height))
+    rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors))
 
-def cube_worker(msg):
-    radar_cube = RadarCube.deserialize(msg.payload.to_bytes())
-    data = np.array(radar_cube.cube).reshape(radar_cube.shape)
-    # Take the absolute value of the data to improve visualization.
-    data = np.abs(data)
-    rr.log("radar/cube",
-            rr.Tensor(data, dim_names=["SEQ", "RANGE", "RX", "DOPPLER"]))
-
-
-async def cube_handler(drain):
+async def boxes2d_handler(drain):
+    boxes_tracked = {}
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=cube_worker, args=[msg])
+
+        thread = threading.Thread(target=boxes2d_worker, args=[msg, boxes_tracked])
         thread.start()
         
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
-
-
+    
 async def main_async(args):
     # Setup rerun
     args.memory_limit = 10
-    rr.script_setup(args, "radar/cube")
+    rr.script_setup(args, "model-boxes2d")
 
     # Zenoh config
     config = zenoh.Config()
@@ -64,15 +75,15 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/radar/cube', drain.callback)
-    await asyncio.gather((cube_handler(drain)))
+    session.declare_subscriber('rt/model/boxes2d', drain.callback)
+    await asyncio.gather((boxes2d_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Radar Cube")
+    parser = ArgumentParser(description="EdgeFirst Samples - Boxes2D Tracked")
     parser.add_argument('-r', '--remote', type=str, default=None,
                         help="Connect to the remote endpoint instead of local.")
     rr.script_add_args(parser)

@@ -5,44 +5,92 @@ from argparse import ArgumentParser
 import numpy as np
 import sys
 import cv2
+import asyncio
+import zenoh
+import time
+import threading
+import rerun.blueprint as rrb
 
-def handler(sample):
-    # Deserialize message
-    target = CompressedImage.deserialize(sample.payload.to_bytes())
-    print(f"Received message: {target}")
+class MessageDrain:
+    def __init__(self, loop):
+        self._queue = asyncio.Queue(maxsize=100)
+        self._loop = loop
 
-def main():
-    args = ArgumentParser(description="EdgeFirst Samples - JPEG")
-    args.add_argument('-r', '--remote', type=str, default=None,
-                      help="Connect to a Zenoh router rather than local.")
-    rr.script_add_args(args)
-    args = args.parse_args()
+    def callback(self, msg):
+        if not self._loop.is_closed():
+            if self._queue.full():
+                self._queue.get_nowait()
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
 
-    rr.script_setup(args, "jpeg")
+    async def read(self):
+        return await self._queue.get()
 
-    # Create the default Zenoh configuration and if the connect argument is
-    # provided set the mode to client and add the target to the endpoints.
+    async def get_latest(self):
+        latest = await self._queue.get()
+        while not self._queue.empty():
+            latest = self._queue.get_nowait()
+        return latest
+
+def jpeg_worker(msg):
+    image = CompressedImage.deserialize(msg.payload.to_bytes())
+    np_arr = np.frombuffer(bytearray(image.data), np.uint8)
+    im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    rr.log('/camera', rr.Image(im))
+
+    
+async def jpeg_handler(drain):
+    while True:
+        msg = await drain.get_latest()
+        thread = threading.Thread(target=jpeg_worker, args=[msg])
+        thread.start()
+        
+        while thread.is_alive():
+            await asyncio.sleep(0.001)
+        thread.join()
+
+
+async def main_async(args):
+    # Setup rerun
+    args.memory_limit = 10
+    rr.script_setup(args, "camera-jpeg")
+    blueprint = rrb.Blueprint(
+        rrb.Grid(contents=[
+            rrb.Spatial2DView(origin="/camera", name="Camera Feed")
+        ])
+    )
+    rr.send_blueprint(blueprint) 
+
+    # Zenoh config
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote is not None:
+    if args.remote:
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
+        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
     session = zenoh.open(config)
 
-    # Create a subscriber for "rt/camera/jpeg"
-    subscriber = session.declare_subscriber('rt/camera/jpeg')
+    # Create drains
+    loop = asyncio.get_running_loop()
+    drain = MessageDrain(loop)
+
+    session.declare_subscriber('rt/camera/jpeg', drain.callback)
+    await asyncio.gather((jpeg_handler(drain)))
 
     while True:
-        msg = subscriber.recv()
-        print(msg.timestamp)
-        image = CompressedImage.deserialize(msg.payload.to_bytes())
-        np_arr = np.frombuffer(bytearray(image.data), np.uint8)
-        im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        rr.log('image', rr.Image(im))
+        asyncio.sleep(0.001)
 
-if __name__ == "__main__":    
+
+def main():
+    parser = ArgumentParser(description="EdgeFirst Samples - JPEG")
+    parser.add_argument('-r', '--remote', type=str, default=None,
+                        help="Connect to the remote endpoint instead of local.")
+    rr.script_add_args(parser)
+    args = parser.parse_args()
+
     try:
-        main()
+        asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
+if __name__ == "__main__":
+    main()

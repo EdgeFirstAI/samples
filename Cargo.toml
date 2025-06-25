@@ -24,6 +24,10 @@ name = "camera-h264"
 path = "rust/camera/h264.rs"
 
 [[bin]]
+name = "mega-sample"
+path = "rust/combined/mega_sample.rs"
+
+[[bin]]
 name = "lidar-clusters"
 path = "rust/lidar/clusters.rs"
 

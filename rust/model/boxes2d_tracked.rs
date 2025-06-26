@@ -4,7 +4,7 @@ use edgefirst_schemas::edgefirst_msgs::Detect;
 use std::error::Error;
 use std::collections::HashMap;
 use rand::{rng, Rng};
-use rerun::{Boxes2D, Color};
+use rerun::{Boxes2D};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -21,13 +21,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     while let Ok(msg) = subscriber.recv() {
         let detection: Detect = cdr::deserialize(&msg.payload().to_bytes())?;
-
         let mut centers = Vec::new();
         let mut sizes = Vec::new();
         let mut labels = Vec::new();
         let mut colors = Vec::new();
-
-        // boxes_tracked: HashMap<String, (String, [u8; 3])>
 
         for b in detection.boxes {
             if !b.track.id.is_empty() {

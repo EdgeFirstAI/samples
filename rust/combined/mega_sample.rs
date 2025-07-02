@@ -9,7 +9,7 @@ use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
     decode_pcd,
-    edgefirst_msgs::{Detect, Mask},
+    edgefirst_msgs::{Detect, Mask, DetectBox2D},
     foxglove_msgs::FoxgloveCompressedVideo,
     sensor_msgs::{NavSatFix, PointCloud2},
 };
@@ -18,6 +18,32 @@ use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
 use rerun::{AnnotationContext, Boxes3D, Color, Image, Points3D, Position3D, SegmentationImage};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
+
+fn crop_box(mut b: DetectBox2D)
+    -> DetectBox2D {
+    if b.center_x + (b.width / 2.0) > 1.0 {
+        let new_width = b.width - (b.center_x + (b.width / 2.0) - 1.0);
+        b.center_x = (b.center_x - (b.width / 2.0) + 1.0) / 2.0;
+        b.width = new_width;
+    }
+    if b.center_x - (b.width / 2.0) < 0.0 {
+        let new_width = b.center_x + (b.width / 2.0);
+        b.center_x = (b.center_x + (b.width / 2.0)) / 2.0;
+        b.width = new_width;
+    }
+    if b.center_y + (b.height / 2.0) > 1.0 {
+        let new_height = b.height - (b.center_y + (b.height / 2.0) - 1.0);
+        b.center_y = (b.center_y - (b.height / 2.0) + 1.0) / 2.0;
+        b.height = new_height;
+    }
+    if b.center_y - (b.height / 2.0) < 0.0 {
+        let new_height = b.center_y + (b.height / 2.0);
+        b.center_y = (b.center_y + (b.height / 2.0)) / 2.0;
+        b.height = new_height;
+    }
+
+    b
+}
 
 async fn camera_h264_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
@@ -75,6 +101,7 @@ async fn model_boxes2d_handler(
         if size[0] == 0 || size[1] == 0 { continue; }
 
         for b in detection.boxes {
+            let b = crop_box(b);
             centers.push([b.center_x * size[0] as f32, b.center_y * size[1] as f32]);
             sizes.push([b.width * size[0] as f32, b.height * size[1] as f32]);
             labels.push(b.label);
@@ -390,8 +417,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Rerun setup
-    loop {
-        
+    loop { 
     }
-    Ok(())
 }

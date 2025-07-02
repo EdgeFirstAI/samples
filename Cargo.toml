@@ -36,6 +36,10 @@ name = "camera-lidar"
 path = "rust/combined/camera_lidar.rs"
 
 [[bin]]
+name = "camera-radar"
+path = "rust/combined/camera_radar.rs"
+
+[[bin]]
 name = "lidar-clusters"
 path = "rust/lidar/clusters.rs"
 

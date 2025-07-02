@@ -2,24 +2,23 @@ use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
 use rerun::{Color, Points3D, Position3D};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
+use tokio::{sync::Mutex, task};
+use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-    let session = zenoh::open(args.clone()).await.unwrap();
+async fn lidar_clusters_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    rr: Arc<Mutex<rerun::RecordingStream>>,
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize lidar clusters: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
 
-    // Create a subscriber for "rt/lidar/clusters"
-    let subscriber = session
-        .declare_subscriber("rt/lidar/clusters")
-        .await
-        .unwrap();
-
-    // Create Rerun logger using the provided parameters
-    let (rr, _serve_guard) = args.rerun.init("lidar-clusters")?;
-
-    while let Ok(msg) = subscriber.recv() {
-        let pcd: PointCloud2 = cdr::deserialize(&msg.payload().to_bytes())?;
         let points = decode_pcd(&pcd);
         let clustered_points: Vec<_> = points.iter().filter(|x| x.id > 0).collect();
         let max_cluster_id = clustered_points
@@ -40,8 +39,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));
-        rr.log("lidar/clusters", &points)?;
-    }
 
-    Ok(())
+        let rr_guard = rr.lock().await;
+        let _ = match rr_guard.log("lidar/clusters", &points) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log lidar clusters: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    let session = zenoh::open(args.clone()).await.unwrap();
+
+    let (rr, _serve_guard) = args.rerun.init("lidar-clusters")?;
+    let rr = Arc::new(Mutex::new(rr));
+
+    let sub = session.declare_subscriber("rt/lidar/clusters").await.unwrap();
+    let rr_clone = rr.clone();
+    task::spawn(lidar_clusters_handler(sub, rr_clone));
+
+    // Rerun setup
+    loop {
+        
+    }
 }

@@ -1,32 +1,3 @@
-// use std::collections::HashSet;
-// use std::time::{Duration, Instant};
-// use tokio::time::sleep;
-// use zenoh::handlers::FifoChannelHandler;
-// use zenoh::pubsub::Subscriber;
-// use std::sync::{Arc};
-// use tokio::sync::Mutex;
-// use clap::Parser;
-// use edgefirst_samples::Args;
-// use edgefirst_schemas::edgefirst_msgs::Detect;
-// use rerun::Boxes3D;
-// use std::error::Error;
-// use clap::Parser as _;
-// use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
-// use rerun::{Image};
-// use openh264::decoder::Decoder;
-// use openh264::nal_units;
-// use openh264::formats::YUVSource;
-// use tokio::task;
-// use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
-// use rerun::{Color, Points3D, Position3D};
-// use edgefirst_schemas::edgefirst_msgs::Mask;
-// use ndarray::{Array2, Array};
-// use zstd::stream::decode_all;
-// use std::io::Cursor;
-// use rerun::{AnnotationContext, SegmentationImage};
-// use edgefirst_schemas::sensor_msgs::NavSatFix;
-// use zenoh::sample::Sample;
-
 use std::{
     collections::HashSet,
     error::Error,
@@ -34,7 +5,6 @@ use std::{
     sync::Arc,
     time::{Instant},
 };
-
 use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
@@ -43,7 +13,6 @@ use edgefirst_schemas::{
     foxglove_msgs::FoxgloveCompressedVideo,
     sensor_msgs::{NavSatFix, PointCloud2},
 };
-
 use ndarray::{Array, Array2};
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
 use rerun::{AnnotationContext, Boxes3D, Color, Image, Points3D, Position3D, SegmentationImage};
@@ -53,6 +22,7 @@ use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 async fn camera_h264_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
     rr: Arc<Mutex<rerun::RecordingStream>>,
+    frame_size: Arc<Mutex<[u32; 2]>>,
 ) {
     // Create decoder inside the function
     let mut decoder = Decoder::new().expect("Failed to create decoder");
@@ -73,19 +43,22 @@ async fn camera_h264_handler(
             yuv.write_rgb8(&mut rgb_raw);
             let width = yuv.dimensions().0;
             let height = yuv.dimensions().1;
-
             let image = Image::from_rgb24(rgb_raw, [width as u32, height as u32]);
             let rr_guard = rr.lock().await;
             if let Err(e) = rr_guard.log("/camera", &image) {
                 eprintln!("Failed to log video: {:?}", e);
             }
+
+            let mut frame_size = frame_size.lock().await;
+            *frame_size = [width as u32, height as u32];
         }
     }
 }
 
-async  fn model_boxes2d_handler(
+async fn model_boxes2d_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
     rr: Arc<Mutex<rerun::RecordingStream>>,
+    frame_size: Arc<Mutex<[u32; 2]>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
         let detection = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
@@ -98,12 +71,15 @@ async  fn model_boxes2d_handler(
         let mut centers = Vec::new();
         let mut sizes = Vec::new();
         let mut labels = Vec::new();
+        let size = frame_size.lock().await;
+        if size[0] == 0 || size[1] == 0 { continue; }
 
         for b in detection.boxes {
-            centers.push([b.center_x * 960.0, b.center_y * 540.0]);
-            sizes.push([b.width * 960.0, b.height * 540.0]);
+            centers.push([b.center_x * size[0] as f32, b.center_y * size[1] as f32]);
+            sizes.push([b.width * size[0] as f32, b.height * size[1] as f32]);
             labels.push(b.label);
         }
+        drop(size);
 
         let rr_guard = rr.lock().await;
         let _ = match rr_guard.log("/camera/boxes2d", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels)) {
@@ -360,17 +336,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (rr, _serve_guard) = args.rerun.init("mega-sample")?;
     let rr = Arc::new(Mutex::new(rr));
+    let frame_size = Arc::new(Mutex::new([0u32; 2]));
 
     if camera_topics.contains("rt/camera/h264") {
         let cam_sub = session.declare_subscriber("rt/camera/h264").await.unwrap();
         let cam_rr = rr.clone();
-        task::spawn(camera_h264_handler(cam_sub, cam_rr));
+        let frame_size_cam = frame_size.clone();
+        task::spawn(camera_h264_handler(cam_sub, cam_rr, frame_size_cam));
     }
 
     if model_topics.contains("rt/model/boxes2d") {
         let boxes2d_sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
         let boxes2d_rr = rr.clone();
-        task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr));
+        let frame_size_boxes2d = frame_size.clone();
+        task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr, frame_size_boxes2d));
     }
 
     // if model_topics.contains("rt/model/mask_compressed") {

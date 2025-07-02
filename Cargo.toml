@@ -28,6 +28,14 @@ name = "mega-sample"
 path = "rust/combined/mega_sample.rs"
 
 [[bin]]
+name = "camera-model"
+path = "rust/combined/camera_model.rs"
+
+[[bin]]
+name = "camera-lidar"
+path = "rust/combined/camera_lidar.rs"
+
+[[bin]]
 name = "lidar-clusters"
 path = "rust/lidar/clusters.rs"
 

@@ -5,29 +5,42 @@ use ndarray::{Array2, Array};
 use zstd::stream::decode_all;
 use std::io::Cursor;
 use rerun::{AnnotationContext, SegmentationImage};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
+use tokio::{sync::Mutex, task};
+use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-    let session = zenoh::open(args.clone()).await.unwrap();
+async fn model_mask_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    rr: Arc<Mutex<rerun::RecordingStream>>,
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize model mask: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let decompressed_bytes = match decode_all(Cursor::new(&mask.mask)) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to decompress mask array: {:?}", e);
+                continue;
+            }
+        };
 
-    // Create a subscriber for "rt/model/mask"
-    let subscriber = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
-
-    // Create Rerun logger using the provided parameters
-    let (rr, _serve_guard) = args.rerun.init("model-compressed_mask")?;
-
-    while let Ok(msg) = subscriber.recv() {
-        let mask: Mask = cdr::deserialize(&msg.payload().to_bytes())?;
-        let decompressed_bytes = decode_all(Cursor::new(&mask.mask))?;
-        
         let h = mask.height as usize;
         let w = mask.width as usize;
-        let total_len = mask.mask.len() as u32;
+        let total_len = decompressed_bytes.len() as u32;
         let c = (total_len / (h as u32 * w as u32)) as usize;
 
-        let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
+        let arr3 = match Array::from_shape_vec([h, w, c], decompressed_bytes.clone()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to form the mask array: {:?}", e);
+                continue;
+            }
+        };
         
         // Compute argmax along the last axis (class channel)
         let array2: Array2<u8> = arr3
@@ -40,17 +53,49 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .unwrap_or(0)
             });
 
-        // Log annotation context
-        rr.log(
-            "/",
-            &AnnotationContext::new([
-                (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
-                (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
-        )?;
+        let seg_img = match SegmentationImage::try_from(array2) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to convert to SegmentationImage: {:?}", e);
+                continue;
+            }
+        };
 
         // Log segmentation mask
-        let _ = rr.log("mask", &SegmentationImage::try_from(array2)?)?;
+        let rr_guard = rr.lock().await;
+        let _ = match rr_guard.log("model/mask_compressed", &seg_img) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log mask: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
     }
+}
 
-    Ok(())
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    let session = zenoh::open(args.clone()).await.unwrap();
+
+    let (rr, _serve_guard) = args.rerun.init("model-mask_compressed")?;
+
+    // Log annotation context
+    rr.log(
+        "/",
+        &AnnotationContext::new([
+            (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
+            (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
+    )?;
+
+    let rr = Arc::new(Mutex::new(rr));
+
+    let sub = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
+    let rr_clone = rr.clone();
+    task::spawn(model_mask_handler(sub, rr_clone));
+
+    // Rerun setup
+    loop {
+        
+    }
 }

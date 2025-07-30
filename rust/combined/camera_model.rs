@@ -115,49 +115,49 @@ async fn model_boxes2d_handler(
     }
 }
 
-// async fn model_mask_handler(
-//     sub: Subscriber<FifoChannelHandler<Sample>>,
-//     rr: Arc<Mutex<rerun::RecordingStream>>,
-//     compressed: Bool
-// ) {
-//     while let Ok(msg) = sub.recv_async().await {
-//         let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
-//             Ok(v) => v,
-//             Err(e) => {
-//                 eprintln!("Failed to deserialize detect message: {:?}", e);
-//                 continue; // skip this message and continue
-//             }
-//         };
-//         let decompressed_bytes = decode_all(Cursor::new(&mask.mask))?;
-//         let h = mask.height as usize;
-//         let w = mask.width as usize;
-//         let total_len = mask.mask.len() as u32;
-//         let c = (total_len / (h as u32 * w as u32)) as usize;
+async fn model_mask_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    rr: Arc<Mutex<rerun::RecordingStream>>,
+    compressed: bool
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize detect message: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let decompressed_bytes = decode_all(Cursor::new(&mask.mask))?;
+        let h = mask.height as usize;
+        let w = mask.width as usize;
+        let total_len = mask.mask.len() as u32;
+        let c = (total_len / (h as u32 * w as u32)) as usize;
 
-//         let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
+        let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
         
-//         // Compute argmax along the last axis (class channel)
-//         let array2: Array2<u8> = arr3
-//             .map_axis(ndarray::Axis(2), |class_scores| {
-//                 class_scores
-//                     .iter()
-//                     .enumerate()
-//                     .max_by_key(|(_, val)| *val)
-//                     .map(|(idx, _)| idx as u8)
-//                     .unwrap_or(0)
-//             });
+        // Compute argmax along the last axis (class channel)
+        let array2: Array2<u8> = arr3
+            .map_axis(ndarray::Axis(2), |class_scores| {
+                class_scores
+                    .iter()
+                    .enumerate()
+                    .max_by_key(|(_, val)| *val)
+                    .map(|(idx, _)| idx as u8)
+                    .unwrap_or(0)
+            });
 
-//         // Log segmentation mask
-//         let rr_guard = rr.lock().await;
-//         let _ = match rr_guard.log("/camera/mask", &SegmentationImage::try_from(array2)?) {
-//             Ok(v) => v,
-//             Err(e) => {
-//                 eprintln!("Failed to log mask: {:?}", e);
-//                 continue; // skip this message and continue
-//             }
-//         };  
-//     }
-// }
+        // Log segmentation mask
+        let rr_guard = rr.lock().await;
+        let _ = match rr_guard.log("/camera/mask", &SegmentationImage::try_from(array2)?) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log mask: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };  
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

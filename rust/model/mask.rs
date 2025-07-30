@@ -6,6 +6,58 @@ use rerun::{AnnotationContext, SegmentationImage};
 use std::{error::Error, sync::Arc};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
+use fast_image_resize as fr;
+
+fn resize_array3_u8(
+    input: &Array3<u8>,
+    new_height: usize,
+    new_width: usize,
+) -> Result<Array3<u8>, Box<dyn Error>> {
+    let (h, w, c) = input.dim();
+
+    // Prepare the output array
+    let mut output = Array3::<u8>::zeros((new_height, new_width, c));
+
+    // Create a resizer instance (bilinear or nearest neighbor)
+    let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(fr::FilterType::Triangle));
+
+    // For each channel, resize the 2D slice
+    for channel in 0..c {
+        // Extract 2D view for the channel
+        let channel_in: Array2<u8> = input.slice(s![.., .., channel]).to_owned();
+
+        // Create source ImageView
+        let src_view = fr::ImageView::from_u8(
+            &channel_in.as_slice().unwrap(),
+            channel_in.ncols(),
+            channel_in.nrows(),
+            channel_in.ncols(),
+            fr::PixelType::U8,
+        )?;
+
+        // Prepare destination buffer
+        let mut dst_buffer = vec![0u8; new_width * new_height];
+        let mut dst_view = fr::ImageViewMut::from_u8(
+            &mut dst_buffer,
+            new_width,
+            new_height,
+            new_width,
+            fr::PixelType::U8,
+        )?;
+
+        // Perform resize
+        resizer.resize(&src_view, &mut dst_view)?;
+
+        // Copy resized data back to output array for this channel
+        for (idx, val) in dst_buffer.iter().enumerate() {
+            let row = idx / new_width;
+            let col = idx % new_width;
+            output[[row, col, channel]] = *val;
+        }
+    }
+
+    Ok(output)
+}
 
 async fn model_mask_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,

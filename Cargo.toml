@@ -141,6 +141,7 @@ itertools = "0.14.0"
 zstd = "0.13.3"
 openh264 = { git = "https://github.com/ralfbiedert/openh264-rs.git", rev = "refs/pull/79/head" }
 rand = "0.9.1"
+fast_image_resize = "5.1.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 async-pidfd = "0.1.4"

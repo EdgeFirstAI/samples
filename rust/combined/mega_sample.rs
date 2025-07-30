@@ -13,11 +13,14 @@ use edgefirst_schemas::{
     foxglove_msgs::FoxgloveCompressedVideo,
     sensor_msgs::{NavSatFix, PointCloud2},
 };
-use ndarray::{Array, Array2};
+use zstd::stream::decode_all;
+use ndarray::{Array, Array2, Array3, s};
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
 use rerun::{AnnotationContext, Boxes3D, Color, Image, Points3D, Position3D, SegmentationImage};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
+use fast_image_resize as fr;
+use fast_image_resize::images::Image as fr_Image;
 
 fn crop_box(mut b: DetectBox2D)
     -> DetectBox2D {
@@ -43,6 +46,49 @@ fn crop_box(mut b: DetectBox2D)
     }
 
     b
+}
+
+fn resize_array3_u8(arr: &Array3<u8>, new_width: usize, new_height: usize) -> Result<Array3<u8>, Box<dyn std::error::Error>> {
+    let (height, width, channels) = arr.dim();
+
+    // fast_image_resize expects pixels interleaved: [R,G,B,R,G,B,...]
+    // Convert ndarray from shape (H, W, C) to a Vec<u8> in interleaved order
+    let mut src_buffer = Vec::with_capacity(height * width * channels);
+    for row in 0..height {
+        for col in 0..width {
+            for ch in 0..channels {
+                src_buffer.push(arr[[row, col, ch]]);
+            }
+        }
+    }
+
+    // Create source Image view
+    let src_image = fr_Image::from_vec_u8(width as u32, height as u32, src_buffer, fr::PixelType::U8x3)?;
+
+    // Prepare destination buffer (interleaved)
+    let dst_buffer = vec![0u8; new_width * new_height * channels];
+    let mut dst_image = fr_Image::from_vec_u8(new_width as u32, new_height as u32, dst_buffer, fr::PixelType::U8x3)?;
+
+    // Create resizer and do resize (bilinear)
+    let mut resizer = fr::Resizer::new();
+    resizer.resize(&src_image, &mut dst_image, None)?;
+
+    // Get back the resized pixel buffer
+    let resized_buf = dst_image.into_vec();
+
+    // Convert interleaved Vec<u8> back into ndarray::Array3<u8>
+    let mut output = Array3::<u8>::zeros((new_height, new_width, channels));
+    let mut idx = 0;
+    for row in 0..new_height {
+        for col in 0..new_width {
+            for ch in 0..channels {
+                output[[row, col, ch]] = resized_buf[idx];
+                idx += 1;
+            }
+        }
+    }
+
+    Ok(output)
 }
 
 async fn camera_h264_handler(
@@ -129,49 +175,82 @@ async fn model_boxes2d_handler(
     }
 }
 
-// async fn model_mask_handler(
-//     sub: Subscriber<FifoChannelHandler<Sample>>,
-//     rr: Arc<Mutex<rerun::RecordingStream>>,
-//     compressed: Bool
-// ) {
-//     while let Ok(msg) = sub.recv_async().await {
-//         let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
-//             Ok(v) => v,
-//             Err(e) => {
-//                 eprintln!("Failed to deserialize detect message: {:?}", e);
-//                 continue; // skip this message and continue
-//             }
-//         };
-//         let decompressed_bytes = decode_all(Cursor::new(&mask.mask))?;
-//         let h = mask.height as usize;
-//         let w = mask.width as usize;
-//         let total_len = mask.mask.len() as u32;
-//         let c = (total_len / (h as u32 * w as u32)) as usize;
+async fn model_mask_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    rr: Arc<Mutex<rerun::RecordingStream>>,
+    frame_size: Arc<Mutex<[u32; 2]>>
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize model mask: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let decompressed_bytes = match decode_all(Cursor::new(&mask.mask)) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to decompress mask array: {:?}", e);
+                continue;
+            }
+        };
 
-//         let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
+        let h = mask.height as usize;
+        let w = mask.width as usize;
+        let total_len = decompressed_bytes.len() as u32;
+        let c = (total_len / (h as u32 * w as u32)) as usize;
+
+        let arr3 = match Array3::from_shape_vec([h, w, c], decompressed_bytes.clone()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to form the mask array: {:?}", e);
+                continue;
+            }
+        };
+
+        let size = frame_size.lock().await;
+        let new_size = size.clone();
+        drop(size);
+
+        let resized_arr3 = match resize_array3_u8(&arr3, new_size[0] as usize, new_size[1] as usize) {
+            Ok(arr) => arr,
+            Err(e) => {
+                eprintln!("Failed to resize array3: {:?}", e);
+                continue; // or return, break, or handle the error as needed
+            }
+        };
         
-//         // Compute argmax along the last axis (class channel)
-//         let array2: Array2<u8> = arr3
-//             .map_axis(ndarray::Axis(2), |class_scores| {
-//                 class_scores
-//                     .iter()
-//                     .enumerate()
-//                     .max_by_key(|(_, val)| *val)
-//                     .map(|(idx, _)| idx as u8)
-//                     .unwrap_or(0)
-//             });
+        // Compute argmax along the last axis (class channel)
+        let array2: Array2<u8> = resized_arr3
+            .map_axis(ndarray::Axis(2), |class_scores| {
+                class_scores
+                    .iter()
+                    .enumerate()
+                    .max_by_key(|(_, val)| *val)
+                    .map(|(idx, _)| idx as u8)
+                    .unwrap_or(0)
+            });
 
-//         // Log segmentation mask
-//         let rr_guard = rr.lock().await;
-//         let _ = match rr_guard.log("/camera/mask", &SegmentationImage::try_from(array2)?) {
-//             Ok(v) => v,
-//             Err(e) => {
-//                 eprintln!("Failed to log mask: {:?}", e);
-//                 continue; // skip this message and continue
-//             }
-//         };  
-//     }
-// }
+        let seg_img = match SegmentationImage::try_from(array2) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to convert to SegmentationImage: {:?}", e);
+                continue;
+            }
+        };
+
+        // Log segmentation mask
+        let rr_guard = rr.lock().await;
+        let _ = match rr_guard.log("/camera/mask", &seg_img) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log mask: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+    }
+}
 
 async fn radar_clusters_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
@@ -379,18 +458,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr, frame_size_boxes2d));
     }
 
-    // if model_topics.contains("rt/model/mask_compressed") {
-    //     // Log annotation context
-    //     rr.lock().await.log(
-    //         "/",
-    //         &AnnotationContext::new([
-    //             (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
-    //             (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
-    //     )?;
-    //     let mask_sub = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
-    //     let mask_rr = rr.clone();
-    //     task::spawn(model_mask_handler(mask_sub, mask_rr, true));
-    // }
+    if model_topics.contains("rt/model/mask_compressed") {
+        // Log annotation context
+        rr.lock().await.log(
+            "/",
+            &AnnotationContext::new([
+                (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
+                (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
+        )?;
+        let mask_sub = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
+        let mask_rr = rr.clone();
+        let frame_size_mask = frame_size.clone();
+        task::spawn(model_mask_handler(mask_sub, mask_rr, frame_size_mask));
+    }
 
     if radar_topics.contains("rt/radar/clusters") {
         let radar_sub = session.declare_subscriber("rt/radar/clusters").await.unwrap();

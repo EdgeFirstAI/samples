@@ -4,6 +4,7 @@ import sys
 import av
 import io
 import zenoh
+import time
 import threading
 import numpy as np
 from edgefirst.schemas.edgefirst_msgs import Detect
@@ -20,7 +21,7 @@ from foxglove.schemas import (CompressedVideo, Timestamp, PointCloud,
                               SceneEntity, SceneEntityDeletion, 
                               SceneEntityDeletionType, SceneUpdate,
                               FrameTransform, PointsAnnotation, PointsAnnotationType,
-                              ImageAnnotations, Point2, Color)
+                              ImageAnnotations, Point2, Color, TextAnnotation)
 
 class FrameSize:
     def __init__(self):
@@ -71,7 +72,6 @@ def h264_worker(msg, frame_storage, raw_data, container):
                 for frame in packet.decode():
                     frame_array = frame.to_ndarray(format='rgb24')
                     frame_storage.set(frame_array.shape[1], frame_array.shape[0])
-                    print("Logged a shape")
             except Exception:
                 continue
     foxglove.log(
@@ -83,6 +83,7 @@ def h264_worker(msg, frame_storage, raw_data, container):
             format = vid.format
         )
     )
+
     
 async def h264_handler(drain, frame_storage):
     raw_data = io.BytesIO()
@@ -99,28 +100,38 @@ async def h264_handler(drain, frame_storage):
 
 def boxes2d_worker(msg, boxes_tracked, frame_size):
     detection = Detect.deserialize(msg.payload.to_bytes())
-    centers, sizes, labels, colors = [], [], [], []
+    labels, colors = [], []
     point_annos = []
+    label_annos = []
     for box in detection.boxes:
+        lx = box.center_x * frame_size[0] - (box.width * frame_size[0] / 2)
+        lx = max(0, min(lx, frame_size[0]))
+        rx = box.center_x * frame_size[0] + (box.width * frame_size[0] / 2)
+        rx = max(0, min(rx, frame_size[0]))
+        uy = box.center_y * frame_size[1] - (box.height * frame_size[1] / 2)
+        uy = max(0, min(uy, frame_size[1]))
+        by = box.center_y * frame_size[1] + (box.height * frame_size[1] / 2)
+        by = max(0, min(by, frame_size[1]))
+
+        color = Color(r=0,g=1,b=0,a=1)
+        label = TextAnnotation(position=Point2(x=lx, y=by), text=box.label, font_size=32, text_color=Color(r=0,g=0,b=0,a=1),
+                               background_color=Color(r=1,g=1,b=1,a=1))
         if box.track.id and box.track.id not in boxes_tracked:
             new_color = np.random.choice(range(256), size=3)
-            boxes_tracked[box.track.id] = [box.label + ": " + box.track.id[:6], Color(r=new_color[0] / 255, g=new_color[1] / 255, 
-                                                                                      b=new_color[2] / 255, a=1)]
+            boxes_tracked[box.track.id] = Color(r=new_color[0] / 255, g=new_color[1] / 255, 
+                                                b=new_color[2] / 255, a=1)
         if box.track.id:
-            colors.append(boxes_tracked[box.track.id][1])
-            labels.append(boxes_tracked[box.track.id][0])
-        else:
-            colors.append(Color(r=0,g=1,b=0,a=1))
-            labels.append(box.label)
-        lx = box.center_x * frame_size[0] - (box.width * frame_size[0] / 2)
-        rx = box.center_x * frame_size[0] + (box.width * frame_size[0] / 2)
-        uy = box.center_y * frame_size[1] - (box.height * frame_size[1] / 2)
-        by = box.center_y * frame_size[1] + (box.height * frame_size[1] / 2)
+            label = TextAnnotation(position=Point2(x=lx, y=by), text=box.label + ": " + box.track.id[:6], font_size=32, 
+                                   text_color=Color(r=1,g=1,b=1,a=1), background_color=Color(r=0,g=0,b=0,a=1))
+            color = boxes_tracked[box.track.id]
+
+        label_annos.append(label)
         points = [Point2(x=lx, y=uy), Point2(x=lx, y=by), Point2(x=rx, y=by), Point2(x=rx, y=uy)]
         point_annos.append(PointsAnnotation(type=PointsAnnotationType.LineLoop, points=points,
-                                            outline_color=colors[-1], thickness=2))
-    im_anno = ImageAnnotations(points=point_annos)
+                                            outline_color=color, thickness=5))
+    im_anno = ImageAnnotations(points=point_annos, texts=label_annos)
     foxglove.log("/camera/boxes2d", im_anno)
+
 
 async def boxes2d_handler(drain, frame_storage):
     boxes_tracked = {}
@@ -155,10 +166,6 @@ def clusters_worker(msg):
 
     pc = PointCloud(
         frame_id=pcd.header.frame_id,
-        pose=Pose(
-            position=Vector3(x=0, y=0, z=-0.19),
-            orientation=Quaternion(x=0, y=0, z=-0.9998157, w=0.0191974),
-        ),
         point_stride=28,  # 4 fields * 4 bytes
         fields=[
             PackedElementField(name="x", offset=0, type=PackedElementFieldNumericType.Float32),
@@ -186,14 +193,14 @@ def boxes3d_worker(msg):
     detection = Detect.deserialize(msg.payload.to_bytes())
     # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
     # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
-
     ts = Timestamp(sec=detection.header.stamp.sec, nsec=detection.header.stamp.nanosec)
     cube_list = []
     for box in detection.boxes:
         cube = CubePrimitive(
-            pose=Pose(position=Vector3(x=-box.center_x, y=box.center_y, z=-box.distance),
+            pose=Pose(position=Vector3(x=box.center_x, y=box.center_y, z=box.distance),
                       orientation=Quaternion(x=0, y=0, z=0, w=1)),
-            size=Vector3(x=box.width, y=box.height, z=box.width)
+            size=Vector3(x=box.width, y=box.height, z=box.width),
+            color=(Color(r=0, g=1, b=0, a=0.5))
         )
         cube_list.append(cube)
     entity = SceneEntity(timestamp=ts, frame_id=detection.header.frame_id,
@@ -274,6 +281,7 @@ async def main_async(args):
     session.declare_subscriber('rt/fusion/boxes3d', boxes3d_drain.callback)
     session.declare_subscriber('rt/tf_static', static_drain.callback)
 
+    print("All setup")
     # Launch concurrent processing tasks
     await asyncio.gather(h264_handler(h264_drain, frame_size_storage), 
                          boxes2d_handler(boxes2d_drain, frame_size_storage),

@@ -16,16 +16,16 @@ name = "list-topics"
 path = "rust/list-topics.rs"
 
 [[bin]]
+name = "edgefirst-foxglove"
+path = "rust/edgefirst_foxglove.rs"
+
+[[bin]]
 name = "camera-info"
 path = "rust/camera/camera_info.rs"
 
 [[bin]]
 name = "camera-h264"
 path = "rust/camera/h264.rs"
-
-[[bin]]
-name = "camera-h264-foxglove"
-path = "rust/foxglove/camera/h264.rs"
 
 [[bin]]
 name = "mega-sample"
@@ -40,16 +40,8 @@ name = "camera-lidar"
 path = "rust/combined/camera_lidar.rs"
 
 [[bin]]
-name = "camera-lidar-foxglove"
-path = "rust/foxglove/combined/camera_lidar.rs"
-
-[[bin]]
 name = "camera-radar"
 path = "rust/combined/camera_radar.rs"
-
-[[bin]]
-name = "camera-radar-foxglove"
-path = "rust/foxglove/combined/camera_radar.rs"
 
 [[bin]]
 name = "lidar-clusters"

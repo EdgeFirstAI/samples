@@ -8,17 +8,17 @@ use clap::Parser;
 use bytes::Bytes;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
-    decode_pcd,
-    edgefirst_msgs::Detect,
-    foxglove_msgs::FoxgloveCompressedVideo,
-    sensor_msgs::{PointCloud2},
-    geometry_msgs::TransformStamped
+    decode_pcd, 
+    edgefirst_msgs::Detect, 
+    foxglove_msgs::FoxgloveCompressedVideo, 
+    geometry_msgs::TransformStamped, 
+    sensor_msgs::{NavSatFix, PointCloud2, IMU}
 };
 use foxglove::{WebSocketServer, log,
     schemas::{Timestamp, CompressedVideo, PointCloud, PackedElementField,
               Quaternion, Vector3, Pose, Color, CubePrimitive, SceneEntity, SceneEntityDeletion,
               SceneUpdate, FrameTransform, TextAnnotation, ImageAnnotations, Point2,
-              PointsAnnotation}
+              PointsAnnotation, LocationFix}
 };
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
 use tokio::{sync::Mutex, task};
@@ -162,6 +162,85 @@ async fn model_boxes2d_handler(
     }
 }
 
+async fn lidar_clusters_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize lidar pointcloud: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let clustered_points: Vec<_> = decode_pcd(&pcd).into_iter().filter(|p| p.id > 0).collect();
+        let max_cluster_id = clustered_points
+            .iter()
+            .map(|p| p.id)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        let mut packed = Vec::with_capacity(clustered_points.len() * 28); // 7 f32 values per point
+
+        for p in &clustered_points {
+            let (r, g, b) = colorous::TURBO
+                .eval_continuous(p.id as f64 / max_cluster_id as f64)
+                .as_tuple();
+
+            // Normalize u8 RGB to 0.0–1.0
+            let r = r as f32 / 255.0;
+            let g = g as f32 / 255.0;
+            let b = b as f32 / 255.0;
+
+            packed.push(p.x as f32);
+            packed.push(p.y as f32);
+            packed.push(p.z as f32);
+            packed.push(r);
+            packed.push(g);
+            packed.push(b);
+            packed.push(1.0 as f32);
+        }
+
+        let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
+
+        let pc = PointCloud {
+            frame_id: pcd.header.frame_id.clone(),
+            timestamp: Some(Timestamp::now()),
+            pose: Some(Pose {
+                position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+                orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+            }),
+            point_stride: 28,
+            fields: vec![
+                PackedElementField {
+                    name: "x".into(),
+                    offset: 0,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "y".into(),
+                    offset: 4,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "z".into(),
+                    offset: 8,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "rgba".into(),
+                    offset: 12,
+                    r#type: 7,
+                },
+            ],
+            data: data,
+        };
+
+        log!("/pointcloud/lidar/clusters", pc);
+    }
+}
+
 async fn radar_clusters_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>
 ) {
@@ -237,7 +316,7 @@ async fn radar_clusters_handler(
             data: data,
         };
 
-        log!("/pointcloud/clusters", pc);
+        log!("/pointcloud/radar/clusters", pc);
     }
 }
 
@@ -310,6 +389,66 @@ async fn fusion_boxes3d_handler(
     }
 }
 
+async fn gps_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let gps = match cdr::deserialize::<NavSatFix>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize gps: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+
+        let ts = Timestamp::new(gps.header.stamp.sec as u32, gps.header.stamp.nanosec);
+        let loc_fix = LocationFix {
+            timestamp: Some(ts.clone()),
+            frame_id: gps.header.frame_id,
+            latitude: gps.latitude,
+            longitude: gps.longitude,
+            altitude: gps.altitude,
+            position_covariance: gps.position_covariance.to_vec(),
+            position_covariance_type: gps.position_covariance_type as i32
+        };
+
+        log!("/gps", loc_fix);
+    }
+}
+
+async fn imu_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let imu = match cdr::deserialize::<IMU>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize imu: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let imu_quat = Quaternion {
+            x: imu.orientation.x,
+            y: imu.orientation.y,
+            z: imu.orientation.z,
+            w: imu.orientation.w
+        };
+        let imu_angular_vel = Vector3 {
+            x: imu.angular_velocity.x,
+            y: imu.angular_velocity.y,
+            z: imu.angular_velocity.z
+        };
+        let imu_linear_accel = Vector3 {
+            x: imu.linear_acceleration.x,
+            y: imu.linear_acceleration.y,
+            z: imu.linear_acceleration.z
+        };
+        log!("/imu/quaternion", imu_quat);
+        log!("/imu/angular_velocity", imu_angular_vel);
+        log!("/imu/linear_acceleration", imu_linear_accel);
+    }
+}
+
 async fn static_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>
  ) {
@@ -364,11 +503,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let frame_size_boxes2d = frame_size.clone();
     task::spawn(model_boxes2d_handler(boxes2d_sub, frame_size_boxes2d));
 
+    let lidar_sub = session.declare_subscriber("rt/lidar/clusters").await.unwrap();
+    task::spawn(lidar_clusters_handler(lidar_sub));
+
     let lidar_sub = session.declare_subscriber("rt/radar/clusters").await.unwrap();
     task::spawn(radar_clusters_handler(lidar_sub));
 
     let boxes3d_sub = session.declare_subscriber("rt/fusion/boxes3d").await.unwrap();
     task::spawn(fusion_boxes3d_handler(boxes3d_sub));
+
+    let gps_sub = session.declare_subscriber("rt/gps").await.unwrap();
+    task::spawn(gps_handler(gps_sub));
+
+    let imu_sub = session.declare_subscriber("rt/imu").await.unwrap();
+    task::spawn(imu_handler(imu_sub));
 
     let static_sub = session.declare_subscriber("rt/tf_static").await.unwrap();
     task::spawn(static_handler(static_sub));

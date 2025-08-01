@@ -41,4 +41,4 @@ if __name__ == "__main__":
         # Capture the message encoding MIME type then split on the first ';'
         # to get the schema.
         schema = str(msg.encoding).split(';', maxsplit=1)[-1]
-        print("topic: %s → %s" % (topic, schema))
+        print("topic: %s -> %s" % (topic, schema))

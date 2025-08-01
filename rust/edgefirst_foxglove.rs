@@ -490,7 +490,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let frame_size = Arc::new(Mutex::new([0u32; 2]));
 
     thread::spawn(|| {
-        WebSocketServer::new()
+        WebSocketServer::new().bind("0.0.0.0", 8765)
             .start_blocking()
             .expect("Server failed to start");
     });

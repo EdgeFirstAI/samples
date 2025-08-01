@@ -55,7 +55,7 @@ async fn camera_h264_handler(
             data: video.data.clone().into(),
             format: video.format.clone(),
         };
-        log!("/camera", cv)
+        log!("/camera/h264", cv)
     }
 }
 
@@ -157,7 +157,7 @@ async fn model_boxes2d_handler(
             texts: label_annos,
             ..Default::default()
         };
-        log!("/camera/boxes2d", annotations);
+        log!("/model/boxes2d", annotations);
         
     }
 }
@@ -237,7 +237,7 @@ async fn lidar_clusters_handler(
             data: data,
         };
 
-        log!("/pointcloud/lidar/clusters", pc);
+        log!("/lidar/clusters", pc);
     }
 }
 
@@ -316,7 +316,7 @@ async fn radar_clusters_handler(
             data: data,
         };
 
-        log!("/pointcloud/radar/clusters", pc);
+        log!("/radar/clusters", pc);
     }
 }
 
@@ -385,7 +385,7 @@ async fn fusion_boxes3d_handler(
             entities: vec![entity],
         };
 
-        log!("/pointcloud/boxes3d", update);
+        log!("/fusion/boxes3d", update);
     }
 }
 

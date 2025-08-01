@@ -2,54 +2,34 @@ use std::{
     error::Error,
     sync::Arc,
     thread,
-    io::Cursor
+    collections::HashMap
 };
 use clap::Parser;
-use byteorder::WriteBytesExt;
+use bytes::Bytes;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
     decode_pcd,
-    edgefirst_msgs::{Detect, DetectBox2D},
+    edgefirst_msgs::Detect,
     foxglove_msgs::FoxgloveCompressedVideo,
     sensor_msgs::{PointCloud2},
+    geometry_msgs::TransformStamped
 };
 use foxglove::{WebSocketServer, log,
     schemas::{Timestamp, CompressedVideo, PointCloud, PackedElementField,
-              Quaternion, Vector3, Pose}
+              Quaternion, Vector3, Pose, Color, CubePrimitive, SceneEntity, SceneEntityDeletion,
+              SceneUpdate, FrameTransform, TextAnnotation, ImageAnnotations, Point2,
+              PointsAnnotation}
 };
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
-use rerun::{Boxes3D, Color, Image, Points3D, Position3D};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
+async fn camera_h264_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    frame_size: Arc<Mutex<[u32; 2]>>,
+) {
+    let mut decoder = Decoder::new().expect("Failed to create decoder");
 
-fn crop_box(mut b: DetectBox2D)
-    -> DetectBox2D {
-    if b.center_x + (b.width / 2.0) > 1.0 {
-        let new_width = b.width - (b.center_x + (b.width / 2.0) - 1.0);
-        b.center_x = (b.center_x - (b.width / 2.0) + 1.0) / 2.0;
-        b.width = new_width;
-    }
-    if b.center_x - (b.width / 2.0) < 0.0 {
-        let new_width = b.center_x + (b.width / 2.0);
-        b.center_x = (b.center_x + (b.width / 2.0)) / 2.0;
-        b.width = new_width;
-    }
-    if b.center_y + (b.height / 2.0) > 1.0 {
-        let new_height = b.height - (b.center_y + (b.height / 2.0) - 1.0);
-        b.center_y = (b.center_y - (b.height / 2.0) + 1.0) / 2.0;
-        b.height = new_height;
-    }
-    if b.center_y - (b.height / 2.0) < 0.0 {
-        let new_height = b.center_y + (b.height / 2.0);
-        b.center_y = (b.center_y + (b.height / 2.0)) / 2.0;
-        b.height = new_height;
-    }
-
-    b
-}
-
-async fn camera_h264_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let video = match cdr::deserialize::<FoxgloveCompressedVideo>(&msg.payload().to_bytes()) {
             Ok(v) => v,
@@ -58,10 +38,19 @@ async fn camera_h264_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
                 continue;
             }
         };
+        let mut size = frame_size.lock().await;
+        if size[0] == 0 || size[1] == 0 {
+            for packet in nal_units(&video.data) {
+                let Ok(Some(yuv)) = decoder.decode(packet) else { continue };
+                let width = yuv.dimensions().0;
+                let height = yuv.dimensions().1;
+                *size = [width as u32, height as u32];
+            }
+        }
 
-        let ts = Timestamp::new(video.header.stamp.sec as u32, video.header.stamp.nanosec as u32);
+        let ts = Timestamp::new(video.header.stamp.sec as u32, video.header.stamp.nanosec);
         let cv = CompressedVideo {
-            timestamp: Some(ts),
+            timestamp: Some(ts.clone()),
             frame_id: video.header.frame_id.clone(),
             data: video.data.clone().into(),
             format: video.format.clone(),
@@ -72,9 +61,9 @@ async fn camera_h264_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
 
 async fn model_boxes2d_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
     frame_size: Arc<Mutex<[u32; 2]>>,
 ) {
+    let mut boxes_tracked: HashMap<String, Color> = HashMap::new();
     while let Ok(msg) = sub.recv_async().await {
         let detection = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
             Ok(v) => v,
@@ -83,28 +72,93 @@ async fn model_boxes2d_handler(
                 continue; // skip this message and continue
             }
         };
-        let mut centers = Vec::new();
-        let mut sizes = Vec::new();
-        let mut labels = Vec::new();
+
+        let ts = Timestamp::new(detection.header.stamp.sec as u32, detection.header.stamp.nanosec);
+        let mut point_annos = vec![];
+        let mut label_annos = vec![];
         let size = frame_size.lock().await;
         if size[0] == 0 || size[1] == 0 { continue; }
-
+        let w = size[0] as f64;
+        let h = size[1] as f64;
         for b in detection.boxes {
-            let b = crop_box(b);
-            centers.push([b.center_x * size[0] as f32, b.center_y * size[1] as f32]);
-            sizes.push([b.width * size[0] as f32, b.height * size[1] as f32]);
-            labels.push(b.label);
-        }
-        drop(size);
 
-        let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/camera/boxes2d", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels)) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("Failed to log boxes2d: {:?}", e);
-                continue; // skip this message and continue
+            let mut lx = b.center_x as f64 * w - (b.width as f64 * w / 2.0);
+            lx = lx.clamp(0.0, w);
+
+            let mut rx = b.center_x as f64 * w + (b.width as f64 * w / 2.0);
+            rx = rx.clamp(0.0, w);
+
+            let mut uy = b.center_y as f64 * h - (b.height as f64 * h / 2.0);
+            uy = uy.clamp(0.0, h);
+
+            let mut by = b.center_y as f64 * h + (b.height as f64 * h / 2.0);
+            by = by.clamp(0.0, h);
+
+            let mut color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
+            let mut label = TextAnnotation {
+                timestamp: Some(ts.clone()),
+                position: Some(Point2 { x: lx, y: by }),
+                text: b.label.clone(),
+                font_size: 32.0,
+                text_color: Some(Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }),
+                background_color: Some(Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }),
+            };
+
+            if b.track.id != "" {
+                if !boxes_tracked.contains_key(&b.track.id) {
+                    let rgb = (
+                        rand::random::<u8>(),
+                        rand::random::<u8>(),
+                        rand::random::<u8>()
+                    );
+                    boxes_tracked.insert(
+                        b.track.id.clone(),
+                        Color {
+                            r: rgb.0 as f64 / 255.0,
+                            g: rgb.1 as f64 / 255.0,
+                            b: rgb.2 as f64 / 255.0,
+                            a: 1.0,
+                        },
+                    );
                 }
-            };   
+                color = boxes_tracked[&b.track.id];
+                let short_id = &b.track.id[0..6];
+                label = TextAnnotation {
+                    timestamp: Some(ts.clone()),
+                    position: Some(Point2 { x: lx, y: by }),
+                    text: format!("{}: {}", b.label, short_id),
+                    font_size: 32.0,
+                    text_color: Some(Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }),
+                    background_color: Some(Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }),
+                };
+            }
+
+            label_annos.push(label);
+
+            let points = vec![
+                Point2 { x: lx, y: uy },
+                Point2 { x: lx, y: by },
+                Point2 { x: rx, y: by },
+                Point2 { x: rx, y: uy },
+            ];
+
+            point_annos.push(PointsAnnotation {
+                timestamp: Some(ts.clone()),
+                r#type: 2,
+                points: points,
+                outline_color: Some(color),
+                thickness: 5.0,
+                ..Default::default()
+            });
+        }
+
+        let annotations = ImageAnnotations {
+            points: point_annos,
+            texts: label_annos,
+            ..Default::default()
+        };
+        log!("/camera/boxes2d", annotations);
+        
     }
 }
 
@@ -127,8 +181,7 @@ async fn lidar_clusters_handler(
             .unwrap_or(1)
             .max(1);
 
-        let mut buffer = Vec::with_capacity(clustered_points.len() * 28); // 7 f32 values per point
-        let mut cursor = Cursor::new(&mut buffer);
+        let mut packed = Vec::with_capacity(clustered_points.len() * 28); // 7 f32 values per point
 
         for p in &clustered_points {
             let (r, g, b) = colorous::TURBO
@@ -140,14 +193,16 @@ async fn lidar_clusters_handler(
             let g = g as f32 / 255.0;
             let b = b as f32 / 255.0;
 
-            cursor.write_f32_le(p.x).unwrap();
-            cursor.write_f32_le(p.y).unwrap();
-            cursor.write_f32_le(p.z).unwrap();
-            cursor.write_f32_le(r).unwrap();
-            cursor.write_f32_le(g).unwrap();
-            cursor.write_f32_le(b).unwrap();
-            cursor.write_f32_le(1.0).unwrap(); // alpha
+            packed.push(p.x as f32);
+            packed.push(p.y as f32);
+            packed.push(p.z as f32);
+            packed.push(r);
+            packed.push(g);
+            packed.push(b);
+            packed.push(1.0 as f32);
         }
+
+        let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
 
         let pc = PointCloud {
             frame_id: pcd.header.frame_id.clone(),
@@ -179,7 +234,7 @@ async fn lidar_clusters_handler(
                     r#type: 7,
                 },
             ],
-            data: buffer,
+            data: data,
         };
 
         log!("/pointcloud/clusters", pc);
@@ -187,8 +242,7 @@ async fn lidar_clusters_handler(
 }
 
 async fn fusion_boxes3d_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
+    sub: Subscriber<FifoChannelHandler<Sample>>
 ) {
     while let Ok(msg) = sub.recv_async().await {
         let det = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
@@ -198,49 +252,126 @@ async fn fusion_boxes3d_handler(
                 continue; // skip this message and continue
             }
         };
-        let boxes = det.boxes;
-        // The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
-        // We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
-        let rr_boxes = Boxes3D::from_centers_and_sizes(
-            boxes.iter().map(|b| (b.distance, -b.center_x, -b.center_y)),
-            boxes.iter().map(|b| (b.width, b.width, b.height)),
-        );
-        let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/pointcloud/boxes3d", &rr_boxes) {
+        // Timestamp from header
+        let ts = Timestamp::new(det.header.stamp.sec as u32, det.header.stamp.nanosec);
+
+        // Convert each box to CubePrimitive
+        let cubes: Vec<CubePrimitive> = det
+            .boxes
+            .iter()
+            .map(|b| CubePrimitive {
+                pose: Some(Pose {
+                    position: Some(Vector3 {
+                        x: b.center_x as f64,
+                        y: b.center_y as f64,
+                        z: b.distance as f64,
+                    }),
+                    orientation: Some(Quaternion {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                        w: 1.0,
+                    }),
+                }),
+                size: Some(Vector3 {
+                    x: b.width as f64,
+                    y: b.height as f64,
+                    z: b.width as f64,
+                }),
+                color: Some(Color {
+                    r: 0.0,
+                    g: 1.0,
+                    b: 0.0,
+                    a: 0.5,
+                }),
+            })
+            .collect();
+
+        // Create the entity with the cubes
+        let entity = SceneEntity {
+            timestamp: Some(ts.clone()),
+            frame_id: det.header.frame_id.clone(),
+            id: "boxes3d".to_string(),
+            cubes: cubes,
+            ..Default::default()
+        };
+
+        // Log the update with a matching deletion
+        let update = SceneUpdate {
+            deletions: vec![SceneEntityDeletion {
+                timestamp: Some(ts.clone()),
+                r#type: 0,
+                id: "boxes3d".to_string(),
+            }],
+            entities: vec![entity],
+        };
+
+        log!("/pointcloud/boxes3d", update);
+    }
+}
+
+async fn static_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+ ) {
+    while let Ok(msg) = sub.recv_async().await {
+        let tf_static = match cdr::deserialize::<TransformStamped>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log fusion boxes3d: {:?}", e);
+                eprintln!("Failed to deserialize tf_static: {:?}", e);
                 continue; // skip this message and continue
             }
         };
+        let ts = Timestamp::new(tf_static.header.stamp.sec as u32, tf_static.header.stamp.nanosec);
+
+        let transform = FrameTransform {
+            timestamp: Some(ts.clone()),
+            parent_frame_id: tf_static.header.frame_id.clone(),
+            child_frame_id: tf_static.child_frame_id.clone(),
+            translation: Some(Vector3 {
+                x: tf_static.transform.translation.x,
+                y: tf_static.transform.translation.y,
+                z: tf_static.transform.translation.z,
+            }),
+            rotation: Some(Quaternion {
+                x: tf_static.transform.rotation.x,
+                y: tf_static.transform.rotation.y,
+                z: tf_static.transform.rotation.z,
+                w: tf_static.transform.rotation.w,
+            }),
+        };
+
+        log!("/tf_static", transform);
     }
-}
+ }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
+    let frame_size = Arc::new(Mutex::new([0u32; 2]));
 
     thread::spawn(|| {
         WebSocketServer::new()
             .start_blocking()
             .expect("Server failed to start");
     });
-
+    
     let cam_sub = session.declare_subscriber("rt/camera/h264").await.unwrap();
-    task::spawn(camera_h264_handler(cam_sub));
+    let frame_size_cam = frame_size.clone();
+    task::spawn(camera_h264_handler(cam_sub, frame_size_cam));
 
-    // let boxes2d_sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
-    // let boxes2d_rr = rr.clone();
-    // let frame_size_boxes2d = frame_size.clone();
-    // task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr, frame_size_boxes2d));
+    let boxes2d_sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+    let frame_size_boxes2d = frame_size.clone();
+    task::spawn(model_boxes2d_handler(boxes2d_sub, frame_size_boxes2d));
 
     let lidar_sub = session.declare_subscriber("rt/lidar/clusters").await.unwrap();
     task::spawn(lidar_clusters_handler(lidar_sub));
 
-    // let boxes3d_sub = session.declare_subscriber("rt/fusion/boxes3d").await.unwrap();
-    // let boxes3d_rr = rr.clone();
-    // task::spawn(fusion_boxes3d_handler(boxes3d_sub, boxes3d_rr));
+    let boxes3d_sub = session.declare_subscriber("rt/fusion/boxes3d").await.unwrap();
+    task::spawn(fusion_boxes3d_handler(boxes3d_sub));
+
+    let static_sub = session.declare_subscriber("rt/tf_static").await.unwrap();
+    task::spawn(static_handler(static_sub));
 
     loop {
     }

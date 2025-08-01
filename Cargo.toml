@@ -48,6 +48,10 @@ name = "camera-radar"
 path = "rust/combined/camera_radar.rs"
 
 [[bin]]
+name = "camera-radar-foxglove"
+path = "rust/foxglove/combined/camera_radar.rs"
+
+[[bin]]
 name = "lidar-clusters"
 path = "rust/lidar/clusters.rs"
 
@@ -152,6 +156,8 @@ rand = "0.9.1"
 fast_image_resize = "5.1.4"
 foxglove = "0.10.1"
 byteorder = "1.5.0"
+bytemuck = "1.23.1"
+bytes = "1.10.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 async-pidfd = "0.1.4"

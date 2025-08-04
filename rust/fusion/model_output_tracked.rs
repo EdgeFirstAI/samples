@@ -22,7 +22,7 @@ async fn fusion_model_output_tracked_handler(
         let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize fusion_mask_output_tracked: {:?}", e);
+                eprintln!("Failed to deserialize fusion_mask_output_tracked: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -40,10 +40,10 @@ async fn fusion_model_output_tracked_handler(
         let rr_seg_image = SegmentationImage::try_from(mask).unwrap();
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("fusion/model_output_tracked", &rr_seg_image) {
+        match rr_guard.log("fusion/model_output_tracked", &rr_seg_image) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log fusion model_output_tracked: {:?}", e);
+                eprintln!("Failed to log fusion model_output_tracked: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -65,13 +65,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/fusion/model_output/tracked").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/fusion/model_output/tracked")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(fusion_model_output_tracked_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }
-

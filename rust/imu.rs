@@ -13,7 +13,7 @@ async fn imu_handler(
         let imu = match cdr::deserialize::<IMU>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize imu: {:?}", e);
+                eprintln!("Failed to deserialize imu: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -25,11 +25,10 @@ async fn imu_handler(
         let pose = rerun::Quaternion([x, y, z, w]);
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("imu",
-            &rerun::Transform3D::default().with_quaternion(pose)) {
+        match rr_guard.log("imu", &rerun::Transform3D::default().with_quaternion(pose)) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log gps: {:?}", e);
+                eprintln!("Failed to log gps: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -53,7 +52,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(imu_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

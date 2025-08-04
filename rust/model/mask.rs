@@ -1,12 +1,11 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Mask;
-use ndarray::{Array2, Array};
+use ndarray::{Array, Array2};
 use rerun::{AnnotationContext, SegmentationImage};
 use std::{error::Error, sync::Arc};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
-use fast_image_resize as fr;
 
 // fn resize_array3_u8(
 //     input: &Array3<u8>,
@@ -67,7 +66,7 @@ async fn model_mask_handler(
         let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize model info: {:?}", e);
+                eprintln!("Failed to deserialize model info: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -80,36 +79,35 @@ async fn model_mask_handler(
         let arr3 = match Array::from_shape_vec((h, w, c), mask.mask.clone()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to form the mask array: {:?}", e);
+                eprintln!("Failed to form the mask array: {e:?}");
                 continue;
             }
         };
-        
+
         // Compute argmax along the last axis (class channel)
-        let array2: Array2<u8> = arr3
-            .map_axis(ndarray::Axis(2), |class_scores| {
-                class_scores
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|(_, val)| *val)
-                    .map(|(idx, _)| idx as u8)
-                    .unwrap_or(0)
-            });
+        let array2: Array2<u8> = arr3.map_axis(ndarray::Axis(2), |class_scores| {
+            class_scores
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, val)| *val)
+                .map(|(idx, _)| idx as u8)
+                .unwrap_or(0)
+        });
 
         let seg_img = match SegmentationImage::try_from(array2) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to convert to SegmentationImage: {:?}", e);
+                eprintln!("Failed to convert to SegmentationImage: {e:?}");
                 continue;
             }
         };
 
         // Log segmentation mask
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("model/mask", &seg_img) {
+        match rr_guard.log("model/mask", &seg_img) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log mask: {:?}", e);
+                eprintln!("Failed to log mask: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -128,7 +126,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "/",
         &AnnotationContext::new([
             (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
-            (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
+            (1, "person", rerun::Rgba32::from_rgb(0, 255, 0)),
+        ]),
     )?;
 
     let rr = Arc::new(Mutex::new(rr));
@@ -138,7 +137,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(model_mask_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

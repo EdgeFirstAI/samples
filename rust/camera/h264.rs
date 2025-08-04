@@ -1,9 +1,9 @@
-use std::{error::Error, sync::Arc};
 use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
 use rerun::Image;
+use std::{error::Error, sync::Arc};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
@@ -18,13 +18,15 @@ async fn camera_h264_handler(
         let video = match cdr::deserialize::<FoxgloveCompressedVideo>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize video: {:?}", e);
+                eprintln!("Failed to deserialize video: {e:?}");
                 continue;
             }
         };
 
         for packet in nal_units(&video.data) {
-            let Ok(Some(yuv)) = decoder.decode(packet) else { continue };
+            let Ok(Some(yuv)) = decoder.decode(packet) else {
+                continue;
+            };
             let rgb_len = yuv.rgb8_len();
             let mut rgb_raw = vec![0; rgb_len];
             yuv.write_rgb8(&mut rgb_raw);
@@ -34,12 +36,11 @@ async fn camera_h264_handler(
             let image = Image::from_rgb24(rgb_raw, [width as u32, height as u32]);
             let rr_guard = rr.lock().await;
             if let Err(e) = rr_guard.log("/camera", &image) {
-                eprintln!("Failed to log video: {:?}", e);
+                eprintln!("Failed to log video: {e:?}");
             }
         }
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -54,8 +55,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(camera_h264_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }
-

@@ -14,7 +14,7 @@ async fn radar_clusters_handler(
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize radar clusters: {:?}", e);
+                eprintln!("Failed to deserialize radar clusters: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -40,10 +40,10 @@ async fn radar_clusters_handler(
         }));
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("radar/clusters", &points) {
+        match rr_guard.log("radar/clusters", &points) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log radar clusters: {:?}", e);
+                eprintln!("Failed to log radar clusters: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -58,12 +58,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("radar-clusters")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/radar/clusters").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/radar/clusters")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(radar_clusters_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

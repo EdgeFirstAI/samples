@@ -13,20 +13,22 @@ async fn camera_info_handler(
         let info = match cdr::deserialize::<CameraInfo>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize camera info: {:?}", e);
+                eprintln!("Failed to deserialize camera info: {e:?}");
                 continue;
             }
         };
         let width = info.width;
         let height = info.height;
-        let text = "Camera Width: ".to_owned() + &width.to_string() + " Camera Height: " + &height.to_string();
+        let text = "Camera Width: ".to_owned()
+            + &width.to_string()
+            + " Camera Height: "
+            + &height.to_string();
         let rr_guard = rr.lock().await;
         if let Err(e) = rr_guard.log("CameraInfo", &rerun::TextLog::new(text)) {
-            eprintln!("Failed to log camera info: {:?}", e);
+            eprintln!("Failed to log camera info: {e:?}");
         }
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -41,9 +43,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(camera_info_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }
-
-

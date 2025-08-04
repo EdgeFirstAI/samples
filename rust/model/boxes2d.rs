@@ -13,7 +13,7 @@ async fn model_boxes2d_handler(
         let detection = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize model boxes2d: {:?}", e);
+                eprintln!("Failed to deserialize model boxes2d: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -30,10 +30,10 @@ async fn model_boxes2d_handler(
 
         let boxes = rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels);
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("model/boxes2d", &boxes) {
+        match rr_guard.log("model/boxes2d", &boxes) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log boxes: {:?}", e);
+                eprintln!("Failed to log boxes: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -48,12 +48,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("model-boxes2d")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/model/boxes2d")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(model_boxes2d_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

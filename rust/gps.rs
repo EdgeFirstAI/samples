@@ -13,17 +13,19 @@ async fn gps_handler(
         let gps = match cdr::deserialize::<NavSatFix>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize gps: {:?}", e);
+                eprintln!("Failed to deserialize gps: {e:?}");
                 continue; // skip this message and continue
             }
         };
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("CurrentLoc",
-            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)])) {
+        match rr_guard.log(
+            "CurrentLoc",
+            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)]),
+        ) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log gps: {:?}", e);
+                eprintln!("Failed to log gps: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -43,7 +45,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(gps_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

@@ -13,7 +13,7 @@ async fn lidar_depth_handler(
         let depth = match cdr::deserialize::<Image>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize lidar depth: {:?}", e);
+                eprintln!("Failed to deserialize lidar depth: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -34,10 +34,10 @@ async fn lidar_depth_handler(
         let img = rerun::Image::from_l8(img, [depth.width, depth.height]);
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("lidar/depth", &img) {
+        match rr_guard.log("lidar/depth", &img) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log lidar depth: {:?}", e);
+                eprintln!("Failed to log lidar depth: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -57,7 +57,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(lidar_depth_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

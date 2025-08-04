@@ -14,7 +14,7 @@ async fn fusion_radar_handler(
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize fusion radar: {:?}", e);
+                eprintln!("Failed to deserialize fusion radar: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -39,10 +39,10 @@ async fn fusion_radar_handler(
         }));
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("fusion/radar", &rr_points) {
+        match rr_guard.log("fusion/radar", &rr_points) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log fusion radar: {:?}", e);
+                eprintln!("Failed to log fusion radar: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -62,6 +62,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(fusion_radar_handler(sub, rr_clone));
 
     // Rerun setup
-    loop { 
-    }
+    loop {}
 }

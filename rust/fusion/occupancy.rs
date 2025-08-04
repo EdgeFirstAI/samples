@@ -14,7 +14,7 @@ async fn fusion_occupancy_handler(
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize fusion occupancy: {:?}", e);
+                eprintln!("Failed to deserialize fusion occupancy: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -40,10 +40,10 @@ async fn fusion_occupancy_handler(
         }));
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("fusion/occupancy", &rr_points) {
+        match rr_guard.log("fusion/occupancy", &rr_points) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log fusion occupancy: {:?}", e);
+                eprintln!("Failed to log fusion occupancy: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -58,11 +58,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("fusion-occupancy")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/fusion/occupancy").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/fusion/occupancy")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(fusion_occupancy_handler(sub, rr_clone));
 
     // Rerun setup
-    loop { 
-    }
+    loop {}
 }

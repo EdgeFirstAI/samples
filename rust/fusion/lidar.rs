@@ -19,7 +19,7 @@ async fn fusion_lidar_handler(
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize fusion_lidar: {:?}", e);
+                eprintln!("Failed to deserialize fusion_lidar: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -43,10 +43,10 @@ async fn fusion_lidar_handler(
             Color::from_rgb(r, g, b)
         }));
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("fusion/lidar", &rr_points) {
+        match rr_guard.log("fusion/lidar", &rr_points) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log fusion lidar: {:?}", e);
+                eprintln!("Failed to log fusion lidar: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -66,7 +66,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(fusion_lidar_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

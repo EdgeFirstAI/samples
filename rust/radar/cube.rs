@@ -14,17 +14,21 @@ async fn radar_cube_handler(
         let radar = match cdr::deserialize::<RadarCube>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize radar cube: {:?}", e);
+                eprintln!("Failed to deserialize radar cube: {e:?}");
                 continue; // skip this message and continue
             }
         };
 
         let shape = radar.shape.iter().map(|&x| x as usize).collect::<Vec<_>>();
-        let values = radar.cube.iter().map(|x| x.abs() as u16).collect::<Vec<_>>();
+        let values = radar
+            .cube
+            .iter()
+            .map(|x| x.unsigned_abs())
+            .collect::<Vec<_>>();
         let data = match Array::<u16, _>::from_shape_vec(shape, values) {
             Ok(arr) => arr,
             Err(e) => {
-                eprintln!("Failed to create ndarray from radar cube: {:?}", e);
+                eprintln!("Failed to create ndarray from radar cube: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -32,16 +36,16 @@ async fn radar_cube_handler(
         let tensor = match Tensor::try_from(data) {
             Ok(t) => t.with_dim_names(["SEQ", "RANGE", "RX", "DOPPLER"]),
             Err(e) => {
-                eprintln!("Failed to convert ndarray to Tensor: {:?}", e);
+                eprintln!("Failed to convert ndarray to Tensor: {e:?}");
                 continue;
             }
         };
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("radar/cube", &tensor) {
+        match rr_guard.log("radar/cube", &tensor) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log radar cube: {:?}", e);
+                eprintln!("Failed to log radar cube: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -61,7 +65,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(radar_cube_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

@@ -13,7 +13,7 @@ async fn model_info_handler(
         let info = match cdr::deserialize::<ModelInfo>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize model info: {:?}", e);
+                eprintln!("Failed to deserialize model info: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -27,10 +27,10 @@ async fn model_info_handler(
         let text = "Model Name: ".to_owned() + &m_name + " Model Type: " + &m_type;
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("model/info", &rerun::TextLog::new(text)) {
+        match rr_guard.log("model/info", &rerun::TextLog::new(text)) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log model info: {:?}", e);
+                eprintln!("Failed to log model info: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -50,7 +50,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(model_info_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

@@ -14,7 +14,7 @@ async fn lidar_points_handler(
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize lidar points: {:?}", e);
+                eprintln!("Failed to deserialize lidar points: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -27,10 +27,10 @@ async fn lidar_points_handler(
         );
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("lidar/points", &points) {
+        match rr_guard.log("lidar/points", &points) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log lidar points: {:?}", e);
+                eprintln!("Failed to log lidar points: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -50,8 +50,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(lidar_points_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }
-

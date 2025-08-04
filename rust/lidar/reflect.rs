@@ -13,7 +13,7 @@ async fn lidar_reflect_handler(
         let reflect = match cdr::deserialize::<Image>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize lidar reflect: {:?}", e);
+                eprintln!("Failed to deserialize lidar reflect: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -23,10 +23,10 @@ async fn lidar_reflect_handler(
         let img = rerun::Image::from_l8(reflect.data, [reflect.width, reflect.height]);
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("lidar/reflect", &img) {
+        match rr_guard.log("lidar/reflect", &img) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log lidar reflect: {:?}", e);
+                eprintln!("Failed to log lidar reflect: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -41,12 +41,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("lidar-reflect")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/lidar/reflect").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/lidar/reflect")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(lidar_reflect_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

@@ -1,26 +1,23 @@
-use std::{
-    error::Error,
-    sync::Arc,
-    thread,
-    collections::HashMap
-};
-use clap::Parser;
 use bytes::Bytes;
+use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
-    decode_pcd, 
-    edgefirst_msgs::Detect, 
-    foxglove_msgs::FoxgloveCompressedVideo, 
-    geometry_msgs::TransformStamped, 
-    sensor_msgs::{NavSatFix, PointCloud2, IMU}
+    decode_pcd,
+    edgefirst_msgs::Detect,
+    foxglove_msgs::FoxgloveCompressedVideo,
+    geometry_msgs::TransformStamped,
+    sensor_msgs::{IMU, NavSatFix, PointCloud2},
 };
-use foxglove::{WebSocketServer, log,
-    schemas::{Timestamp, CompressedVideo, PointCloud, PackedElementField,
-              Quaternion, Vector3, Pose, Color, CubePrimitive, SceneEntity, SceneEntityDeletion,
-              SceneUpdate, FrameTransform, TextAnnotation, ImageAnnotations, Point2,
-              PointsAnnotation, LocationFix}
+use foxglove::{
+    WebSocketServer, log,
+    schemas::{
+        Color, CompressedVideo, CubePrimitive, FrameTransform, ImageAnnotations, LocationFix,
+        PackedElementField, Point2, PointCloud, PointsAnnotation, Pose, Quaternion, SceneEntity,
+        SceneEntityDeletion, SceneUpdate, TextAnnotation, Timestamp, Vector3,
+    },
 };
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
+use std::{collections::HashMap, error::Error, sync::Arc, thread};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
@@ -34,14 +31,16 @@ async fn camera_h264_handler(
         let video = match cdr::deserialize::<FoxgloveCompressedVideo>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize video: {:?}", e);
+                eprintln!("Failed to deserialize video: {e:?}");
                 continue;
             }
         };
         let mut size = frame_size.lock().await;
         if size[0] == 0 || size[1] == 0 {
             for packet in nal_units(&video.data) {
-                let Ok(Some(yuv)) = decoder.decode(packet) else { continue };
+                let Ok(Some(yuv)) = decoder.decode(packet) else {
+                    continue;
+                };
                 let width = yuv.dimensions().0;
                 let height = yuv.dimensions().1;
                 *size = [width as u32, height as u32];
@@ -50,7 +49,7 @@ async fn camera_h264_handler(
 
         let ts = Timestamp::new(video.header.stamp.sec as u32, video.header.stamp.nanosec);
         let cv = CompressedVideo {
-            timestamp: Some(ts.clone()),
+            timestamp: Some(ts),
             frame_id: video.header.frame_id.clone(),
             data: video.data.clone().into(),
             format: video.format.clone(),
@@ -68,20 +67,24 @@ async fn model_boxes2d_handler(
         let detection = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize detect message: {:?}", e);
+                eprintln!("Failed to deserialize detect message: {e:?}");
                 continue; // skip this message and continue
             }
         };
 
-        let ts = Timestamp::new(detection.header.stamp.sec as u32, detection.header.stamp.nanosec);
+        let ts = Timestamp::new(
+            detection.header.stamp.sec as u32,
+            detection.header.stamp.nanosec,
+        );
         let mut point_annos = vec![];
         let mut label_annos = vec![];
         let size = frame_size.lock().await;
-        if size[0] == 0 || size[1] == 0 { continue; }
+        if size[0] == 0 || size[1] == 0 {
+            continue;
+        }
         let w = size[0] as f64;
         let h = size[1] as f64;
         for b in detection.boxes {
-
             let mut lx = b.center_x as f64 * w - (b.width as f64 * w / 2.0);
             lx = lx.clamp(0.0, w);
 
@@ -94,22 +97,37 @@ async fn model_boxes2d_handler(
             let mut by = b.center_y as f64 * h + (b.height as f64 * h / 2.0);
             by = by.clamp(0.0, h);
 
-            let mut color = Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 };
+            let mut color = Color {
+                r: 0.0,
+                g: 1.0,
+                b: 0.0,
+                a: 1.0,
+            };
             let mut label = TextAnnotation {
-                timestamp: Some(ts.clone()),
+                timestamp: Some(ts),
                 position: Some(Point2 { x: lx, y: by }),
                 text: b.label.clone(),
                 font_size: 32.0,
-                text_color: Some(Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }),
-                background_color: Some(Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }),
+                text_color: Some(Color {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                }),
+                background_color: Some(Color {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 1.0,
+                    a: 1.0,
+                }),
             };
 
-            if b.track.id != "" {
+            if !b.track.id.is_empty() {
                 if !boxes_tracked.contains_key(&b.track.id) {
                     let rgb = (
                         rand::random::<u8>(),
                         rand::random::<u8>(),
-                        rand::random::<u8>()
+                        rand::random::<u8>(),
                     );
                     boxes_tracked.insert(
                         b.track.id.clone(),
@@ -124,12 +142,22 @@ async fn model_boxes2d_handler(
                 color = boxes_tracked[&b.track.id];
                 let short_id = &b.track.id[0..6];
                 label = TextAnnotation {
-                    timestamp: Some(ts.clone()),
+                    timestamp: Some(ts),
                     position: Some(Point2 { x: lx, y: by }),
                     text: format!("{}: {}", b.label, short_id),
                     font_size: 32.0,
-                    text_color: Some(Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }),
-                    background_color: Some(Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }),
+                    text_color: Some(Color {
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 1.0,
+                    }),
+                    background_color: Some(Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    }),
                 };
             }
 
@@ -143,9 +171,9 @@ async fn model_boxes2d_handler(
             ];
 
             point_annos.push(PointsAnnotation {
-                timestamp: Some(ts.clone()),
+                timestamp: Some(ts),
                 r#type: 2,
-                points: points,
+                points,
                 outline_color: Some(color),
                 thickness: 5.0,
                 ..Default::default()
@@ -158,18 +186,15 @@ async fn model_boxes2d_handler(
             ..Default::default()
         };
         log!("/model/boxes2d", annotations);
-        
     }
 }
 
-async fn lidar_clusters_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>
-) {
+async fn lidar_clusters_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize lidar pointcloud: {:?}", e);
+                eprintln!("Failed to deserialize lidar pointcloud: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -199,7 +224,7 @@ async fn lidar_clusters_handler(
             packed.push(r);
             packed.push(g);
             packed.push(b);
-            packed.push(1.0 as f32);
+            packed.push(1.0_f32);
         }
 
         let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
@@ -208,8 +233,17 @@ async fn lidar_clusters_handler(
             frame_id: pcd.header.frame_id.clone(),
             timestamp: Some(Timestamp::now()),
             pose: Some(Pose {
-                position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
-                orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+                position: Some(Vector3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                }),
+                orientation: Some(Quaternion {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                }),
             }),
             point_stride: 28,
             fields: vec![
@@ -234,21 +268,19 @@ async fn lidar_clusters_handler(
                     r#type: 7,
                 },
             ],
-            data: data,
+            data,
         };
 
         log!("/lidar/clusters", pc);
     }
 }
 
-async fn radar_clusters_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>
-) {
+async fn radar_clusters_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize lidar pointcloud: {:?}", e);
+                eprintln!("Failed to deserialize lidar pointcloud: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -278,7 +310,7 @@ async fn radar_clusters_handler(
             packed.push(r);
             packed.push(g);
             packed.push(b);
-            packed.push(1.0 as f32);
+            packed.push(1.0_f32);
         }
 
         let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
@@ -287,8 +319,17 @@ async fn radar_clusters_handler(
             frame_id: pcd.header.frame_id.clone(),
             timestamp: Some(Timestamp::now()),
             pose: Some(Pose {
-                position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
-                orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+                position: Some(Vector3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                }),
+                orientation: Some(Quaternion {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                }),
             }),
             point_stride: 28,
             fields: vec![
@@ -313,21 +354,19 @@ async fn radar_clusters_handler(
                     r#type: 7,
                 },
             ],
-            data: data,
+            data,
         };
 
         log!("/radar/clusters", pc);
     }
 }
 
-async fn fusion_boxes3d_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>
-) {
+async fn fusion_boxes3d_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let det = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize fusion_boxes3d: {:?}", e);
+                eprintln!("Failed to deserialize fusion_boxes3d: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -368,17 +407,17 @@ async fn fusion_boxes3d_handler(
 
         // Create the entity with the cubes
         let entity = SceneEntity {
-            timestamp: Some(ts.clone()),
+            timestamp: Some(ts),
             frame_id: det.header.frame_id.clone(),
             id: "boxes3d".to_string(),
-            cubes: cubes,
+            cubes,
             ..Default::default()
         };
 
         // Log the update with a matching deletion
         let update = SceneUpdate {
             deletions: vec![SceneEntityDeletion {
-                timestamp: Some(ts.clone()),
+                timestamp: Some(ts),
                 r#type: 0,
                 id: "boxes3d".to_string(),
             }],
@@ -389,41 +428,37 @@ async fn fusion_boxes3d_handler(
     }
 }
 
-async fn gps_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>,
-) {
+async fn gps_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let gps = match cdr::deserialize::<NavSatFix>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize gps: {:?}", e);
+                eprintln!("Failed to deserialize gps: {e:?}");
                 continue; // skip this message and continue
             }
         };
 
         let ts = Timestamp::new(gps.header.stamp.sec as u32, gps.header.stamp.nanosec);
         let loc_fix = LocationFix {
-            timestamp: Some(ts.clone()),
+            timestamp: Some(ts),
             frame_id: gps.header.frame_id,
             latitude: gps.latitude,
             longitude: gps.longitude,
             altitude: gps.altitude,
             position_covariance: gps.position_covariance.to_vec(),
-            position_covariance_type: gps.position_covariance_type as i32
+            position_covariance_type: gps.position_covariance_type as i32,
         };
 
         log!("/gps", loc_fix);
     }
 }
 
-async fn imu_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>,
-) {
+async fn imu_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let imu = match cdr::deserialize::<IMU>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize imu: {:?}", e);
+                eprintln!("Failed to deserialize imu: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -431,17 +466,17 @@ async fn imu_handler(
             x: imu.orientation.x,
             y: imu.orientation.y,
             z: imu.orientation.z,
-            w: imu.orientation.w
+            w: imu.orientation.w,
         };
         let imu_angular_vel = Vector3 {
             x: imu.angular_velocity.x,
             y: imu.angular_velocity.y,
-            z: imu.angular_velocity.z
+            z: imu.angular_velocity.z,
         };
         let imu_linear_accel = Vector3 {
             x: imu.linear_acceleration.x,
             y: imu.linear_acceleration.y,
-            z: imu.linear_acceleration.z
+            z: imu.linear_acceleration.z,
         };
         log!("/imu/quaternion", imu_quat);
         log!("/imu/angular_velocity", imu_angular_vel);
@@ -449,21 +484,22 @@ async fn imu_handler(
     }
 }
 
-async fn static_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>
- ) {
+async fn static_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     while let Ok(msg) = sub.recv_async().await {
         let tf_static = match cdr::deserialize::<TransformStamped>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize tf_static: {:?}", e);
+                eprintln!("Failed to deserialize tf_static: {e:?}");
                 continue; // skip this message and continue
             }
         };
-        let ts = Timestamp::new(tf_static.header.stamp.sec as u32, tf_static.header.stamp.nanosec);
+        let ts = Timestamp::new(
+            tf_static.header.stamp.sec as u32,
+            tf_static.header.stamp.nanosec,
+        );
 
         let transform = FrameTransform {
-            timestamp: Some(ts.clone()),
+            timestamp: Some(ts),
             parent_frame_id: tf_static.header.frame_id.clone(),
             child_frame_id: tf_static.child_frame_id.clone(),
             translation: Some(Vector3 {
@@ -481,7 +517,7 @@ async fn static_handler(
 
         log!("/tf_static", transform);
     }
- }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -490,26 +526,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let frame_size = Arc::new(Mutex::new([0u32; 2]));
 
     thread::spawn(|| {
-        WebSocketServer::new().bind("0.0.0.0", 8765)
+        WebSocketServer::new()
+            .bind("0.0.0.0", 8765)
             .start_blocking()
             .expect("Server failed to start");
     });
-    
+
     let cam_sub = session.declare_subscriber("rt/camera/h264").await.unwrap();
     let frame_size_cam = frame_size.clone();
     task::spawn(camera_h264_handler(cam_sub, frame_size_cam));
 
-    let boxes2d_sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+    let boxes2d_sub = session
+        .declare_subscriber("rt/model/boxes2d")
+        .await
+        .unwrap();
     let frame_size_boxes2d = frame_size.clone();
     task::spawn(model_boxes2d_handler(boxes2d_sub, frame_size_boxes2d));
 
-    let lidar_sub = session.declare_subscriber("rt/lidar/clusters").await.unwrap();
+    let lidar_sub = session
+        .declare_subscriber("rt/lidar/clusters")
+        .await
+        .unwrap();
     task::spawn(lidar_clusters_handler(lidar_sub));
 
-    let lidar_sub = session.declare_subscriber("rt/radar/clusters").await.unwrap();
+    let lidar_sub = session
+        .declare_subscriber("rt/radar/clusters")
+        .await
+        .unwrap();
     task::spawn(radar_clusters_handler(lidar_sub));
 
-    let boxes3d_sub = session.declare_subscriber("rt/fusion/boxes3d").await.unwrap();
+    let boxes3d_sub = session
+        .declare_subscriber("rt/fusion/boxes3d")
+        .await
+        .unwrap();
     task::spawn(fusion_boxes3d_handler(boxes3d_sub));
 
     let gps_sub = session.declare_subscriber("rt/gps").await.unwrap();
@@ -521,6 +570,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let static_sub = session.declare_subscriber("rt/tf_static").await.unwrap();
     task::spawn(static_handler(static_sub));
 
-    loop {
-    }
+    loop {}
 }

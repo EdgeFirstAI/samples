@@ -1,13 +1,13 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Mask;
-use ndarray::{Array2, Array};
-use zstd::stream::decode_all;
-use std::io::Cursor;
+use ndarray::{Array, Array2};
 use rerun::{AnnotationContext, SegmentationImage};
+use std::io::Cursor;
 use std::{error::Error, sync::Arc};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
+use zstd::stream::decode_all;
 
 async fn model_mask_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
@@ -17,14 +17,14 @@ async fn model_mask_handler(
         let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize model mask: {:?}", e);
+                eprintln!("Failed to deserialize model mask: {e:?}");
                 continue; // skip this message and continue
             }
         };
         let decompressed_bytes = match decode_all(Cursor::new(&mask.mask)) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to decompress mask array: {:?}", e);
+                eprintln!("Failed to decompress mask array: {e:?}");
                 continue;
             }
         };
@@ -37,36 +37,35 @@ async fn model_mask_handler(
         let arr3 = match Array::from_shape_vec([h, w, c], decompressed_bytes.clone()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to form the mask array: {:?}", e);
+                eprintln!("Failed to form the mask array: {e:?}");
                 continue;
             }
         };
-        
+
         // Compute argmax along the last axis (class channel)
-        let array2: Array2<u8> = arr3
-            .map_axis(ndarray::Axis(2), |class_scores| {
-                class_scores
-                    .iter()
-                    .enumerate()
-                    .max_by_key(|(_, val)| *val)
-                    .map(|(idx, _)| idx as u8)
-                    .unwrap_or(0)
-            });
+        let array2: Array2<u8> = arr3.map_axis(ndarray::Axis(2), |class_scores| {
+            class_scores
+                .iter()
+                .enumerate()
+                .max_by_key(|(_, val)| *val)
+                .map(|(idx, _)| idx as u8)
+                .unwrap_or(0)
+        });
 
         let seg_img = match SegmentationImage::try_from(array2) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to convert to SegmentationImage: {:?}", e);
+                eprintln!("Failed to convert to SegmentationImage: {e:?}");
                 continue;
             }
         };
 
         // Log segmentation mask
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("model/mask_compressed", &seg_img) {
+        match rr_guard.log("model/mask_compressed", &seg_img) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log mask: {:?}", e);
+                eprintln!("Failed to log mask: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -85,17 +84,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         "/",
         &AnnotationContext::new([
             (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
-            (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
+            (1, "person", rerun::Rgba32::from_rgb(0, 255, 0)),
+        ]),
     )?;
 
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/model/mask_compressed")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(model_mask_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

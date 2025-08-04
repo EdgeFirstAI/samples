@@ -1,10 +1,10 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Detect;
-use std::{error::Error, sync::Arc};
+use rand::{Rng, rng};
+use rerun::Boxes2D;
 use std::collections::HashMap;
-use rand::{rng, Rng};
-use rerun::{Boxes2D};
+use std::{error::Error, sync::Arc};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
@@ -18,7 +18,7 @@ async fn model_boxes2d_handler(
         let detection = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize model boxes2d: {:?}", e);
+                eprintln!("Failed to deserialize model boxes2d: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -58,10 +58,10 @@ async fn model_boxes2d_handler(
             .with_colors(colors);
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("model/boxes", &boxes) {
+        match rr_guard.log("model/boxes", &boxes) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log boxes: {:?}", e);
+                eprintln!("Failed to log boxes: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -76,12 +76,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("model-boxes2d")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    let sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+    let sub = session
+        .declare_subscriber("rt/model/boxes2d")
+        .await
+        .unwrap();
     let rr_clone = rr.clone();
     task::spawn(model_boxes2d_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

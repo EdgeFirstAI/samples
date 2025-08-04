@@ -13,17 +13,17 @@ async fn radar_info_handler(
         let info = match cdr::deserialize::<RadarInfo>(&msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize radar info: {:?}", e);
+                eprintln!("Failed to deserialize radar info: {e:?}");
                 continue; // skip this message and continue
             }
         };
 
-        let text = format!("{:?}", info);
+        let text = format!("{info:?}");
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("radar/info", &rerun::TextLog::new(text)) {
+        match rr_guard.log("radar/info", &rerun::TextLog::new(text)) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log radar info: {:?}", e);
+                eprintln!("Failed to log radar info: {e:?}");
                 continue; // skip this message and continue
             }
         };
@@ -43,7 +43,5 @@ async fn main() -> Result<(), Box<dyn Error>> {
     task::spawn(radar_info_handler(sub, rr_clone));
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
 }

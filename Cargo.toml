@@ -16,6 +16,10 @@ name = "list-topics"
 path = "rust/list-topics.rs"
 
 [[bin]]
+name = "edgefirst-foxglove"
+path = "rust/edgefirst_foxglove.rs"
+
+[[bin]]
 name = "camera-info"
 path = "rust/camera/camera_info.rs"
 
@@ -26,6 +30,18 @@ path = "rust/camera/h264.rs"
 [[bin]]
 name = "mega-sample"
 path = "rust/combined/mega_sample.rs"
+
+[[bin]]
+name = "camera-model"
+path = "rust/combined/camera_model.rs"
+
+[[bin]]
+name = "camera-lidar"
+path = "rust/combined/camera_lidar.rs"
+
+[[bin]]
+name = "camera-radar"
+path = "rust/combined/camera_radar.rs"
 
 [[bin]]
 name = "lidar-clusters"
@@ -129,6 +145,11 @@ itertools = "0.14.0"
 zstd = "0.13.3"
 openh264 = { git = "https://github.com/ralfbiedert/openh264-rs.git", rev = "refs/pull/79/head" }
 rand = "0.9.1"
+fast_image_resize = "5.1.4"
+foxglove = "0.10.1"
+byteorder = "1.5.0"
+bytemuck = "1.23.1"
+bytes = "1.10.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 async-pidfd = "0.1.4"

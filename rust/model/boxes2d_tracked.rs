@@ -1,26 +1,28 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Detect;
-use std::error::Error;
+use rand::{Rng, rng};
+use rerun::Boxes2D;
 use std::collections::HashMap;
-use rand::{rng, Rng};
-use rerun::{Boxes2D};
+use std::{error::Error, sync::Arc};
+use tokio::{sync::Mutex, task};
+use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-    let session = zenoh::open(args.clone()).await.unwrap();
-
-    // Create a subscriber for "rt/model/boxes2d"
-    let subscriber = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
-
-    // Create Rerun logger using the provided parameters
-    let (rr, _serve_guard) = args.rerun.init("model-boxes")?;
-
+async fn model_boxes2d_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    rr: Arc<Mutex<rerun::RecordingStream>>,
+) {
     let mut boxes_tracked: HashMap<String, (String, [u8; 3])> = HashMap::new();
 
-    while let Ok(msg) = subscriber.recv() {
-        let detection: Detect = cdr::deserialize(&msg.payload().to_bytes())?;
+    while let Ok(msg) = sub.recv_async().await {
+        let detection = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize model boxes2d: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
+
         let mut centers = Vec::new();
         let mut sizes = Vec::new();
         let mut labels = Vec::new();
@@ -51,13 +53,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
             centers.push([b.center_x, b.center_y]);
             sizes.push([b.width, b.height]);
         }
-
         let boxes = Boxes2D::from_centers_and_sizes(centers, sizes)
             .with_labels(labels)
             .with_colors(colors);
 
-        rr.log("boxes", &boxes)?;
+        let rr_guard = rr.lock().await;
+        match rr_guard.log("model/boxes", &boxes) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log boxes: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
     }
+}
 
-    Ok(())
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    let session = zenoh::open(args.clone()).await.unwrap();
+
+    let (rr, _serve_guard) = args.rerun.init("model-boxes2d")?;
+    let rr = Arc::new(Mutex::new(rr));
+
+    let sub = session
+        .declare_subscriber("rt/model/boxes2d")
+        .await
+        .unwrap();
+    let rr_clone = rr.clone();
+    task::spawn(model_boxes2d_handler(sub, rr_clone));
+
+    // Rerun setup
+    loop {}
 }

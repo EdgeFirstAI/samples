@@ -2,24 +2,23 @@ use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
 use rerun::{Color, Points3D, Position3D};
-use std::error::Error;
+use std::{error::Error, sync::Arc};
+use tokio::{sync::Mutex, task};
+use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-    let session = zenoh::open(args.clone()).await.unwrap();
+async fn fusion_occupancy_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>,
+    rr: Arc<Mutex<rerun::RecordingStream>>,
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize fusion occupancy: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
 
-    // Create Rerun logger using the provided parameters
-    let (rec, _serve_guard) = args.rerun.init("fusion-occupancy")?;
-
-    // Create a subscriber for "rt/fusion/occupancy"
-    let subscriber = session
-        .declare_subscriber("rt/fusion/occupancy")
-        .await
-        .unwrap();
-
-    while let Ok(msg) = subscriber.recv() {
-        let pcd: PointCloud2 = cdr::deserialize(&msg.payload().to_bytes())?;
         let points = decode_pcd(&pcd);
         let max_class = points
             .iter()
@@ -39,8 +38,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));
-        let _ = rec.log("fusion/occupancy", &rr_points);
-    }
 
-    Ok(())
+        let rr_guard = rr.lock().await;
+        match rr_guard.log("fusion/occupancy", &rr_points) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log fusion occupancy: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    let session = zenoh::open(args.clone()).await.unwrap();
+
+    let (rr, _serve_guard) = args.rerun.init("fusion-occupancy")?;
+    let rr = Arc::new(Mutex::new(rr));
+
+    let sub = session
+        .declare_subscriber("rt/fusion/occupancy")
+        .await
+        .unwrap();
+    let rr_clone = rr.clone();
+    task::spawn(fusion_occupancy_handler(sub, rr_clone));
+
+    // Rerun setup
+    loop {}
 }

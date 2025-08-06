@@ -275,7 +275,88 @@ async fn lidar_clusters_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     }
 }
 
-async fn radar_clusters_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
+async fn fusion_lidar_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize lidar pointcloud: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
+        let clustered_points: Vec<_> = decode_pcd(&pcd).into_iter().filter(|p| p.id > 0).collect();
+        let max_cluster_id = clustered_points
+            .iter()
+            .map(|p| p.id)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        let mut packed = Vec::with_capacity(clustered_points.len() * 28); // 7 f32 values per point
+
+        for p in &clustered_points {
+            let (r, g, b) = colorous::TURBO
+                .eval_continuous(p.id as f64 / max_cluster_id as f64)
+                .as_tuple();
+
+            // Normalize u8 RGB to 0.0–1.0
+            let r = r as f32 / 255.0;
+            let g = g as f32 / 255.0;
+            let b = b as f32 / 255.0;
+
+            packed.push(p.x as f32);
+            packed.push(p.y as f32);
+            packed.push(p.z as f32);
+            packed.push(r);
+            packed.push(g);
+            packed.push(b);
+            packed.push(1.0_f32);
+        }
+
+        let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
+
+        let pc = PointCloud {
+            frame_id: pcd.header.frame_id.clone(),
+            timestamp: Some(Timestamp::now()),
+            pose: Some(Pose {
+                position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+                orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+            }),
+            point_stride: 28,
+            fields: vec![
+                PackedElementField {
+                    name: "x".into(),
+                    offset: 0,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "y".into(),
+                    offset: 4,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "z".into(),
+                    offset: 8,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "rgba".into(),
+                    offset: 12,
+                    r#type: 7,
+                },
+            ],
+            data,
+        };
+
+        log!("/fusion/lidar", pc);
+    }
+}
+
+async fn radar_clusters_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+) {
     while let Ok(msg) = sub.recv_async().await {
         let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
             Ok(v) => v,
@@ -361,7 +442,167 @@ async fn radar_clusters_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
     }
 }
 
-async fn fusion_boxes3d_handler(sub: Subscriber<FifoChannelHandler<Sample>>) {
+async fn fusion_radar_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize lidar pointcloud: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
+        let clustered_points: Vec<_> = decode_pcd(&pcd).into_iter().filter(|p| p.id > 0).collect();
+        let max_cluster_id = clustered_points
+            .iter()
+            .map(|p| p.id)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        let mut packed = Vec::with_capacity(clustered_points.len() * 28); // 7 f32 values per point
+
+        for p in &clustered_points {
+            let (r, g, b) = colorous::TURBO
+                .eval_continuous(p.id as f64 / max_cluster_id as f64)
+                .as_tuple();
+
+            // Normalize u8 RGB to 0.0–1.0
+            let r = r as f32 / 255.0;
+            let g = g as f32 / 255.0;
+            let b = b as f32 / 255.0;
+
+            packed.push(p.x as f32);
+            packed.push(p.y as f32);
+            packed.push(p.z as f32);
+            packed.push(r);
+            packed.push(g);
+            packed.push(b);
+            packed.push(1.0_f32);
+        }
+
+        let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
+
+        let pc = PointCloud {
+            frame_id: pcd.header.frame_id.clone(),
+            timestamp: Some(Timestamp::now()),
+            pose: Some(Pose {
+                position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+                orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+            }),
+            point_stride: 28,
+            fields: vec![
+                PackedElementField {
+                    name: "x".into(),
+                    offset: 0,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "y".into(),
+                    offset: 4,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "z".into(),
+                    offset: 8,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "rgba".into(),
+                    offset: 12,
+                    r#type: 7,
+                },
+            ],
+            data,
+        };
+
+        log!("/fusion/radar", pc);
+    }
+}
+
+async fn fusion_occupancy_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+) {
+    while let Ok(msg) = sub.recv_async().await {
+        let pcd = match cdr::deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to deserialize lidar pointcloud: {e:?}");
+                continue; // skip this message and continue
+            }
+        };
+        let points = decode_pcd(&pcd);
+        let max_class = points
+            .iter()
+            .map(|x| x.fields["vision_class"] as isize)
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        let mut packed = Vec::with_capacity(points.len() * 28); // 7 f32 values per point
+
+        for p in &points {
+            let (r, g, b) = colorous::TURBO
+                .eval_continuous(p.fields["vision_class"] / max_class as f64)
+                .as_tuple();
+
+            // Normalize u8 RGB to 0.0–1.0
+            let r = r as f32 / 255.0;
+            let g = g as f32 / 255.0;
+            let b = b as f32 / 255.0;
+
+            packed.push(p.x as f32);
+            packed.push(p.y as f32);
+            packed.push(p.z as f32);
+            packed.push(r);
+            packed.push(g);
+            packed.push(b);
+            packed.push(1.0_f32);
+        }
+
+        let data = Bytes::from(bytemuck::cast_slice(&packed).to_vec());
+
+        let pc = PointCloud {
+            frame_id: pcd.header.frame_id.clone(),
+            timestamp: Some(Timestamp::now()),
+            pose: Some(Pose {
+                position: Some(Vector3 { x: 0.0, y: 0.0, z: 0.0 }),
+                orientation: Some(Quaternion { x: 0.0, y: 0.0, z: 0.0, w: 1.0 }),
+            }),
+            point_stride: 28,
+            fields: vec![
+                PackedElementField {
+                    name: "x".into(),
+                    offset: 0,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "y".into(),
+                    offset: 4,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "z".into(),
+                    offset: 8,
+                    r#type: 7,
+                },
+                PackedElementField {
+                    name: "rgba".into(),
+                    offset: 12,
+                    r#type: 7,
+                },
+            ],
+            data,
+        };
+
+        log!("/fusion/occupancy", pc);
+    }
+}
+
+async fn fusion_boxes3d_handler(
+    sub: Subscriber<FifoChannelHandler<Sample>>
+) {
     while let Ok(msg) = sub.recv_async().await {
         let det = match cdr::deserialize::<Detect>(&msg.payload().to_bytes()) {
             Ok(v) => v,
@@ -549,11 +790,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
     task::spawn(lidar_clusters_handler(lidar_sub));
 
-    let lidar_sub = session
-        .declare_subscriber("rt/radar/clusters")
-        .await
-        .unwrap();
-    task::spawn(radar_clusters_handler(lidar_sub));
+    let fusion_lidar_sub = session.declare_subscriber("rt/fusion/lidar").await.unwrap();
+    task::spawn(fusion_lidar_handler(fusion_lidar_sub));
+
+    let radar_sub = session.declare_subscriber("rt/radar/clusters").await.unwrap();
+    task::spawn(radar_clusters_handler(radar_sub));
+
+    let fusion_radar_sub = session.declare_subscriber("rt/fusion/radar").await.unwrap();
+    task::spawn(fusion_radar_handler(fusion_radar_sub));
+
+    let fusion_occupancy_sub = session.declare_subscriber("rt/fusion/occupancy").await.unwrap();
+    task::spawn(fusion_occupancy_handler(fusion_occupancy_sub));
 
     let boxes3d_sub = session
         .declare_subscriber("rt/fusion/boxes3d")

@@ -375,8 +375,9 @@ When modifying code, update corresponding documentation:
 ### Review Required
 
 ⚠️ **Weak copyleft (REQUIRES LEGAL REVIEW)**:
-- MPL-2.0 (Mozilla Public License)
-- LGPL-2.1-or-later, LGPL-3.0-or-later (if dynamically linked)
+- LGPL-2.1-or-later, LGPL-3.0-or-later (if statically linked)
+
+**Note on MPL-2.0:** Moved to ALLOWED licenses. MPL-2.0 is file-level copyleft - acceptable for dependencies as long as we don't modify MPL-2.0 source files. Safe to use libraries with MPL-2.0 license.
 
 ### Strictly Disallowed
 
@@ -887,3 +888,24 @@ git push -u origin feature/EDGEAI-456-add-temperature-sensor
 ---
 
 *This document helps AI assistants contribute effectively to Au-Zone projects while maintaining quality, security, and consistency. For questions or suggestions, contact `support@au-zone.com`.*
+
+### Understanding MPL-2.0
+
+**Mozilla Public License 2.0 is ALLOWED for dependencies** because:
+
+1. **File-level copyleft**: Only applies to the specific MPL-2.0 files, not entire codebase
+2. **Linkage freedom**: Can link with code under any license (even proprietary)
+3. **Safe usage pattern**: As long as we:
+   - Use as external dependency (via Cargo.toml)
+   - Don't copy/modify MPL-2.0 source files
+   - Don't distribute modified versions of MPL-2.0 code
+
+**When MPL-2.0 requires caution:**
+- ❌ Copying code from MPL-2.0 files into our codebase
+- ❌ Modifying MPL-2.0 source files directly
+- ❌ Creating derivative works of MPL-2.0 code
+
+**Acceptable use:**
+- ✅ Using MPL-2.0 crates as dependencies
+- ✅ Linking against MPL-2.0 libraries
+- ✅ Distributing binaries that use MPL-2.0 dependencies

@@ -37,10 +37,12 @@ ALLOWED_LICENSES: Set[str] = {
     "CC0-1.0",  # Creative Commons Zero (public domain dedication)
     "OFL-1.1",  # SIL Open Font License (for fonts)
     "Ubuntu-font-1.0",  # Ubuntu Font License
+    "MPL-2.0",  # Mozilla Public License 2.0 - file-level copyleft, safe as dependency
 }
 
+# Weak copyleft licenses requiring manual review
+# Note: MPL-2.0 moved to ALLOWED - file-level copyleft, safe for dependencies
 REVIEW_REQUIRED_LICENSES: Set[str] = {
-    "MPL-2.0",  # Acceptable for external dependencies (not modifying source)
     "LGPL-2.0",
     "LGPL-2.1",
     "LGPL-3.0",

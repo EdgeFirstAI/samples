@@ -1,0 +1,87 @@
+EdgeFirst Middleware Samples
+Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
+This product includes software developed at Au-Zone Technologies
+(https://au-zone.com/).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+================================================================================
+
+THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
+
+This project depends on third-party libraries and components. A comprehensive
+Software Bill of Materials (SBOM) listing all dependencies and their licenses
+can be generated using:
+
+    bash .github/scripts/generate_sbom.sh
+
+The SBOM will be generated in CycloneDX format as sbom.json.
+
+Key Dependencies:
+
+1. Zenoh (v1.3.4)
+   License: Apache-2.0 OR EPL-2.0
+   Copyright: Eclipse Foundation and contributors
+   Website: https://zenoh.io/
+
+2. Rerun (v0.27.2) - Optional
+   License: Apache-2.0 OR MIT
+   Copyright: Rerun.io contributors
+   Website: https://rerun.io/
+
+3. edgefirst-schemas (v1.4.0)
+   License: Apache-2.0
+   Copyright: Au-Zone Technologies
+   Repository: https://github.com/au-zone/edgefirst-schemas
+
+4. Tokio (async runtime)
+   License: MIT
+   Copyright: Tokio contributors
+   Website: https://tokio.rs/
+
+5. Clap (CLI parsing)
+   License: Apache-2.0 OR MIT
+   Copyright: Clap contributors
+   Website: https://github.com/clap-rs/clap
+
+6. sublime_fuzzy (fuzzy string matching)
+   License: Apache-2.0
+   Copyright: Schlechtwetterfront and contributors
+   Repository: https://github.com/Schlechtwetterfront/fuzzy-rs
+   Note: Transitive dependency via Rerun (optional feature)
+
+For a complete list of all transitive dependencies and their licenses,
+please refer to:
+- The generated SBOM (sbom.json)
+- Cargo.lock for exact dependency versions
+- Each dependency's LICENSE file in the source repository
+
+================================================================================
+
+NOTICE FOR DEPENDENCIES WITH SPECIAL ATTRIBUTION REQUIREMENTS
+
+Apache-2.0 Licensed Dependencies:
+All Apache-2.0 licensed dependencies retain their original copyright notices
+and license terms as required by Section 4(d) of the Apache License 2.0.
+
+BSD Licensed Dependencies:
+All BSD licensed dependencies retain their original copyright notices and
+license terms as required by the BSD license.
+
+================================================================================
+
+For questions about licensing or third-party software notices, please contact:
+support@au-zone.com
+
+Last Updated: 2025-11-18

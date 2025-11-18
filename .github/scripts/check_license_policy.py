@@ -2,6 +2,10 @@
 """
 Check license policy compliance for SBOM (CycloneDX format)
 Validates that all dependencies comply with license policy
+
+Note: sublime_fuzzy 0.7.0 may show as unlicensed in SBOM scans,
+but is confirmed Apache-2.0 at https://github.com/Schlechtwetterfront/fuzzy-rs
+(transitive dependency via Rerun, optional feature only)
 """
 
 import json

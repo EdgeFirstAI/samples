@@ -210,33 +210,37 @@ flake8 python/
 
 ## Testing
 
-### Run Tests
+### Manual Testing
 
-```bash
-# Run all tests
-cargo test
+Since this repository provides sample applications demonstrating EdgeFirst Perception integration, testing is primarily done through integration testing as part of the EdgeFirst Perception test suite.
 
-# Run tests for specific module
-cargo test --lib
+All samples should be manually tested to ensure they:
+- Build successfully on supported platforms (Linux, Windows, macOS)
+- Connect properly to EdgeFirst Perception (both local and remote)
+- Handle topics and data streams correctly
+- Display appropriate error messages
+- Clean up resources properly
 
-# Run integration tests
-cargo test --test '*'
-```
+### Testing Checklist
 
-### Code Coverage
+When contributing or reviewing samples:
 
-```bash
-# Install llvm-cov
-cargo install cargo-llvm-cov
+- [ ] Sample builds without errors on test platforms (x86_64, aarch64)
+- [ ] Runtime dependencies are documented
+- [ ] Connection parameters work as expected (local autodiscovery and --remote)
+- [ ] Error cases are handled gracefully
+- [ ] Documentation matches actual behavior
+- [ ] Code follows project conventions
+- [ ] SBOM generation succeeds without license violations
 
-# Generate coverage report
-cargo llvm-cov --html
+### Platform Testing
 
-# View coverage report
-open target/llvm-cov/html/index.html
-```
+Samples are tested on:
+- **Linux**: Primary platform (x86_64, aarch64)
+- **Windows**: Client applications
+- **macOS**: Client applications
 
-**Note:** Test suite is currently under development. We welcome contributions to improve test coverage!
+For hardware-specific features, document requirements clearly in the sample's documentation.
 
 ---
 
@@ -290,11 +294,12 @@ black python/
 cargo clippy -- -D warnings
 flake8 python/
 
-# Build
+# Build all samples
 cargo build --all-targets
 
-# Test (when tests exist)
-cargo test
+# Generate SBOM and check license compliance
+.github/scripts/generate_sbom.sh
+python3 .github/scripts/check_license_policy.py sbom.json
 
 # Test on target platform if applicable
 ```

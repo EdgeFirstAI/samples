@@ -1,0 +1,95 @@
+name: SBOM & License Compliance
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  release:
+    types: [published]
+
+jobs:
+  sbom-compliance:
+    name: Generate SBOM & Check Licenses
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install scancode-toolkit
+        run: |
+          python3 -m venv venv
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install scancode-toolkit
+
+      - name: Install CycloneDX CLI
+        run: |
+          mkdir -p ~/.local/bin
+          wget -q -O ~/.local/bin/cyclonedx \
+            https://github.com/CycloneDX/cyclonedx-cli/releases/download/v0.27.1/cyclonedx-linux-x64
+          chmod +x ~/.local/bin/cyclonedx
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Generate Complete SBOM
+        run: bash .github/scripts/generate_sbom.sh
+
+      - name: Validate SBOM Format
+        run: cyclonedx validate --input-file sbom.json
+
+      - name: Check License Policy
+        run: python3 .github/scripts/check_license_policy.py sbom.json
+
+      - name: Upload SBOM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.sha }}
+          path: |
+            sbom.json
+            NOTICE
+          retention-days: 90
+
+      - name: Check for SBOM changes
+        if: github.event_name == 'pull_request'
+        run: |
+          if ! git diff --exit-code sbom.json NOTICE; then
+            echo "⚠️  SBOM or NOTICE file has changes!"
+            echo "If dependencies were added/updated, commit the updated SBOM and NOTICE files."
+            echo ""
+            echo "To update:"
+            echo "  bash .github/scripts/generate_sbom.sh"
+            echo "  git add sbom.json NOTICE"
+            echo "  git commit -m 'Update SBOM and NOTICE'"
+          fi
+
+  release-sbom:
+    name: Attach SBOM to Release
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    needs: sbom-compliance
+
+    steps:
+      - name: Download SBOM Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-${{ github.sha }}
+
+      - name: Attach SBOM to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sbom.json
+            NOTICE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

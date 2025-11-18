@@ -679,9 +679,17 @@ fn main() -> Result<()> {
 
 ### Testing Conventions
 
-**Current Status:**
-- Test suite under development (contributions welcome)
-- Focus on example clarity over exhaustive testing
+**Testing approach for sample code:**
+- Unit tests: Not applicable - samples demonstrate client integration
+- Integration tests: Manual testing against running EdgeFirst Perception instance
+- Test platforms: x86_64 and aarch64 Linux, Windows and macOS clients
+- Manual testing checklist in CONTRIBUTING.md
+
+**Quality verification:**
+- Build verification: `cargo build --all-targets` must succeed
+- Lint compliance: `cargo clippy -- -D warnings` must pass
+- SBOM compliance: `.github/scripts/generate_sbom.sh` must complete without license violations
+- Platform testing: Verify on Linux (primary), Windows and macOS (client apps)
 
 **When adding tests:**
 - Unit tests: Co-locate with implementation or separate `tests/` directory

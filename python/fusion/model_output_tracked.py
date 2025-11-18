@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Mask
 import rerun as rr
@@ -88,5 +91,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

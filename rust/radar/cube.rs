@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::RadarCube;
@@ -22,7 +25,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             radar
                 .cube
                 .iter()
-                .map(|x| x.abs() as u16)
+                .map(|x| x.unsigned_abs())
                 .collect::<Vec<_>>(),
         )?;
         let tensor = Tensor::try_from(data)?.with_dim_names(["SEQ", "RANGE", "RX", "DOPPLER"]);

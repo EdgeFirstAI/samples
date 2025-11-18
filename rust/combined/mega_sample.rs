@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 // use std::collections::HashSet;
 // use std::time::{Duration, Instant};
 // use tokio::time::sleep;
@@ -30,7 +33,6 @@
 use std::{
     collections::HashSet,
     error::Error,
-    io::Cursor,
     sync::Arc,
     time::{Instant},
 };
@@ -39,14 +41,13 @@ use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
     decode_pcd,
-    edgefirst_msgs::{Detect, Mask},
+    edgefirst_msgs::Detect,
     foxglove_msgs::FoxgloveCompressedVideo,
     sensor_msgs::{NavSatFix, PointCloud2},
 };
 
-use ndarray::{Array, Array2};
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
-use rerun::{AnnotationContext, Boxes3D, Color, Image, Points3D, Position3D, SegmentationImage};
+use rerun::{Boxes3D, Color, Image, Points3D, Position3D};
 use tokio::{sync::Mutex, task};
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
@@ -106,7 +107,7 @@ async  fn model_boxes2d_handler(
         }
 
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/camera/boxes2d", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels)) {
+        match rr_guard.log("/camera/boxes2d", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels)) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("Failed to log boxes2d: {:?}", e);
@@ -116,7 +117,7 @@ async  fn model_boxes2d_handler(
         let model_time_sec = detection.model_time.sec as f64;
         let model_time_nsec = detection.model_time.nanosec as f64;
         let total_time = model_time_sec + (model_time_nsec / 1e9);
-        let _ = match rr_guard.log("/metrics/detection_inference", &rerun::archetypes::Scalars::new([total_time])) {
+        match rr_guard.log("/metrics/detection_inference", &rerun::archetypes::Scalars::new([total_time])) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("Failed to log detection inference: {:?}", e);
@@ -203,7 +204,7 @@ async fn radar_clusters_handler(
             Color::from_rgb(r, g, b)
         }));
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/pointcloud/radar", &points) {
+        match rr_guard.log("/pointcloud/radar", &points) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("Failed to log radar pointcloud: {:?}", e);
@@ -246,7 +247,7 @@ async fn lidar_clusters_handler(
             Color::from_rgb(r, g, b)
         }));
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/pointcloud/lidar", &points) {
+        match rr_guard.log("/pointcloud/lidar", &points) {
                 Ok(v) => v,
                 Err(e) => {
                     eprintln!("Failed to log radar pointcloud: {:?}", e);
@@ -269,7 +270,7 @@ async fn gps_handler(
             }
         };
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/gps", &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)])) {
+        match rr_guard.log("/gps", &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)])) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to log radar pointcloud: {:?}", e);
@@ -299,7 +300,7 @@ async fn fusion_boxes3d_handler(
             boxes.iter().map(|b| (b.width, b.width, b.height)),
         );
         let rr_guard = rr.lock().await;
-        let _ = match rr_guard.log("/pointcloud/boxes3d", &rr_boxes) {
+        match rr_guard.log("/pointcloud/boxes3d", &rr_boxes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to log fusion boxes3d: {:?}", e);

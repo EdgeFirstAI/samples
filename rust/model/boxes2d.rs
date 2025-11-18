@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Detect;
@@ -27,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             labels.push(b.label);
         }
 
-        let _ = rr.log("boxes", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels))?;
+        rr.log("boxes", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels))?;
     }
 
     Ok(())

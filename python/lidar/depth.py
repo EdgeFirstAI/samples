@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 from argparse import ArgumentParser
 from edgefirst.schemas.sensor_msgs import Image
 import numpy as np

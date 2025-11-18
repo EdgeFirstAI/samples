@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 #![cfg_attr(not(target_os = "linux"), allow(dead_code, unused_imports))]
 
 use clap::Parser;

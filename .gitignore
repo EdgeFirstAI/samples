@@ -4,5 +4,10 @@
 __pycache__/
 *.py[cod]
 
-Cargo.lock
 *.rrd
+
+# SBOM generation artifacts
+*.cdx.json
+sbom.json
+NOTICE
+source-sbom*.json

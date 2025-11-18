@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Mask;
@@ -46,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )?;
 
         // Log segmentation mask
-        let _ = rr.log("mask", &SegmentationImage::try_from(array2)?)?;
+        rr.log("mask", &SegmentationImage::try_from(array2)?)?;
     }
 
     Ok(())

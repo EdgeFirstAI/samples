@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 import zenoh
 from edgefirst.schemas.sensor_msgs import PointCloud2
 from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
@@ -89,4 +92,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

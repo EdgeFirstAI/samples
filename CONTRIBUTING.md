@@ -595,15 +595,66 @@ All contributions must:
 When adding new dependencies, ensure they use compatible licenses:
 
 ✅ **Allowed:**
-- MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Unlicense
-
-⚠️ **Requires Review:**
-- MPL-2.0, LGPL (if dynamically linked)
+- MIT, MIT-0, Apache-2.0
+- BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Unlicense
+- Zlib, BSL-1.0, CC0-1.0
+- MPL-2.0 (file-level copyleft, safe as dependency)
 
 ❌ **Not Allowed:**
 - GPL, AGPL, proprietary licenses without approval
+- CC-BY-NC, CC-BY-ND (non-commercial, no-derivatives)
+- SSPL, BSL
 
 See [AGENTS.md](AGENTS.md#license-policy) for complete license policy.
+
+### Adding New Dependencies
+
+When adding dependencies to `Cargo.toml` or `requirements.txt`:
+
+1. **Check License Compatibility** (see Allowed Dependency Licenses above)
+
+2. **Update Lock Files**
+   ```bash
+   # Rust - update Cargo.lock
+   cargo build
+   git add Cargo.lock
+   
+   # Python - update requirements.txt if using pip-tools
+   pip-compile requirements.in
+   git add requirements.txt
+   ```
+
+3. **Regenerate SBOM and NOTICE**
+   ```bash
+   # Generate complete SBOM and updated NOTICE
+   bash .github/scripts/generate_sbom.sh
+   
+   # Review the updated NOTICE file
+   git diff NOTICE
+   
+   # Commit if changes are present
+   git add NOTICE sbom.json
+   ```
+
+4. **Verify License Policy**
+   ```bash
+   # Check for license violations
+   python3 .github/scripts/check_license_policy.py sbom.json
+   ```
+
+5. **Include in Commit**
+   - Commit `Cargo.lock` and/or `requirements.txt`
+   - Commit updated `NOTICE` and `sbom.json` files
+   - Reference NOTICE update in commit message
+
+**Example commit message:**
+```
+Add opencv-rust for image processing example
+
+- Added opencv 0.88 (MIT license)
+- Updated Cargo.lock and NOTICE file
+- All dependencies pass license policy check
+```
 
 ### Cargo.lock Policy
 

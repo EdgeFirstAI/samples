@@ -12,7 +12,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create a subscriber for "rt/model/boxes2d"
-    let subscriber = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+    let subscriber = session
+        .declare_subscriber("rt/model/boxes2d")
+        .await
+        .unwrap();
 
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("model-boxes")?;
@@ -30,7 +33,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             labels.push(b.label);
         }
 
-        rr.log("boxes", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels))?;
+        rr.log(
+            "boxes",
+            &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels),
+        )?;
     }
 
     Ok(())

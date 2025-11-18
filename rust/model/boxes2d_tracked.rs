@@ -4,10 +4,10 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Detect;
-use std::error::Error;
+use rand::{Rng, rng};
+use rerun::Boxes2D;
 use std::collections::HashMap;
-use rand::{rng, Rng};
-use rerun::{Boxes2D};
+use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -15,7 +15,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create a subscriber for "rt/model/boxes2d"
-    let subscriber = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+    let subscriber = session
+        .declare_subscriber("rt/model/boxes2d")
+        .await
+        .unwrap();
 
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("model-boxes")?;

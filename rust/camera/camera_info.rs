@@ -22,7 +22,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let width = info.width;
         let height = info.height;
-        let text = "Camera Width: ".to_owned() + &width.to_string() + " Camera Height: " + &height.to_string();
+        let text = "Camera Width: ".to_owned()
+            + &width.to_string()
+            + " Camera Height: "
+            + &height.to_string();
         let _ = rr.log("CameraInfo", &rerun::TextLog::new(text));
     }
 

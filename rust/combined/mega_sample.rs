@@ -30,12 +30,7 @@
 // use edgefirst_schemas::sensor_msgs::NavSatFix;
 // use zenoh::sample::Sample;
 
-use std::{
-    collections::HashSet,
-    error::Error,
-    sync::Arc,
-    time::{Instant},
-};
+use std::{collections::HashSet, error::Error, sync::Arc, time::Instant};
 
 use clap::Parser;
 use edgefirst_samples::Args;
@@ -68,7 +63,9 @@ async fn camera_h264_handler(
         };
 
         for packet in nal_units(&video.data) {
-            let Ok(Some(yuv)) = decoder.decode(packet) else { continue };
+            let Ok(Some(yuv)) = decoder.decode(packet) else {
+                continue;
+            };
             let rgb_len = yuv.rgb8_len();
             let mut rgb_raw = vec![0; rgb_len];
             yuv.write_rgb8(&mut rgb_raw);
@@ -84,7 +81,7 @@ async fn camera_h264_handler(
     }
 }
 
-async  fn model_boxes2d_handler(
+async fn model_boxes2d_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
@@ -107,23 +104,29 @@ async  fn model_boxes2d_handler(
         }
 
         let rr_guard = rr.lock().await;
-        match rr_guard.log("/camera/boxes2d", &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels)) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("Failed to log boxes2d: {:?}", e);
+        match rr_guard.log(
+            "/camera/boxes2d",
+            &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels),
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log boxes2d: {:?}", e);
                 continue; // skip this message and continue
-                }
-            };  
+            }
+        };
         let model_time_sec = detection.model_time.sec as f64;
         let model_time_nsec = detection.model_time.nanosec as f64;
         let total_time = model_time_sec + (model_time_nsec / 1e9);
-        match rr_guard.log("/metrics/detection_inference", &rerun::archetypes::Scalars::new([total_time])) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("Failed to log detection inference: {:?}", e);
+        match rr_guard.log(
+            "/metrics/detection_inference",
+            &rerun::archetypes::Scalars::new([total_time]),
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log detection inference: {:?}", e);
                 continue; // skip this message and continue
-                }
-            }; 
+            }
+        };
     }
 }
 
@@ -147,7 +150,7 @@ async  fn model_boxes2d_handler(
 //         let c = (total_len / (h as u32 * w as u32)) as usize;
 
 //         let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
-        
+
 //         // Compute argmax along the last axis (class channel)
 //         let array2: Array2<u8> = arr3
 //             .map_axis(ndarray::Axis(2), |class_scores| {
@@ -167,7 +170,7 @@ async  fn model_boxes2d_handler(
 //                 eprintln!("Failed to log mask: {:?}", e);
 //                 continue; // skip this message and continue
 //             }
-//         };  
+//         };
 //     }
 // }
 
@@ -205,12 +208,12 @@ async fn radar_clusters_handler(
         }));
         let rr_guard = rr.lock().await;
         match rr_guard.log("/pointcloud/radar", &points) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("Failed to log radar pointcloud: {:?}", e);
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log radar pointcloud: {:?}", e);
                 continue; // skip this message and continue
-                }
-            };  
+            }
+        };
     }
 }
 
@@ -248,12 +251,12 @@ async fn lidar_clusters_handler(
         }));
         let rr_guard = rr.lock().await;
         match rr_guard.log("/pointcloud/lidar", &points) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("Failed to log radar pointcloud: {:?}", e);
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to log radar pointcloud: {:?}", e);
                 continue; // skip this message and continue
-                }
-            };  
+            }
+        };
     }
 }
 
@@ -270,13 +273,16 @@ async fn gps_handler(
             }
         };
         let rr_guard = rr.lock().await;
-        match rr_guard.log("/gps", &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)])) {
+        match rr_guard.log(
+            "/gps",
+            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)]),
+        ) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to log radar pointcloud: {:?}", e);
                 continue; // skip this message and continue
             }
-        };  
+        };
     }
 }
 
@@ -369,7 +375,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if model_topics.contains("rt/model/boxes2d") {
-        let boxes2d_sub = session.declare_subscriber("rt/model/boxes2d").await.unwrap();
+        let boxes2d_sub = session
+            .declare_subscriber("rt/model/boxes2d")
+            .await
+            .unwrap();
         let boxes2d_rr = rr.clone();
         task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr));
     }
@@ -388,19 +397,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // }
 
     if radar_topics.contains("rt/radar/clusters") {
-        let radar_sub = session.declare_subscriber("rt/radar/clusters").await.unwrap();
+        let radar_sub = session
+            .declare_subscriber("rt/radar/clusters")
+            .await
+            .unwrap();
         let radar_rr = rr.clone();
         task::spawn(radar_clusters_handler(radar_sub, radar_rr));
     }
 
     if lidar_topics.contains("rt/lidar/clusters") {
-        let lidar_sub = session.declare_subscriber("rt/lidar/clusters").await.unwrap();
+        let lidar_sub = session
+            .declare_subscriber("rt/lidar/clusters")
+            .await
+            .unwrap();
         let lidar_rr = rr.clone();
         task::spawn(lidar_clusters_handler(lidar_sub, lidar_rr));
     }
 
     if fusion_topics.contains("rt/fusion/boxes3d") {
-        let boxes3d_sub = session.declare_subscriber("rt/fusion/boxes3d").await.unwrap();
+        let boxes3d_sub = session
+            .declare_subscriber("rt/fusion/boxes3d")
+            .await
+            .unwrap();
         let boxes3d_rr = rr.clone();
         task::spawn(fusion_boxes3d_handler(boxes3d_sub, boxes3d_rr));
     }
@@ -412,8 +430,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Rerun setup
-    loop {
-        
-    }
+    loop {}
     Ok(())
 }

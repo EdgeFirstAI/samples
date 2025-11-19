@@ -429,7 +429,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task::spawn(gps_handler(gps_sub, gps_rr));
     }
 
-    // Rerun setup
-    loop {}
+    // Keep running until interrupted
+    tokio::signal::ctrl_c().await?;
     Ok(())
 }

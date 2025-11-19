@@ -36,7 +36,7 @@ jobs:
         run: |
           # Stop build if there are Python syntax errors or undefined names
           flake8 python/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Exit-zero treats all errors as warnings
+          # Exit-zero treats all errors as warnings. Black uses 88 char line length
           flake8 python/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
 
   test:
@@ -64,5 +64,5 @@ jobs:
       
       - name: Verify imports
         run: |
-          python -c "import edgefirst.perception.schemas as schemas; print(f'schemas version: {schemas.__version__}')"
-          python -c "import zenoh; print(f'zenoh version: {zenoh.__version__}')"
+          python -c "import edgefirst.schemas as schemas; print(f'schemas version: {schemas.__version__}')"
+          python -c "import zenoh; import importlib.metadata; print(f'zenoh version: {importlib.metadata.version(\"eclipse-zenoh\")}')"

@@ -8,12 +8,12 @@ import zenoh
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - List Topics")
-    args.add_argument(
+    parser.add_argument(
         "-r",
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Connect to remote endpoint (format: tcp/IP:7447)",
     )
     args.add_argument(
         "-t",

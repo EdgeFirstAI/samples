@@ -489,7 +489,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Connect to remote endpoint (format: tcp/IP:7447)",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

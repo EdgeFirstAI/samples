@@ -5,44 +5,64 @@ All notable changes to EdgeFirst Samples will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2025-11-19
+
+**First public release** of EdgeFirst Perception Middleware samples repository.
+
+This release represents the initial open-source publication of comprehensive Rust and Python examples demonstrating EdgeFirst Perception capabilities across camera, LiDAR, radar, and sensor fusion use cases.
+
+### Highlights
+
+- **Comprehensive Examples**: 28+ Rust examples with parallel Python implementations
+  - Camera: DMA, H.264, info, camera_info
+  - LiDAR: points, depth, clusters, reflectivity
+  - Radar: targets, clusters, cube, info
+  - ML Inference: 2D boxes, masks, tracked objects
+  - Sensor Fusion: radar fusion, lidar fusion, 3D boxes, occupancy grids
+  - Navigation: IMU, GPS
+
+- **Production-Ready CI/CD**
+  - Multi-platform testing (Linux, Windows, macOS)
+  - Rust: cargo fmt, clippy, build, test
+  - Python: black, flake8, import verification
+  - SBOM generation with license compliance checking
+  - SonarQube integration for code quality
+
+- **Open Source Infrastructure**
+  - Apache-2.0 licensed with full SPDX headers
+  - Comprehensive documentation (README, CONTRIBUTING, ARCHITECTURE, SECURITY)
+  - GitHub Actions workflows optimized for cross-platform development
+  - Community guidelines (Code of Conduct, issue templates, PR templates)
 
 ### Added
-- Initial open source release preparation
-- Apache-2.0 license headers on all source files
-- Comprehensive documentation (README, CONTRIBUTING, ARCHITECTURE, SECURITY)
-- SBOM generation and license compliance tooling
-- CI/CD workflows for build, lint, and SBOM validation
-- Code of Conduct (Contributor Covenant 2.1)
-- Pull request templates and issue templates
-- cargo-release configuration for version management
 
-### Changed
-- Updated to edgefirst-schemas 1.4.0 (Apache-2.0 licensed)
-- Migrated from proprietary to open source licensing
-- Version bumped from 0.0.0 to 0.1.0 for initial release
+- Zenoh-based pub/sub communication patterns for all sensor types
+- Optional Rerun visualization integration (feature-gated)
+- Cross-platform build support (Linux primary, Windows/macOS client apps)
+- Automated SBOM generation and license policy enforcement
+- Version management with cargo-release
+- Python import verification script for CI/CD reliability
 
-### Security
-- Established vulnerability reporting process in SECURITY.md
-- Added license compliance checking in CI/CD pipeline
+### Documentation
 
-## [0.1.0] - TBD
+- Architecture guide explaining Zenoh patterns and message schemas
+- Contributing guide with Rust and Python development setup
+- Security policy with vulnerability reporting process
+- AGENTS.md guide for AI-assisted development with project conventions
 
-First public release of EdgeFirst Perception Middleware samples.
+### Infrastructure
 
-### Added
-- Comprehensive Rust examples for camera, LiDAR, radar, and sensor fusion
-- Python examples paralleling Rust functionality
-- Camera integration examples (DMA, H.264, info, camera_info)
-- LiDAR examples (points, depth, clusters, reflect)
-- Radar examples (targets, clusters, cube, info)
-- ML inference examples (boxes2d, masks, tracked objects)
-- Sensor fusion examples (radar, lidar, 3D boxes, occupancy)
-- IMU and GPS examples
-- Zenoh-based communication patterns
-- Optional Rerun visualization integration
-- Support for Linux, Windows, and macOS platforms
-- Cross-platform build support in CI/CD
+- GitHub Actions workflows for continuous integration
+- SBOM generation using scancode-toolkit (22s optimized performance)
+- License policy compliance with automated checking
+- Support for edgefirst-schemas 1.4.0 (Apache-2.0)
+
+### Notes
+
+- This is a samples repository for demonstration and learning
+- Not published to crates.io (publish = false)
+- Versions track sample evolution and documentation improvements
+- Previous development history considered legacy and not detailed here
 
 ---
 

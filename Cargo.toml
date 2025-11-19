@@ -1,11 +1,12 @@
 [package]
 name = "edgefirst-samples"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
 description = "EdgeFirst Perception Middleware samples demonstrating sensor data processing and visualization"
 repository = "https://github.com/au-zone/edgefirst-samples"
 authors = ["Au-Zone Technologies <support@au-zone.com>"]
+publish = false
 
 [lib]
 name = "edgefirst_samples"

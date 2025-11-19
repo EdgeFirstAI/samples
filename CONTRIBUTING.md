@@ -585,6 +585,94 @@ Add relevant screenshots or logs demonstrating the change.
 
 ---
 
+## Release Process
+
+**For Project Maintainers Only**
+
+EdgeFirst Samples follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) and uses cargo-release for version management.
+
+### Version Management
+
+Versions follow the format `MAJOR.MINOR.PATCH`:
+- **MAJOR**: Breaking changes (rare for samples repo)
+- **MINOR**: New samples, features, or significant improvements
+- **PATCH**: Bug fixes, documentation updates, small improvements
+
+### Release Steps
+
+1. **Ensure clean state**:
+   ```bash
+   git checkout main
+   git pull origin main
+   git status  # Should be clean
+   ```
+
+2. **Update CHANGELOG.md**:
+   - Move items from `[Unreleased]` to new version section
+   - Add release date
+   - Commit: `git commit -m "Update CHANGELOG for vX.Y.Z release"`
+
+3. **Create release with cargo-release**:
+   ```bash
+   # For minor release (new features)
+   cargo release minor --execute
+   
+   # For patch release (bug fixes)
+   cargo release patch --execute
+   
+   # For major release (breaking changes)
+   cargo release major --execute
+   ```
+
+   This will:
+   - Update version in `Cargo.toml`
+   - Update `CHANGELOG.md` placeholders
+   - Create git tag `vX.Y.Z`
+   - Push changes and tag to origin
+
+4. **Verify release**:
+   - Check that tag was created: `git tag -l`
+   - Verify GitHub Actions completed successfully
+   - Confirm CHANGELOG looks correct
+
+### Pre-Release Checklist
+
+Before creating a release, verify:
+
+- [ ] All tests pass (`cargo test --workspace`)
+- [ ] All examples build (`cargo build --release --all-targets`)
+- [ ] Documentation is up-to-date
+- [ ] CHANGELOG.md has all changes since last release
+- [ ] No uncommitted changes (`git status` clean)
+- [ ] On `main` branch with latest changes pulled
+- [ ] SBOM generation passes without license violations
+- [ ] CI/CD workflows are green
+
+### Manual Version Tagging (Alternative)
+
+If not using cargo-release:
+
+```bash
+# Update version in Cargo.toml manually
+# Update CHANGELOG.md manually
+git add Cargo.toml CHANGELOG.md
+git commit -m "Release version 0.2.0"
+git tag -a v0.2.0 -m "Release version 0.2.0"
+git push origin main --tags
+```
+
+### Release Notes
+
+After pushing the tag, create GitHub Release:
+1. Go to https://github.com/au-zone/edgefirst-samples/releases
+2. Click "Draft a new release"
+3. Select the tag you just created
+4. Copy relevant section from CHANGELOG.md
+5. Add any additional context or migration notes
+6. Publish release
+
+---
+
 ## License
 
 By contributing to EdgeFirst Samples, you agree that your contributions will be licensed under the **Apache License 2.0**.

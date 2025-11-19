@@ -598,86 +598,268 @@ Versions follow the format `MAJOR.MINOR.PATCH`:
 - **MINOR**: New samples, features, or significant improvements
 - **PATCH**: Bug fixes, documentation updates, small improvements
 
-### Release Steps
-
-1. **Ensure clean state**:
-   ```bash
-   git checkout main
-   git pull origin main
-   git status  # Should be clean
-   ```
-
-2. **Update CHANGELOG.md**:
-   - Move items from `[Unreleased]` to new version section
-   - Add release date
-   - Commit: `git commit -m "Update CHANGELOG for vX.Y.Z release"`
-
-3. **Create release with cargo-release**:
-   ```bash
-   # For minor release (new features)
-   cargo release minor --execute
-   
-   # For patch release (bug fixes)
-   cargo release patch --execute
-   
-   # For major release (breaking changes)
-   cargo release major --execute
-   ```
-
-   This will:
-   - Update version in `Cargo.toml`
-   - Update `CHANGELOG.md` placeholders
-   - Create git tag `vX.Y.Z`
-   - Push changes and tag to origin
-
-4. **Verify release**:
-   - Check that tag was created: `git tag -l`
-   - Verify GitHub Actions completed successfully
-   - Confirm CHANGELOG looks correct
-
 ### Pre-Release Checklist
 
-Before creating a release, verify:
+**⚠️ CRITICAL: Complete this checklist BEFORE running `cargo release`**
 
-- [ ] All tests pass (`cargo test --workspace`)
-- [ ] All examples build (`cargo build --release --all-targets`)
-- [ ] Documentation is up-to-date
-- [ ] CHANGELOG.md has all changes since last release
-- [ ] No uncommitted changes (`git status` clean)
-- [ ] On `main` branch with latest changes pulled
-- [ ] SBOM generation passes without license violations
-- [ ] CI/CD workflows are green
+Empty or undocumented releases are NOT allowed. Every release must have meaningful changes documented in CHANGELOG.md.
+
+- [ ] **Document all user-visible changes in CHANGELOG.md**
+  - Update the `## [Unreleased]` section with changes since last release
+  - Use Keep a Changelog format: Added, Changed, Deprecated, Removed, Fixed, Security
+  - Focus on user impact, not implementation details
+  - Include: new examples, documentation improvements, bug fixes, dependency updates
+  - **Documentation improvements ARE user-visible changes** (README updates, new guides, etc.)
+
+- [ ] **Review commits since last release**
+  ```bash
+  # Find last tag
+  LAST_TAG=$(git tag --sort=-v:refname | head -1)
+  echo "Last release: $LAST_TAG"
+  
+  # Review all commits
+  git log $LAST_TAG..HEAD --oneline
+  
+  # See detailed changes
+  git log $LAST_TAG..HEAD --stat
+  ```
+
+- [ ] **Verify all tests and quality checks pass**
+  ```bash
+  # Rust tests and linting
+  cargo test --all-targets
+  cargo clippy -- -D warnings
+  cargo fmt --check
+  
+  # Python quality checks
+  black --check python/
+  flake8 python/
+  python .github/scripts/verify_python_imports.py
+  
+  # Build all examples
+  cargo build --release --all-targets
+  ```
+
+- [ ] **Verify SBOM compliance**
+  ```bash
+  .github/scripts/generate_sbom.sh
+  python3 .github/scripts/check_license_policy.py sbom.json
+  # Must complete without license violations
+  ```
+
+- [ ] **Ensure clean git state**
+  ```bash
+  git checkout main
+  git pull origin main
+  git status  # Should show "nothing to commit, working tree clean"
+  ```
+
+- [ ] **Ensure CHANGELOG has meaningful content**
+  - Look at `## [Unreleased]` section in CHANGELOG.md
+  - **Must NOT be empty** - document what changed!
+  - If empty, stop and document changes before proceeding
+
+### Release Steps
+
+1. **Document changes in CHANGELOG.md**
+
+   Edit the `[Unreleased]` section to document all changes:
+
+   ```markdown
+   ## [Unreleased]
+   
+   ### Added
+   - New radar visualization example with point cloud display
+   - QUICKSTART.md guide for ZIP archive distributions
+   
+   ### Changed
+   - Updated README with improved learning progression
+   - Upgraded edgefirst-schemas to 1.5.0
+   
+   ### Fixed
+   - Zenoh multicast properly disabled in remote mode
+   - DMA buffer file descriptor leak in camera examples
+   
+   ### Documentation
+   - Improved onboarding with architecture diagrams
+   - Added sensor fusion workflow examples
+   ```
+
+   **Commit the CHANGELOG update:**
+   ```bash
+   git add CHANGELOG.md
+   git commit -m "Update CHANGELOG for next release"
+   git push origin main
+   ```
+
+2. **Create release with cargo-release**
+
+   Choose the appropriate version bump:
+
+   ```bash
+   # Patch release (0.1.x): Bug fixes, doc improvements, minor tweaks
+   cargo release patch --execute --no-confirm
+   
+   # Minor release (0.x.0): New examples, new features, backward-compatible
+   cargo release minor --execute --no-confirm
+   
+   # Major release (x.0.0): Breaking changes (rare for samples)
+   cargo release major --execute --no-confirm
+   ```
+
+   This automatically:
+   - Updates version in `Cargo.toml` and `Cargo.lock`
+   - Updates CHANGELOG.md date (replaces YYYY-MM-DD placeholder)
+   - Creates commit: `chore: Release edgefirst-samples version X.Y.Z`
+   - Creates git tag: `vX.Y.Z` with message "Release version X.Y.Z"
+   - Pushes commit and tag to `origin/main`
+
+3. **Verify release was created**
+
+   ```bash
+   # Check tag was created
+   git tag --sort=-v:refname | head -3
+   
+   # Verify push succeeded
+   git log origin/main --oneline -3
+   
+   # Monitor GitHub Actions
+   gh run list --limit 3
+   # Or visit: https://github.com/EdgeFirstAI/samples/actions
+   ```
+
+4. **Monitor automated release workflow**
+
+   GitHub Actions (`.github/workflows/release.yml`) will:
+   - Build binaries for all platforms (Linux x86_64/aarch64, Windows, macOS)
+   - Create ZIP archives with binaries + QUICKSTART.md + CHANGELOG.md
+   - Generate release notes combining QUICKSTART + CHANGELOG
+   - Create GitHub Release at https://github.com/EdgeFirstAI/samples/releases
+   - Attach platform-specific ZIPs as release assets
+
+   Verify the release appears correctly at: https://github.com/EdgeFirstAI/samples/releases
+
+### CHANGELOG Best Practices
+
+**What to document (user-visible changes):**
+- ✅ New examples or sample applications
+- ✅ Documentation additions/improvements (README, guides, QUICKSTART, etc.)
+- ✅ New feature support (new message types, sensors, platforms)
+- ✅ Bug fixes affecting user experience
+- ✅ Dependency updates (especially edgefirst-schemas versions)
+- ✅ Build/workflow improvements users might notice
+- ✅ Performance improvements with measurable impact
+
+**What NOT to document (internal changes):**
+- ❌ Code refactoring that doesn't change behavior
+- ❌ Comment additions or improvements
+- ❌ Variable renames
+- ❌ Test-only changes (unless revealing important behavior)
+- ❌ CI/CD tweaks users don't see
+
+**Good changelog entries:**
+```markdown
+### Added
+- **QUICKSTART.md**: New quick start guide with architecture diagrams for ZIP distributions
+- Temperature sensor example with Rust and Python implementations
+- Automated SBOM generation in CI/CD workflow
+
+### Changed
+- **README restructured**: Priority-based organization improves learning progression
+- Updated to edgefirst-schemas 1.5.0 with new radar message types
+- Release workflow now includes QUICKSTART.md in ZIP archives
+
+### Fixed
+- Zenoh multicast discovery properly disabled in remote mode
+- DMA buffer file descriptor leak in camera examples
+- Memory leak in long-running fusion examples
+```
+
+**Bad changelog entries (avoid):**
+```markdown
+### Added
+- stuff  # Too vague
+
+### Changed
+- Updated code  # Not specific, not user-visible
+- Refactored module structure  # Internal change, doesn't affect users
+
+### Fixed
+- Bug  # Which bug? What impact?
+```
+
+### Release Cadence
+
+This is a samples repository - releases are **event-driven**:
+- Release when significant examples are added
+- Release when documentation substantially improves
+- Release when fixing critical bugs
+- Release when updating to new edgefirst-schemas versions
+
+**Avoid:**
+- Empty releases with no documented changes
+- Multiple releases per day (batch related changes)
+- Releases for trivial typo fixes (batch with other changes)
+
+### Troubleshooting Releases
+
+**cargo-release fails with "nothing to commit":**
+- You likely didn't commit CHANGELOG.md update
+- Solution: Document changes in CHANGELOG.md and commit before running cargo release
+
+**Release created but CHANGELOG is empty:**
+- This is a process failure - avoid this by following the pre-release checklist
+- Solution: Immediately create a follow-up patch release with proper CHANGELOG
+
+**GitHub Actions workflow didn't trigger:**
+```bash
+# Verify tag was pushed
+git ls-remote --tags origin | grep v0.1
+
+# Tags should be pushed automatically by cargo-release
+# If missing, push manually:
+git push origin --tags
+```
+
+**Need to fix a bad release:**
+- **Never delete tags from main branch**
+- Solution: Create a new patch release with the fix documented in CHANGELOG
+
+### Testing Release Process (Without Pushing)
+
+To test locally without pushing:
+
+```bash
+# Dry-run mode
+cargo release patch --execute --no-push
+
+# Review what changed
+git log --oneline -3
+git show HEAD
+
+# Undo if needed
+git reset --hard HEAD~1
+git tag -d v0.1.X
+```
 
 ### Manual Version Tagging (Alternative)
 
 If not using cargo-release:
 
 ```bash
-# Update version in Cargo.toml manually
-# Update CHANGELOG.md manually
-git add Cargo.toml CHANGELOG.md
-git commit -m "Release version 0.2.0"
+# Update version in Cargo.toml and Cargo.lock manually
+cargo build  # Updates Cargo.lock
+
+# Update CHANGELOG.md manually (add version and date)
+
+# Commit changes
+git add Cargo.toml Cargo.lock CHANGELOG.md
+git commit -m "chore: Release edgefirst-samples version 0.2.0"
+
+# Create and push tag
 git tag -a v0.2.0 -m "Release version 0.2.0"
 git push origin main --tags
 ```
-
-### Release Notes
-
-After pushing the tag, GitHub Actions automatically:
-1. Builds release binaries for all supported platforms:
-   - Linux (x86_64, aarch64)
-   - macOS (x86_64, aarch64/Apple Silicon)
-   - Windows (x86_64)
-2. Creates ZIP archives containing all compiled binaries
-3. Generates GitHub Release with changelog from CHANGELOG.md
-4. Attaches all platform-specific ZIP files as release assets
-
-The automated release workflow is triggered by tags matching `v*.*.*` pattern.
-
-**Manual steps (if needed):**
-- Edit release notes at https://github.com/EdgeFirstAI/samples/releases
-- Mark as pre-release if it contains `alpha`, `beta`, or `rc`
-- Add migration notes or breaking change warnings
 
 ---
 

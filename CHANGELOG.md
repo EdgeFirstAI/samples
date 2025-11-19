@@ -7,9 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<!-- 
+IMPORTANT: Before creating a release, document all user-visible changes here.
+Empty releases should be avoided - ensure meaningful changes are listed.
+-->
+
 ## [0.1.2] - 2025-11-19
 
+### Added
+- **QUICKSTART.md**: New quick start guide designed for ZIP archive distribution
+  - Focused user onboarding with clear architecture diagrams
+  - Usage examples for local and remote EdgeFirst platform connections
+  - Highlights key examples: `list-topics` (Hello World) and `mega-sample` (complete pipeline)
+
+### Changed
+- **README.md restructuring**: Priority-based organization for better learning progression
+  - Quick start section moved to top with download links
+  - Sample applications organized by complexity and use case
+  - Enhanced Examples Overview table with clearer descriptions
+- **Release workflow improvements**: 
+  - ZIP archives now include QUICKSTART.md instead of README.md
+  - Release notes combine QUICKSTART + CHANGELOG for better context
+  - Added platform download table to GitHub releases
+
+### Documentation
+- Improved user onboarding experience for distributed archives
+- Better separation between end-user quick start and developer documentation
+
 ## [0.1.1] - 2025-11-19
+
+### Added
+- **Automated GitHub release workflow**: 
+  - Creates releases automatically on version tags
+  - Generates platform-specific ZIP archives (Linux x86_64/aarch64, Windows, macOS)
+  - Uploads artifacts to GitHub Releases
+
+### Fixed
+- Corrected all GitHub repository URLs from placeholder to `EdgeFirstAI/samples`
+- Updated README badges to point to correct repository
 
 ## [0.1.0] - 2025-11-19
 

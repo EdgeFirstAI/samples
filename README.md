@@ -41,8 +41,8 @@ All samples support both **local** (on-device) and **remote** (over network) con
 # Local mode - auto-discovers topics on EdgeFirst device
 ./list-topics
 
-# Remote mode - connect to EdgeFirst device at specific IP
-./list-topics --remote 192.168.1.100:7447
+# Remote mode - connect to EdgeFirst device at specific IP:port
+./list-topics --remote tcp/192.168.1.100:7447
 ```
 
 > **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
@@ -101,7 +101,7 @@ This is the simplest starting point—it connects to the Zenoh network and lists
 ./list-topics
 
 # Remote connection
-./list-topics --remote 192.168.1.100:7447
+./list-topics --remote tcp/192.168.1.100:7447
 ```
 
 **Topics Discovered:**
@@ -132,7 +132,7 @@ This is the **most comprehensive example**, showcasing EdgeFirst's edge vision c
 ./mega-sample
 
 # Remote connection
-./mega-sample --remote 192.168.1.100:7447
+./mega-sample --remote tcp/192.168.1.100:7447
 ```
 
 **What You'll See:**
@@ -171,7 +171,7 @@ This example shows the **power of running vision models at the edge**—low-late
 Decodes H.264-encoded camera streams. Works remotely and reduces network bandwidth.
 
 ```bash
-./camera-h264 --remote 192.168.1.100:7447
+./camera-h264 --remote tcp/192.168.1.100:7447
 ```
 
 #### Camera Info

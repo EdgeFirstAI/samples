@@ -663,13 +663,21 @@ git push origin main --tags
 
 ### Release Notes
 
-After pushing the tag, create GitHub Release:
-1. Go to https://github.com/EdgeFirstAI/samples/releases
-2. Click "Draft a new release"
-3. Select the tag you just created
-4. Copy relevant section from CHANGELOG.md
-5. Add any additional context or migration notes
-6. Publish release
+After pushing the tag, GitHub Actions automatically:
+1. Builds release binaries for all supported platforms:
+   - Linux (x86_64, aarch64)
+   - macOS (x86_64, aarch64/Apple Silicon)
+   - Windows (x86_64)
+2. Creates ZIP archives containing all compiled binaries
+3. Generates GitHub Release with changelog from CHANGELOG.md
+4. Attaches all platform-specific ZIP files as release assets
+
+The automated release workflow is triggered by tags matching `v*.*.*` pattern.
+
+**Manual steps (if needed):**
+- Edit release notes at https://github.com/EdgeFirstAI/samples/releases
+- Mark as pre-release if it contains `alpha`, `beta`, or `rc`
+- Add migration notes or breaking change warnings
 
 ---
 

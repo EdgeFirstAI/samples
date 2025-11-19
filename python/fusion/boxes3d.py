@@ -10,6 +10,7 @@ import asyncio
 import time
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -33,10 +34,8 @@ def boxes3d_worker(msg):
     detection = Detect.deserialize(msg.payload.to_bytes())
     # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
     # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
-    centers = [(x.distance, -x.center_x, -x.center_y)
-                for x in detection.boxes]
-    sizes = [(x.width, x.width, x.height)
-                for x in detection.boxes]
+    centers = [(x.distance, -x.center_x, -x.center_y) for x in detection.boxes]
+    sizes = [(x.width, x.width, x.height) for x in detection.boxes]
 
     rr.log("/pointcloud/fusion/boxes", rr.Boxes3D(centers=centers, sizes=sizes))
 
@@ -46,11 +45,12 @@ async def boxes3d_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=boxes3d_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
-    
+
+
 async def main_async(args):
     # Setup rerun
     args.memory_limit = 10
@@ -68,7 +68,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/fusion/boxes3d', drain.callback)
+    session.declare_subscriber("rt/fusion/boxes3d", drain.callback)
     await asyncio.gather((boxes3d_handler(drain)))
 
     while True:
@@ -77,8 +77,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Boxes3D")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -86,6 +91,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

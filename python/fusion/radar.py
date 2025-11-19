@@ -11,6 +11,7 @@ import asyncio
 import time
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -35,12 +36,11 @@ def radar_worker(msg):
     points = decode_pcd(pcd)
     clusters = [p for p in points if p.cluster_id > 0]
     if not clusters:
-        rr.log("fusion/radar", rr.Points3D([], colors=[]))  
+        rr.log("fusion/radar", rr.Points3D([], colors=[]))
         return
     max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
-            for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
     rr.log("fusion/radar", rr.Points3D(pos, colors=colors))
 
 
@@ -49,7 +49,7 @@ async def radar_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=radar_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
@@ -72,7 +72,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/fusion/radar', drain.callback)
+    session.declare_subscriber("rt/fusion/radar", drain.callback)
     await asyncio.gather((radar_handler(drain)))
 
     while True:
@@ -81,8 +81,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Fusion Radar")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -90,6 +95,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

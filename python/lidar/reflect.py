@@ -11,6 +11,7 @@ from argparse import ArgumentParser
 from edgefirst.schemas.sensor_msgs import Image
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -38,8 +39,9 @@ def reflect_worker(msg):
         print("Reflect encoding is not mono8")
         return
 
-    data = np.array(reflect.data).reshape(
-        (reflect.height, reflect.width)).astype(np.uint8)
+    data = (
+        np.array(reflect.data).reshape((reflect.height, reflect.width)).astype(np.uint8)
+    )
     rr.log("lidar/depth", rr.Image(data))
 
 
@@ -48,7 +50,7 @@ async def reflect_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=reflect_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
@@ -71,7 +73,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/lidar/reflect', drain.callback)
+    session.declare_subscriber("rt/lidar/reflect", drain.callback)
     await asyncio.gather((reflect_handler(drain)))
 
     while True:
@@ -80,8 +82,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Lidar Reflect")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -89,6 +96,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

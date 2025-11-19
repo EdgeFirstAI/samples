@@ -11,6 +11,7 @@ import asyncio
 import time
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -36,9 +37,11 @@ def model_output_worker(msg):
     np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
     np_arr = np.argmax(np_arr, axis=2)
     rr.log(
-        "/", rr.AnnotationContext([
-            (0, "background", (0, 0, 0)),
-            (1, "person", (255, 0, 0))]))
+        "/",
+        rr.AnnotationContext(
+            [(0, "background", (0, 0, 0)), (1, "person", (255, 0, 0))]
+        ),
+    )
     rr.log("mask", rr.SegmentationImage(np_arr))
 
 
@@ -47,7 +50,7 @@ async def model_output_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=model_output_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
@@ -70,7 +73,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/fusion/model_output', drain.callback)
+    session.declare_subscriber("rt/fusion/model_output", drain.callback)
     await asyncio.gather((model_output_handler(drain)))
 
     while True:
@@ -79,8 +82,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Fusion Model Output")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -88,6 +96,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

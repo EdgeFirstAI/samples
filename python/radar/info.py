@@ -10,6 +10,7 @@ from edgefirst.schemas.edgefirst_msgs import RadarInfo
 import rerun as rr
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -43,7 +44,7 @@ async def info_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=info_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
@@ -66,7 +67,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/radar/info', drain.callback)
+    session.declare_subscriber("rt/radar/info", drain.callback)
     await asyncio.gather((info_handler(drain)))
 
     while True:
@@ -75,8 +76,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Radar Info")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -84,6 +90,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

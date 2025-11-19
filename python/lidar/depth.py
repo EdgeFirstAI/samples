@@ -12,6 +12,7 @@ import time
 import sys
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -39,10 +40,12 @@ def depth_worker(msg):
         print("Depth encoding is not mono16")
         return
     endian_format = ">" if depth.is_bigendian else "<"
-    depth_vals = list(struct.unpack(
-        f"{endian_format}{depth.width*depth.height}H", bytes(depth.data)))
-    data = (np.array(depth_vals).reshape(
-        (depth.height, depth.width)) / 255).astype(np.uint8)
+    depth_vals = list(
+        struct.unpack(f"{endian_format}{depth.width*depth.height}H", bytes(depth.data))
+    )
+    data = (np.array(depth_vals).reshape((depth.height, depth.width)) / 255).astype(
+        np.uint8
+    )
     rr.log("lidar/depth", rr.Image(data))
 
 
@@ -51,7 +54,7 @@ async def depth_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=depth_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
@@ -74,7 +77,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/lidar/depth', drain.callback)
+    session.declare_subscriber("rt/lidar/depth", drain.callback)
     await asyncio.gather((depth_handler(drain)))
 
     while True:
@@ -83,8 +86,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Lidar Depth")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -92,6 +100,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

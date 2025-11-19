@@ -30,6 +30,7 @@ class MessageDrain:
             latest = self._queue.get_nowait()
         return latest
 
+
 def boxes2d_worker(msg, boxes_tracked):
     detection = Detect.deserialize(msg.payload.to_bytes())
     centers = []
@@ -38,16 +39,22 @@ def boxes2d_worker(msg, boxes_tracked):
     colors = []
     for box in detection.boxes:
         if box.track.id and box.track.id not in boxes_tracked:
-            boxes_tracked[box.track.id] = [box.label + ": " + box.track.id[:6], list(np.random.choice(range(256), size=3))]
+            boxes_tracked[box.track.id] = [
+                box.label + ": " + box.track.id[:6],
+                list(np.random.choice(range(256), size=3)),
+            ]
         if box.track.id:
             colors.append(boxes_tracked[box.track.id][1])
             labels.append(boxes_tracked[box.track.id][0])
         else:
-            colors.append([0,255,0])
+            colors.append([0, 255, 0])
             labels.append(box.label)
         centers.append((box.center_x, box.center_y))
         sizes.append((box.width, box.height))
-    rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors))
+    rr.log(
+        "boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors)
+    )
+
 
 async def boxes2d_handler(drain):
     boxes_tracked = {}
@@ -56,11 +63,12 @@ async def boxes2d_handler(drain):
 
         thread = threading.Thread(target=boxes2d_worker, args=[msg, boxes_tracked])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
-    
+
+
 async def main_async(args):
     # Setup rerun
     args.memory_limit = 10
@@ -78,7 +86,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/model/boxes2d', drain.callback)
+    session.declare_subscriber("rt/model/boxes2d", drain.callback)
     await asyncio.gather((boxes2d_handler(drain)))
 
     while True:
@@ -87,8 +95,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Boxes2D Tracked")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -96,6 +109,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

@@ -8,10 +8,20 @@ import zenoh
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - List Topics")
-    args.add_argument('-r', '--remote', type=str, default=None,
-                      help="Connect to the remote endpoint instead of local.")
-    args.add_argument('-t', '--time', type=float, default=None,
-                      help="Time in seconds to run command before exiting.")
+    args.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
+    args.add_argument(
+        "-t",
+        "--time",
+        type=float,
+        default=None,
+        help="Time in seconds to run command before exiting.",
+    )
     args = args.parse_args()
 
     # Create the default Zenoh configuration and if the remote argument is
@@ -24,7 +34,7 @@ if __name__ == "__main__":
     session = zenoh.open(config)
 
     # Create a subscriber for all topics matching the pattern "rt/**"
-    subscriber = session.declare_subscriber('rt/**')
+    subscriber = session.declare_subscriber("rt/**")
 
     # Keep a list of discovered topics to avoid noise from duplicates
     topics = set()
@@ -43,5 +53,5 @@ if __name__ == "__main__":
 
         # Capture the message encoding MIME type then split on the first ';'
         # to get the schema.
-        schema = str(msg.encoding).split(';', maxsplit=1)[-1]
+        schema = str(msg.encoding).split(";", maxsplit=1)[-1]
         print("topic: %s → %s" % (topic, schema))

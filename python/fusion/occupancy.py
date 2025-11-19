@@ -11,6 +11,7 @@ import asyncio
 import time
 import threading
 
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -34,12 +35,11 @@ def occupancy_worker(msg):
     pcd = PointCloud2.deserialize(msg.payload.to_bytes())
     points = decode_pcd(pcd)
     if not points:
-        rr.log("fusion/occupancy", rr.Points3D(positions=[], colors=[])) 
+        rr.log("fusion/occupancy", rr.Points3D(positions=[], colors=[]))
         return
     max_class = max(max([p.vision_class for p in points]), 1)
     pos = [[p.x, p.y, p.z] for p in points]
-    colors = [
-        colormap(turbo_colormap, p.vision_class/max_class) for p in points]
+    colors = [colormap(turbo_colormap, p.vision_class / max_class) for p in points]
     rr.log("fusion/occupancy", rr.Points3D(positions=pos, colors=colors))
 
 
@@ -48,7 +48,7 @@ async def occupancy_handler(drain):
         msg = await drain.get_latest()
         thread = threading.Thread(target=occupancy_worker, args=[msg])
         thread.start()
-        
+
         while thread.is_alive():
             await asyncio.sleep(0.001)
         thread.join()
@@ -71,7 +71,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber('rt/fusion/occupancy', drain.callback)
+    session.declare_subscriber("rt/fusion/occupancy", drain.callback)
     await asyncio.gather((occupancy_handler(drain)))
 
     while True:
@@ -80,8 +80,13 @@ async def main_async(args):
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Fusion Occupancy")
-    parser.add_argument('-r', '--remote', type=str, default=None,
-                        help="Connect to the remote endpoint instead of local.")
+    parser.add_argument(
+        "-r",
+        "--remote",
+        type=str,
+        default=None,
+        help="Connect to the remote endpoint instead of local.",
+    )
     rr.script_add_args(parser)
     args = parser.parse_args()
 
@@ -89,6 +94,7 @@ def main():
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

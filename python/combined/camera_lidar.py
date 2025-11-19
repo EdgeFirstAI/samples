@@ -10,6 +10,7 @@ import zenoh
 import threading
 import time
 from collections import deque
+import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
 from edgefirst.schemas.edgefirst_msgs import Detect

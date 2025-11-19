@@ -2,7 +2,7 @@
 
 This document provides instructions for AI coding assistants (GitHub Copilot, Cursor, Claude Code, etc.) working on the **EdgeFirst Samples** repository. These guidelines ensure consistent code quality, proper workflow adherence, and maintainable contributions.
 
-**Project:** EdgeFirst Samples (https://github.com/au-zone/edgefirst-samples)  
+**Project:** EdgeFirst Samples (https://github.com/EdgeFirstAI/samples)  
 **Organization:** Au-Zone Technologies  
 **Version:** 1.0  
 **Last Updated:** November 2025

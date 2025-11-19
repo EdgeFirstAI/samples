@@ -111,8 +111,8 @@ sudo apt-get install -y \
 ### Clone the Repository
 
 ```bash
-git clone https://github.com/au-zone/edgefirst-samples.git
-cd edgefirst-samples
+git clone https://github.com/EdgeFirstAI/samples.git
+cd samples
 ```
 
 ### Cross-Compilation Setup (Optional)
@@ -252,7 +252,7 @@ For hardware-specific features, document requirements clearly in the sample's do
 # Fork the repository on GitHub, then:
 git clone https://github.com/YOUR-USERNAME/edgefirst-samples.git
 cd edgefirst-samples
-git remote add upstream https://github.com/au-zone/edgefirst-samples.git
+git remote add upstream https://github.com/EdgeFirstAI/samples.git
 ```
 
 ### 2. Create a Feature Branch
@@ -664,7 +664,7 @@ git push origin main --tags
 ### Release Notes
 
 After pushing the tag, create GitHub Release:
-1. Go to https://github.com/au-zone/edgefirst-samples/releases
+1. Go to https://github.com/EdgeFirstAI/samples/releases
 2. Click "Draft a new release"
 3. Select the tag you just created
 4. Copy relevant section from CHANGELOG.md

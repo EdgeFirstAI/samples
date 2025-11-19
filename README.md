@@ -1,8 +1,8 @@
 # EdgeFirst Middleware Samples
 
-[![Build Status](https://github.com/au-zone/edgefirst-samples/workflows/Rust/badge.svg)](https://github.com/au-zone/edgefirst-samples/actions)
+[![Build Status](https://github.com/EdgeFirstAI/samples/workflows/Rust%20CI/badge.svg)](https://github.com/EdgeFirstAI/samples/actions)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![EdgeFirst Studio](https://img.shields.io/badge/EdgeFirst-Studio-green)](https://edgefirst.ai)
+[![EdgeFirst Studio](https://img.shields.io/badge/EdgeFirst-Studio-green)](https://edgefirst.studio)
 
 **Learn EdgeFirst Perception Middleware through practical, ready-to-run examples.**
 
@@ -212,7 +212,7 @@ The repository includes `.cargo/config.toml` with pre-configured linker settings
 
 ### EdgeFirst Ecosystem
 
-- **[EdgeFirst Studio](https://edgefirst.ai):** MLOps platform for edge AI model deployment
+- **[EdgeFirst Studio](https://edgefirst.studio):** MLOps platform for edge AI model deployment
 - **[EdgeFirst Modules](https://doc.edgefirst.ai/):** Pre-built perception modules
 - **Hardware Platforms:**
   - **Maivin:** Edge AI development platform

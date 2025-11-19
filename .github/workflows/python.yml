@@ -63,6 +63,4 @@ jobs:
           pip install -r requirements.txt
       
       - name: Verify imports
-        run: |
-          python -c "import edgefirst.schemas as schemas; print(f'schemas version: {schemas.__version__}')"
-          python -c 'import zenoh; import importlib.metadata; print(f"zenoh version: {importlib.metadata.version('"'"'eclipse-zenoh'"'"')}")'
+        run: python .github/scripts/verify_imports.py

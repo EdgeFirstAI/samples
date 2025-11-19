@@ -90,7 +90,7 @@ jobs:
           cp target/${{ matrix.target }}/release/fusion-model-output-tracked artifacts/${{ matrix.archive_name }}/
           cp target/${{ matrix.target }}/release/imu artifacts/${{ matrix.archive_name }}/
           cp target/${{ matrix.target }}/release/gps artifacts/${{ matrix.archive_name }}/
-          cp README.md LICENSE NOTICE artifacts/${{ matrix.archive_name }}/
+          cp QUICKSTART.md LICENSE NOTICE artifacts/${{ matrix.archive_name }}/
       
       - name: Prepare artifact directory (Windows)
         if: runner.os == 'Windows'
@@ -123,7 +123,7 @@ jobs:
           Copy-Item -Path target/${{ matrix.target }}/release/fusion-model-output-tracked.exe -Destination artifacts/${{ matrix.archive_name }}/
           Copy-Item -Path target/${{ matrix.target }}/release/imu.exe -Destination artifacts/${{ matrix.archive_name }}/
           Copy-Item -Path target/${{ matrix.target }}/release/gps.exe -Destination artifacts/${{ matrix.archive_name }}/
-          Copy-Item -Path README.md,LICENSE,NOTICE -Destination artifacts/${{ matrix.archive_name }}/
+          Copy-Item -Path QUICKSTART.md,LICENSE,NOTICE -Destination artifacts/${{ matrix.archive_name }}/
       
       - name: Create archive (Unix)
         if: runner.os != 'Windows'
@@ -169,24 +169,75 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       
-      - name: Extract changelog for version
-        id: changelog
+      - name: Create release notes
+        id: release_notes
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          echo "Extracting changelog for version $VERSION"
+          echo "Creating release notes for version $VERSION"
           
-          # Extract the section for this version from CHANGELOG.md
+          # Start with Quick Start section
+          cat > release_notes.md << 'EOF_QUICKSTART'
+          # Quick Start
+          
+          Download the ZIP file for your platform below, extract it, and run the samples:
+          
+          ```bash
+          # Extract archive
+          unzip edgefirst-samples-linux-x86_64.zip
+          cd edgefirst-samples-linux-x86_64
+          
+          # List available topics
+          ./list-topics
+          
+          # Run complete vision pipeline demo
+          ./mega-sample
+          
+          # Remote connection
+          ./list-topics --remote 192.168.1.100:7447
+          ```
+          
+          See `QUICKSTART.md` in the archive for full usage instructions.
+          
+          ---
+          
+          EOF_QUICKSTART
+          
+          # Append changelog for this version
           if [ -f CHANGELOG.md ]; then
+            echo "# What's New" >> release_notes.md
+            echo "" >> release_notes.md
             CHANGELOG=$(sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' | tail -n +2)
-            if [ -z "$CHANGELOG" ]; then
-              CHANGELOG="Release version $VERSION"
+            if [ -n "$CHANGELOG" ]; then
+              echo "$CHANGELOG" >> release_notes.md
+            else
+              echo "Release version $VERSION" >> release_notes.md
             fi
           else
-            CHANGELOG="Release version $VERSION"
+            echo "# Release" >> release_notes.md
+            echo "" >> release_notes.md
+            echo "Release version $VERSION" >> release_notes.md
           fi
           
-          # Save to file for multi-line content
-          echo "$CHANGELOG" > release_notes.md
+          # Append platform details
+          cat >> release_notes.md << 'EOF_PLATFORMS'
+          
+          ---
+          
+          ## Supported Platforms
+          
+          | Platform | Archive |
+          |----------|---------|
+          | Linux x86_64 | `edgefirst-samples-linux-x86_64.zip` |
+          | Linux aarch64 | `edgefirst-samples-linux-aarch64.zip` |
+          | macOS Intel | `edgefirst-samples-macos-x86_64.zip` |
+          | macOS Apple Silicon | `edgefirst-samples-macos-aarch64.zip` |
+          | Windows x86_64 | `edgefirst-samples-windows-x86_64.zip` |
+          
+          Each archive contains all 26 sample applications plus documentation.
+          
+          **Documentation:** https://doc.edgefirst.ai/develop/perception/dev/  
+          **Source Code:** https://github.com/EdgeFirstAI/samples
+          EOF_PLATFORMS
       
       - name: Create GitHub Release
         uses: softprops/action-gh-release@e7a8f85e1c67a31e6ed99a94b41bd0b71bbee6b8 # v2.2.0

@@ -8,7 +8,7 @@ import zenoh
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - List Topics")
-    parser.add_argument(
+    args.add_argument(
         "-r",
         "--remote",
         type=str,

@@ -746,7 +746,7 @@ fn main() -> Result<()> {
 cargo run --bin list-topics
 
 # Remote
-cargo run --bin list-topics -- --remote 192.168.1.100:7447
+cargo run --bin list-topics -- --remote tcp/192.168.1.100:7447
 ```
 
 ---

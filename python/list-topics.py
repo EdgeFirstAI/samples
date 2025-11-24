@@ -13,7 +13,7 @@ if __name__ == "__main__":
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Connect to remote endpoint (format: tcp/<IP_ADDRESS>:7447)",
     )
     args.add_argument(
         "-t",

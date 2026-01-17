@@ -6,7 +6,8 @@ use edgefirst_samples::Args;
 use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
 use edgefirst::image::{TensorImage, ImageConverter, RGB};
 use edgefirst::image::ImageConverterTrait;
-use edgefirst::tensor::TensorMemory;
+use edgefirst::tensor::{Tensor, TensorMemory, TensorMapTrait, TensorTrait};
+use edgefirst::tensor::Error as TensorError;
 use edgefirst::image::{Rotation, Flip, Crop};
 use edgefirst::decoder::Decoder as EFDecoder;
 use openh264::decoder::Decoder;
@@ -40,28 +41,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let width = yuv.dimensions().0;
             let height = yuv.dimensions().1;
 
-            let image = Image::from_rgb24(rgb_raw.clone(), [width as u32, height as u32]);
-            rr.log("image", &image)?;
-            
-            // Save image as PNG
-            if let Some(img) = ::image::RgbImage::from_raw(width as u32, height as u32, rgb_raw.clone()) {
-                if let Err(e) = img.save("decoded_frame.png") {
-                    eprintln!("Failed to save image: {:?}", e);
-                }
-            }
+            // let image = Image::from_rgb24(rgb_raw.clone(), [width as u32, height as u32]);
+            // rr.log("image", &image)?;
 
-            let png_bytes = include_bytes!("../../decoded_frame.png");
-            let img = TensorImage::load(png_bytes, Some(RGB), Some(TensorMemory::Mem))
-                .map_err(|e| format!("Failed to load TensorImage: {:?}", e))?;
+            let tensor = Tensor::<u8>::new(&[width as usize, height as usize, 3], Some(TensorMemory::Mem), Some("test_tensor"))
+                .map_err(|e| format!("Failed to create Tensor: {:?}", e))?;
+            
+            let mut map = tensor.map().map_err(|e| format!("Failed to map Tensor memory: {:?}", e))?;
+
+            map.copy_from_slice(&rgb_raw);
+            
+            drop(map); // Unmap the tensor memory
+            let tensor_image = TensorImage::from_tensor(tensor, RGB)
+                .map_err(|e| format!("Failed to create TensorImage: {:?}", e))?;
+            // println!("Created TensorImage of size {}x{}", tensor_image.width(), tensor_image.height());
             let mut converter = ImageConverter::new()
                 .map_err(|e| format!("Failed to create ImageConverter: {:?}", e))?;
-            let mut dst = TensorImage::new(640, 480, RGB, None)
+            let mut dst = TensorImage::new(1920, 1080, RGB, None)
                 .map_err(|e| format!("Failed to create destination TensorImage: {:?}", e))?;
-            converter.convert(&img, &mut dst, Rotation::None, Flip::None, Crop::default())
+            converter.convert(&tensor_image, &mut dst, Rotation::Rotate180, Flip::None, Crop::default())
                 .map_err(|e| format!("Failed to convert image: {:?}", e))?;
-            // let img = TensorImage::load(&rgb_raw, Some(RGB), Some(TensorMemory::Mem))
-            //     .map_err(|e| format!("Failed to load TensorImage: {:?}", e))?;
-            
+
+            // // let _ = dst.save_jpeg("test.jpeg", 90);
+
+            let dst_map = dst.tensor().map().map_err(|e| format!("Failed to map destination Tensor memory: {:?}", e))?;
+
+            let im = Image::from_rgb24(dst_map.to_vec(), [width as u32, height as u32]);
+            rr.log("image", &im)?;
+            drop(dst_map); // Unmap the destination tensor memory
         }
     }
 

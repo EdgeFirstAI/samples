@@ -355,8 +355,10 @@ async def main_async(args):
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
+        config.insert_json5("connect", '{"endpoints": ["%s"]}' % remote)
     session = zenoh.open(config)
 
     # Create a subscriber for all topics matching the pattern "rt/**"

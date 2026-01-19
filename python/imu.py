@@ -38,7 +38,7 @@ def imu_worker(msg):
     z = imu.orientation.z
     w = imu.orientation.w
     rr.log(
-        "/imu", rr.Transform3D(clear=False, quaternion=Quaternion(xyzw=[x, y, z, w]))
+        "/imu", rr.Transform3D(quaternion=Quaternion(xyzw=[x, y, z, w]))
     )
 
 
@@ -62,8 +62,10 @@ async def main_async(args):
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)
 
     # Create drains
@@ -71,7 +73,7 @@ async def main_async(args):
     drain = MessageDrain(loop)
 
     rr.log("/imu", rr.Boxes3D(half_sizes=[[0.5, 0.5, 0.5]], fill_mode="solid"))
-    rr.log("/imu", rr.Transform3D(axis_length=2))
+    rr.log("/imu", rr.TransformAxes3D(axis_length=2))
 
     session.declare_subscriber("rt/imu", drain.callback)
     await asyncio.gather((imu_handler(drain)))
@@ -95,6 +97,7 @@ def main():
     try:
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
+        rr.rerun_shutdown()
         sys.exit(0)
 
 

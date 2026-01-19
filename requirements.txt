@@ -1,7 +1,7 @@
 eclipse-zenoh
 edgefirst-schemas
 numpy
-rerun-sdk
+rerun-sdk==0.28.2
 zstd
 av
 opencv-python

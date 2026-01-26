@@ -5,7 +5,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::edgefirst_msgs::DmaBuf;
+use edgefirst_schemas::{edgefirst_msgs::DmaBuffer, serde_cdr::deserialize};
 use std::{error::Error, ffi::c_void, ptr::null_mut, slice::from_raw_parts_mut};
 
 #[cfg(target_os = "linux")]
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let subscriber = session.declare_subscriber("rt/camera/dma").await.unwrap();
 
     while let Ok(msg) = subscriber.recv() {
-        let dma_buf: DmaBuf = cdr::deserialize(&msg.payload().to_bytes()).unwrap();
+        let dma_buf: DmaBuffer = deserialize(&msg.payload().to_bytes()).unwrap();
 
         let pidfd: PidFd = match PidFd::from_pid(dma_buf.pid as i32) {
             Ok(v) => v,

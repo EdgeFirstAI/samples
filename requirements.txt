@@ -1,5 +1,5 @@
 eclipse-zenoh
-edgefirst-schemas
+edgefirst-schemas>=1.5.1
 numpy
 rerun-sdk
 zstd

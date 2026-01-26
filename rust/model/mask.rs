@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::edgefirst_msgs::Mask;
+use edgefirst_schemas::{edgefirst_msgs::Mask, serde_cdr::deserialize};
 use ndarray::{Array, Array2};
 use rerun::{AnnotationContext, SegmentationImage};
 use std::error::Error;
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("model-mask")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let mask: Mask = cdr::deserialize(&msg.payload().to_bytes())?;
+        let mask: Mask = deserialize(&msg.payload().to_bytes())?;
 
         let h = mask.height as usize;
         let w = mask.width as usize;

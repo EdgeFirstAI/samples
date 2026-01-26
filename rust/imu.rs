@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::sensor_msgs::IMU;
+use edgefirst_schemas::{sensor_msgs::IMU, serde_cdr::deserialize};
 use std::error::Error;
 
 #[tokio::main]
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     rr.log("box", &rerun::Transform3D::default().with_axis_length(2.0))?;
 
     while let Ok(msg) = subscriber.recv() {
-        let imu: IMU = cdr::deserialize(&msg.payload().to_bytes())?;
+        let imu: IMU = deserialize(&msg.payload().to_bytes())?;
         let x = imu.orientation.x as f32;
         let y = imu.orientation.y as f32;
         let z = imu.orientation.z as f32;

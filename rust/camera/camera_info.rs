@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::sensor_msgs::CameraInfo;
+use edgefirst_schemas::{sensor_msgs::CameraInfo, serde_cdr::deserialize};
 use std::error::Error;
 
 #[tokio::main]
@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("camera-info")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let info: CameraInfo = cdr::deserialize(&msg.payload().to_bytes())?;
+        let info: CameraInfo = deserialize(&msg.payload().to_bytes())?;
 
         let width = info.width;
         let height = info.height;

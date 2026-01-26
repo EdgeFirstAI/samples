@@ -476,9 +476,9 @@ This section is customized for the **EdgeFirst Samples** repository.
 - **Python**: Standard pip/venv setup
 
 **Key Dependencies:**
-- **Zenoh**: 1.3.4 - High-performance pub/sub middleware for sensor data
-- **Rerun**: 0.27.2 - Optional visualization framework (feature flag)
-- **edgefirst-schemas**: 1.4.0 - Message type definitions (Apache-2.0)
+- **Zenoh**: High-performance pub/sub middleware for sensor data
+- **Rerun**: Optional visualization framework (feature flag)
+- **edgefirst-schemas**: Message type definitions (Apache-2.0)
 - **ROS2 CDR**: Message serialization format
 
 **Supported Platforms:**

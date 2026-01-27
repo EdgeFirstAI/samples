@@ -51,9 +51,9 @@ ssh user@192.168.1.100
 sudo systemctl enable --now zenohd
 
 # From your computer - connect to device
-./list-topics --remote 192.168.1.100:7447
-./mega-sample --remote 192.168.1.100:7447
-./camera-h264 --remote 192.168.1.100:7447
+./list-topics --remote tcp/192.168.1.100:7447
+./mega-sample --remote tcp/192.168.1.100:7447
+./camera-h264 --remote tcp/192.168.1.100:7447
 ```
 
 > **Note:** Replace `192.168.1.100` with your EdgeFirst device's IP address.
@@ -122,7 +122,7 @@ All examples support:
 ./list-topics --help
 
 # Connect to remote device
-./camera-h264 --remote 192.168.1.100:7447
+./camera-h264 --remote tcp/192.168.1.100:7447
 
 # Specify custom topic (when applicable)
 ./camera-h264 --topic rt/camera/h264

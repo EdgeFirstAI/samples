@@ -17,11 +17,11 @@ jobs:
       matrix:
         include:
           # Linux x86_64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             archive_name: edgefirst-samples-linux-x86_64
           # Linux aarch64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04-arm
             target: aarch64-unknown-linux-gnu
             archive_name: edgefirst-samples-linux-aarch64
           # macOS x86_64
@@ -193,7 +193,7 @@ jobs:
           ./mega-sample
           
           # Remote connection
-          ./list-topics --remote 192.168.1.100:7447
+          ./list-topics --remote tcp/192.168.1.100:7447
           ```
           
           See `QUICKSTART.md` in the archive for full usage instructions.

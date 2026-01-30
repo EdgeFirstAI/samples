@@ -53,14 +53,12 @@ class MessageDrain:
 
 
 def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name):
-    raw_data.write(msg.payload.to_bytes())
-    raw_data.seek(0)
-    for packet in container.demux():
-        try:
+    try:
+        raw_data.write(msg.payload.to_bytes())
+        raw_data.seek(0)
+        for packet in container.demux():
             if packet.size == 0:
                 continue
-            raw_data.seek(0)
-            raw_data.truncate(0)
             for frame in packet.decode():
                 frame_array = frame.to_ndarray(format="rgb24")
                 frame_height, frame_width = frame_array.shape[:2]
@@ -68,7 +66,7 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                 
                 ef_im = ef.TensorImage(frame_array.shape[1], frame_array.shape[0], ef.FourCC.RGB)
                 ef_im.copy_from_numpy(frame_array)
-                converter = ef.ImageConverter()
+                converter = ef.ImageProcessor()
                 output = ef.TensorImage(640, 640)
                 converter.convert(ef_im, output)
                 
@@ -82,7 +80,6 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                 # Run inference
                 outputs = ort_session.run(None, {input_name: input_tensor})
                 
-                # YOLO outputs: [predictions, proto]
                 predictions = outputs[0]
                 boxes, scores, classes = ef.Decoder.decode_yolo_det(predictions.squeeze(),  (0.0040811873, -123),
                 0.25,
@@ -115,16 +112,19 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                     "/camera/boxes",
                     rr.Boxes2D(centers=centers, sizes=sizes, labels=labels),
                 )
-
-        except Exception as e:
-            print(str(e))
-            continue
+            # Clear buffer after successful packet processing
+            raw_data.seek(0)
+            raw_data.truncate(0)
+    except Exception as e:
+        # Clear buffer on any error
+        raw_data.seek(0)
+        raw_data.truncate(0)
 
 
 async def h264_handler(drain, frame_storage, ort_session, input_name):
     raw_data = io.BytesIO()
     container = av.open(raw_data, format="h264", mode="r")
-
+    
     while True:
         msg = await drain.get_latest()
         thread = threading.Thread(

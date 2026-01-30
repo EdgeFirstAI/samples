@@ -49,7 +49,7 @@ def h264_worker(msg, raw_data, container):
                 frame_array = frame.to_ndarray(format="rgb24")          
                 ef_im = ef.TensorImage(frame_array.shape[1], frame_array.shape[0], ef.FourCC.RGB)
                 ef_im.copy_from_numpy(frame_array)
-                converter = ef.ImageConverter()
+                converter = ef.ImageProcessor()
                 output = ef.TensorImage(640, 640, ef.FourCC.RGB)
                 converter.convert(ef_im, output, ef.Rotation.Rotate180)
                 out_array = np.zeros((640, 640, 3), dtype=np.uint8)

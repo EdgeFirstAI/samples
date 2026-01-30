@@ -26,6 +26,7 @@ import io
 import sys
 import av
 import zenoh
+import time
 import threading
 import onnxruntime as ort
 import numpy as np
@@ -221,7 +222,7 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                     
                     # Resize to YOLO input size (640x640) using hardware acceleration
                     ef_output = ef.TensorImage(640, 640)
-                    converter = ef.ImageConverter()
+                    converter = ef.ImageProcessor()
                     converter.convert(ef_input, ef_output)
                     
                     # Extract resized image to NumPy
@@ -245,6 +246,9 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                         nms_threshold=NMS_THRESHOLD,
                         max_boxes=MAX_DETECTIONS,
                     )
+
+                    tracked_objects = tracker.update(boxes, scores, class_ids, time.time())
+
                     
                     # Convert boxes to normalized coordinates and track
                     detections = []
@@ -263,6 +267,7 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                     
                     # Update tracker
                     tracked_objects = tracker.update(detections)
+                    print(tracked_objects)
                     
                     # Visualization
                     if visualization_enabled:
@@ -303,11 +308,11 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                         # Log tracker statistics
                         rr.log(
                             "tracker/active_tracks",
-                            rr.Scalar(len(tracker.tracks)),
+                            rr.Scalars(len(tracker.tracks)),
                         )
                         rr.log(
                             "tracker/detections_per_frame",
-                            rr.Scalar(len(detections)),
+                            rr.Scalars(len(detections)),
                         )
                     
                     # Optional: Log detected objects for debugging
@@ -353,7 +358,8 @@ async def main_async(args):
     print(f"Model loaded. Input: {input_name}")
     
     # Initialize tracker
-    tracker = SimpleTracker()
+    # tracker = SimpleTracker()
+    tracker = ef.ByteTrack()
     
     # Setup visualization if enabled
     visualization_enabled = not args.no_visualization

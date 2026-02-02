@@ -84,7 +84,7 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                 boxes, scores, classes = ef.Decoder.decode_yolo_det(predictions.squeeze(),  (0.0040811873, -123),
                 0.25,
                 0.7,
-                50,)
+                max_boxes=50)
                 
                 # Log frame and detections to Rerun
                 rr.log("/camera/frame", rr.Image(frame_array))

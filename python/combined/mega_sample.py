@@ -345,21 +345,8 @@ async def lidar_handler(drain):
         thread.join()
 
 
-async def main_async(args):
+async def main_async(args, session):
     loop = asyncio.get_running_loop()
-
-    # Setup rerun
-    args.memory_limit = 10
-    # Create the default Zenoh configuration and if the remote argument is
-    # provided set the mode to client and add the target to the endpoints.
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote is not None:
-        # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % remote)
-    session = zenoh.open(config)
 
     # Create a subscriber for all topics matching the pattern "rt/**"
     subscriber = session.declare_subscriber("rt/**")
@@ -402,20 +389,6 @@ async def main_async(args):
 
     subscriber.undeclare()
     del subscriber
-
-    args.memory_limit = 10
-    rr.script_setup(args, "mega_sample")
-    blueprint = rrb.Blueprint(
-        rrb.Grid(
-            contents=[
-                rrb.MapView(origin="/gps", name="GPS"),
-                rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
-                rrb.Spatial3DView(origin="/pointcloud", name="Pointcloud Clusters"),
-                rrb.TimeSeriesView(origin="/metrics", name="Model Information"),
-            ]
-        )
-    )
-    rr.send_blueprint(blueprint)
 
     async_funcs = []
 
@@ -496,10 +469,39 @@ def main():
     rr.script_add_args(parser)
     args = parser.parse_args()
 
+    # Setup rerun
+    args.memory_limit = 10
+    rr.script_setup(args, sys.argv[0])
+
+    blueprint = rrb.Blueprint(
+        rrb.Grid(
+            contents=[
+                rrb.MapView(origin="/gps", name="GPS"),
+                rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
+                rrb.Spatial3DView(origin="/pointcloud", name="Pointcloud Clusters"),
+                rrb.TimeSeriesView(origin="/metrics", name="Model Information"),
+            ]
+        )
+    )
+    rr.send_blueprint(blueprint)
+
+    # Create the default Zenoh configuration and if the remote argument is
+    # provided set the mode to client and add the target to the endpoints.
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote is not None:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", '{"endpoints": ["%s"]}' % remote)
+    session = zenoh.open(config)
+
     try:
-        asyncio.run(main_async(args))
+        asyncio.run(main_async(args, session))
     except KeyboardInterrupt:
+        session.close()
         sys.exit(0)
+    session.close()
 
 
 if __name__ == "__main__":

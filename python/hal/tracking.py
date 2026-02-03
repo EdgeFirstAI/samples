@@ -191,7 +191,7 @@ class MessageDrain:
 
 
 def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name, 
-                tracker, visualization_enabled):
+                tracker):
     """
     Decode H.264 video, run YOLO inference, and perform tracking.
     
@@ -267,55 +267,50 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                     
                     # Update tracker
                     tracked_objects = tracker.update(detections)
-                    print(tracked_objects)
                     
-                    # Visualization
-                    if visualization_enabled:
-                        # Log frame
-                        rr.log("camera/frame", rr.Image(frame_array))
+                    # Log frame
+                    rr.log("camera/frame", rr.Image(frame_array))
+                    
+                    # Log tracked objects
+                    if tracked_objects:
+                        centers = []
+                        sizes = []
+                        labels = []
+                        colors = []
                         
-                        # Log tracked objects
-                        if tracked_objects:
-                            centers = []
-                            sizes = []
-                            labels = []
-                            colors = []
+                        for track_id, label, cx, cy, color in tracked_objects:
+                            # Convert to pixel coordinates for visualization
+                            px = cx * frame_width
+                            py = cy * frame_height
                             
-                            for track_id, label, cx, cy, color in tracked_objects:
-                                # Convert to pixel coordinates for visualization
-                                px = cx * frame_width
-                                py = cy * frame_height
-                                
-                                # Assume ~5% of frame width for box size (adjust as needed)
-                                box_width = frame_width * 0.05
-                                box_height = frame_height * 0.05
-                                
-                                centers.append((px, py))
-                                sizes.append((box_width, box_height))
-                                labels.append(f"{label}: {track_id[:8]}")
-                                colors.append(color)
+                            # Assume ~5% of frame width for box size (adjust as needed)
+                            box_width = frame_width * 0.05
+                            box_height = frame_height * 0.05
                             
-                            rr.log(
-                                "camera/tracked_objects",
-                                rr.Boxes2D(
-                                    centers=centers,
-                                    sizes=sizes,
-                                    labels=labels,
-                                    colors=colors
-                                ),
-                            )
+                            centers.append((px, py))
+                            sizes.append((box_width, box_height))
+                            labels.append(f"{label}: {track_id[:8]}")
+                            colors.append(color)
                         
-                        # Log tracker statistics
                         rr.log(
-                            "tracker/active_tracks",
-                            rr.Scalars(len(tracker.tracks)),
-                        )
-                        rr.log(
-                            "tracker/detections_per_frame",
-                            rr.Scalars(len(detections)),
+                            "camera/tracked_objects",
+                            rr.Boxes2D(
+                                centers=centers,
+                                sizes=sizes,
+                                labels=labels,
+                                colors=colors
+                            ),
                         )
                     
-                    # Optional: Log detected objects for debugging
+                    # Log tracker statistics
+                    rr.log(
+                        "tracker/active_tracks",
+                        rr.Scalars(len(tracker.tracks)),
+                    )
+                    rr.log(
+                        "tracker/detections_per_frame",
+                        rr.Scalars(len(detections)),
+                    )
                     if len(tracked_objects) > 0:
                         print(f"Frame: {len(detections)} detections, "
                               f"{len(tracked_objects)} active tracks")
@@ -329,7 +324,7 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
 
 
 async def h264_handler(drain, frame_storage, ort_session, input_name, 
-                       tracker, visualization_enabled):
+                       tracker):
     """Main handler for H.264 stream processing."""
     raw_data = io.BytesIO()
     container = av.open(raw_data, format="h264", mode="r")
@@ -339,7 +334,7 @@ async def h264_handler(drain, frame_storage, ort_session, input_name,
         thread = threading.Thread(
             target=h264_worker,
             args=[msg, frame_storage, raw_data, container, ort_session, 
-                  input_name, tracker, visualization_enabled],
+                  input_name, tracker],
         )
         thread.start()
         
@@ -348,7 +343,7 @@ async def h264_handler(drain, frame_storage, ort_session, input_name,
         thread.join()
 
 
-async def main_async(args):
+async def main_async(session, args):
     """Main async function."""
     
     # Load YOLO model
@@ -361,33 +356,6 @@ async def main_async(args):
     # tracker = SimpleTracker()
     tracker = ef.ByteTrack()
     
-    # Setup visualization if enabled
-    visualization_enabled = not args.no_visualization
-    if visualization_enabled:
-        print("Setting up Rerun visualization...")
-        args.memory_limit = 10
-        rr.script_setup(args, "hal-tracking")
-        
-        blueprint = rrb.Blueprint(
-            rrb.Grid(
-                contents=[
-                    rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
-                    rrb.BarChartView(origin="/tracker", name="Tracker Stats"),
-                ]
-            )
-        )
-        rr.send_blueprint(blueprint)
-    
-    # Zenoh configuration
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
-        # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
-    
-    session = zenoh.open(config)
     print("Zenoh session opened")
     
     # Create async drains
@@ -403,7 +371,7 @@ async def main_async(args):
     # Start processing
     await asyncio.gather(
         h264_handler(h264_drain, frame_size_storage, ort_session, input_name,
-                     tracker, visualization_enabled),
+                     tracker),
     )
     
     # Keep running
@@ -431,22 +399,44 @@ def main():
         default=None,
         help="Connect to the remote endpoint instead of local.",
     )
-    parser.add_argument(
-        "--no-visualization",
-        action="store_true",
-        help="Disable Rerun visualization",
-    )
     
     # Rerun args
     rr.script_add_args(parser)
     
     args = parser.parse_args()
     
+    # Setup Rerun visualization
+    args.memory_limit = 10
+    rr.script_setup(args, sys.argv[0])
+    
+    blueprint = rrb.Blueprint(
+        rrb.Grid(
+            contents=[
+                rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
+                rrb.BarChartView(origin="/tracker", name="Tracker Stats"),
+            ]
+        )
+    )
+    rr.send_blueprint(blueprint)
+    
+    # Zenoh configuration
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
+    
+    session = zenoh.open(config)
+    
     try:
-        asyncio.run(main_async(args))
+        asyncio.run(main_async(session, args))
     except KeyboardInterrupt:
         print("\nShutdown requested")
+        session.close()
         sys.exit(0)
+    session.close()
 
 
 if __name__ == "__main__":

@@ -178,28 +178,7 @@ async def boxes2d_handler(drain, frame_storage):
         thread.join()
 
 
-async def main_async(args):
-    rr.script_setup(args, "camera-model")
-
-    blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
-    )
-    rr.send_blueprint(blueprint)
-    # Load YOLO model with ONNX Runtime
-    ort_session = ort.InferenceSession(args.model_path)
-    input_name = ort_session.get_inputs()[0].name
-    print(f"Loaded YOLO model from {args.model_path}")
-
-    # Zenoh config
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
-        # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
-    session = zenoh.open(config)
-
+async def main_async(session, ort_session, input_name):
     # Create drains
     loop = asyncio.get_running_loop()
     h264_drain = MessageDrain(loop)
@@ -233,10 +212,34 @@ def main():
     rr.script_add_args(parser)
     args = parser.parse_args()
 
+    rr.script_setup(args, sys.argv[0])
+
+    blueprint = rrb.Blueprint(
+        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+    )
+    rr.send_blueprint(blueprint)
+
+    # Load YOLO model with ONNX Runtime
+    ort_session = ort.InferenceSession(args.model_path)
+    input_name = ort_session.get_inputs()[0].name
+    print(f"Loaded YOLO model from {args.model_path}")
+
+    # Zenoh config
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
+    session = zenoh.open(config)
+
     try:
-        asyncio.run(main_async(args))
+        asyncio.run(main_async(session, ort_session, input_name))
     except KeyboardInterrupt:
+        session.close()
         sys.exit(0)
+    session.close()
 
 
 if __name__ == "__main__":

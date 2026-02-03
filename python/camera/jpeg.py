@@ -55,24 +55,11 @@ async def jpeg_handler(drain):
         thread.join()
 
 
-async def main_async(args):
-    # Setup rerun
-    args.memory_limit = 10
-    rr.script_setup(args, "camera-jpeg")
+async def main_async(session):
     blueprint = rrb.Blueprint(
         rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
-
-    # Zenoh config
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
-        # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
-    session = zenoh.open(config)
 
     # Create drains
     loop = asyncio.get_running_loop()
@@ -97,10 +84,26 @@ def main():
     rr.script_add_args(parser)
     args = parser.parse_args()
 
+    # Setup rerun
+    args.memory_limit = 10
+    rr.script_setup(args, sys.argv[0])
+
+    # Zenoh config
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
+    session = zenoh.open(config)
+
     try:
-        asyncio.run(main_async(args))
+        asyncio.run(main_async(session))
     except KeyboardInterrupt:
+        session.close()
         sys.exit(0)
+    session.close()
 
 
 if __name__ == "__main__":

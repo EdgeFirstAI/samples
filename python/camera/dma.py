@@ -93,29 +93,7 @@ async def dma_handler(drain):
         thread.join()
 
 
-async def main_async(args):
-    # Setup rerun
-    args.memory_limit = 10
-    rr.script_setup(args, "camera-dma")
-    blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
-    )
-    rr.send_blueprint(blueprint)
-
-    if args.remote:
-        print("DMA example is only functional when run on an EdgeFirst Platform")
-        return
-
-    # Zenoh config
-    config = zenoh.Config()
-    config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
-        # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
-    session = zenoh.open(config)
-
+async def main_async(session):
     # Create drains
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
@@ -139,10 +117,34 @@ def main():
     rr.script_add_args(parser)
     args = parser.parse_args()
 
+    if args.remote:
+        print("DMA example is only functional when run on an EdgeFirst Platform")
+        return
+
+    # Setup rerun
+    args.memory_limit = 10
+    rr.script_setup(args, sys.argv[0])
+    blueprint = rrb.Blueprint(
+        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+    )
+    rr.send_blueprint(blueprint)
+
+    # Zenoh config
+    config = zenoh.Config()
+    config.insert_json5("scouting/multicast/interface", "'lo'")
+    if args.remote:
+        # Ensure remote endpoint has tcp/ prefix
+        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        config.insert_json5("mode", "'client'")
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
+    session = zenoh.open(config)
+
     try:
-        asyncio.run(main_async(args))
+        asyncio.run(main_async(session, args))
     except KeyboardInterrupt:
+        session.close()
         sys.exit(0)
+    session.close()
 
 
 if __name__ == "__main__":

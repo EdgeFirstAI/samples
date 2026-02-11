@@ -13,16 +13,16 @@ name = "edgefirst_samples"
 path = "rust/lib.rs"
 
 [[bin]]
-name = "camera-dma"
-path = "rust/camera/dma.rs"
-
-[[bin]]
 name = "list-topics"
 path = "rust/list-topics.rs"
 
 [[bin]]
 name = "camera-info"
-path = "rust/camera/camera_info.rs"
+path = "rust/camera/info.rs"
+
+[[bin]]
+name = "camera-dma"
+path = "rust/camera/dma.rs"
 
 [[bin]]
 name = "camera-h264"

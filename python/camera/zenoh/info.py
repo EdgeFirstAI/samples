@@ -1,38 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import DmaBuffer
-import rerun as rr
-import rerun.blueprint as rrb
+"""EdgeFirst Samples - Camera Info (Zenoh).
+
+Subscribes to the Zenoh topic `rt/camera/info`, deserializes `CameraInfo` messages,
+and logs basic camera properties (width/height) to a Rerun viewer.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
+import asyncio
 from argparse import ArgumentParser
 import sys
-import mmap
-import ctypes
-import os
-import asyncio
-import time
 import threading
 
-# Constants for syscall
-SYS_pidfd_open = 434  # From syscall.h
-SYS_pidfd_getfd = 438  # From syscall.h
-GETFD_FLAGS = 0
+import rerun as rr
+import zenoh
 
-# C bindings to syscall (Linux only)
-if sys.platform.startswith("linux"):
-    libc = ctypes.CDLL("libc.so.6", use_errno=True)
-else:
-    print("DMA only works on EdgeFirst Platforms")
-    sys.exit(0)
-
-
-def pidfd_open(pid: int, flags: int = 0) -> int:
-    return libc.syscall(SYS_pidfd_open, pid, flags)
-
-
-def pidfd_getfd(pidfd: int, target_fd: int, flags: int = GETFD_FLAGS) -> int:
-    return libc.syscall(SYS_pidfd_getfd, pidfd, target_fd, flags)
+from edgefirst.schemas.sensor_msgs import CameraInfo
 
 
 class MessageDrain:
@@ -56,36 +42,19 @@ class MessageDrain:
         return latest
 
 
-def dma_worker(msg):
-    dma_buf = DmaBuffer.deserialize(msg.payload.to_bytes())
-    pidfd = pidfd_open(dma_buf.pid)
-    if pidfd < 0:
-        return
-
-    fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
-    if fd < 0:
-        return
-
-    # Now fd can be used as a file descriptor
-    mm = mmap.mmap(fd, dma_buf.length)
+def info_worker(msg):
+    info = CameraInfo.deserialize(msg.payload.to_bytes())
+    width = info.width
+    height = info.height
     rr.log(
-        "/camera",
-        rr.Image(
-            bytes=mm[:],
-            width=dma_buf.width,
-            height=dma_buf.height,
-            pixel_format=rr.PixelFormat.YUY2,
-        ),
+        "CameraInfo", rr.TextLog("Camera Width: %d Camera Height: %d" % (width, height))
     )
-    mm.close()
-    os.close(fd)
-    os.close(pidfd)
 
 
-async def dma_handler(drain):
+async def info_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=dma_worker, args=[msg])
+        thread = threading.Thread(target=info_worker, args=[msg])
         thread.start()
 
         while thread.is_alive():
@@ -98,15 +67,15 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/camera/dma", drain.callback)
-    await asyncio.gather((dma_handler(drain)))
+    session.declare_subscriber("rt/camera/info", drain.callback)
+    await asyncio.gather((info_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - DMA")
+    parser = ArgumentParser(description="EdgeFirst Samples - Camera Info")
     parser.add_argument(
         "-r",
         "--remote",
@@ -117,17 +86,9 @@ def main():
     rr.script_add_args(parser)
     args = parser.parse_args()
 
-    if args.remote:
-        print("DMA example is only functional when run on an EdgeFirst Platform")
-        return
-
     # Setup rerun
     args.memory_limit = 10
     rr.script_setup(args, sys.argv[0])
-    blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
-    )
-    rr.send_blueprint(blueprint)
 
     # Zenoh config
     config = zenoh.Config()
@@ -140,7 +101,7 @@ def main():
     session = zenoh.open(config)
 
     try:
-        asyncio.run(main_async(session, args))
+        asyncio.run(main_async(session))
     except KeyboardInterrupt:
         session.close()
         sys.exit(0)

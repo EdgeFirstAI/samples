@@ -33,13 +33,25 @@ impl From<Args> for Config {
     fn from(args: Args) -> Self {
         let mut config = Config::default();
 
+        let remote: Vec<String> = args
+            .remote
+            .iter()
+            .map(|endpoint| {
+                if endpoint.starts_with("tcp/") {
+                    endpoint.clone()
+                } else {
+                    format!("tcp/{}", endpoint)
+                }
+            })
+            .collect();
+
         config
             .insert_json5("mode", &json!(args.mode).to_string())
             .unwrap();
 
         if !args.remote.is_empty() {
             config
-                .insert_json5("connect/endpoints", &json!(args.remote).to_string())
+                .insert_json5("connect/endpoints", &json!(remote).to_string())
                 .unwrap();
         }
 

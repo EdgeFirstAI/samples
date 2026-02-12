@@ -1,16 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-from argparse import ArgumentParser
+"""EdgeFirst Samples - JPEG (Zenoh).
+
+Subscribes to the Zenoh topic `rt/camera/jpeg`, deserializes `CompressedImage`
+messages, decodes the JPEG payload into an RGB image, and logs the image stream
+to a Rerun viewer under `/camera`.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
 import asyncio
-import io
+from argparse import ArgumentParser
 import sys
-import av
-import zenoh
-import time
 import threading
+
+import cv2
+import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
+import zenoh
+
+from edgefirst.schemas.sensor_msgs import CompressedImage
 
 
 class MessageDrain:
@@ -34,28 +46,18 @@ class MessageDrain:
         return latest
 
 
-def h264_worker(msg, raw_data, container):
-    raw_data.write(msg.payload.to_bytes())
-    raw_data.seek(0)
-    for packet in container.demux():
-        try:
-            if packet.size == 0:
-                continue
-            raw_data.seek(0)
-            raw_data.truncate(0)
-            for frame in packet.decode():
-                frame_array = frame.to_ndarray(format="rgb24")
-                rr.log("/camera", rr.Image(frame_array))
-        except Exception:
-            continue
+def jpeg_worker(msg):
+    image = CompressedImage.deserialize(msg.payload.to_bytes())
+    np_arr = np.frombuffer(bytearray(image.data), np.uint8)
+    im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+    rr.log("/camera", rr.Image(im))
 
 
-async def h264_handler(drain):
-    raw_data = io.BytesIO()
-    container = av.open(raw_data, format="h264", mode="r")
+async def jpeg_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=h264_worker, args=[msg, raw_data, container])
+        thread = threading.Thread(target=jpeg_worker, args=[msg])
         thread.start()
 
         while thread.is_alive():
@@ -73,15 +75,15 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/camera/h264", drain.callback)
-    await asyncio.gather((h264_handler(drain)))
+    session.declare_subscriber("rt/camera/jpeg", drain.callback)
+    await asyncio.gather((jpeg_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - H264")
+    parser = ArgumentParser(description="EdgeFirst Samples - JPEG")
     parser.add_argument(
         "-r",
         "--remote",

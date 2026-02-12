@@ -8,7 +8,7 @@
 
 This repository provides sample applications demonstrating how to subscribe to and process topics from **EdgeFirst Perception Middleware**—a modular edge AI platform for vision, LiDAR, radar, and sensor fusion on embedded Linux devices.
 
-**Quick Links:** [Developer Guide](https://doc.edgefirst.ai/develop/perception/dev/) • [Latest Release](https://github.com/EdgeFirstAI/samples/releases/latest) • [Contributing](CONTRIBUTING.md)
+**Quick Links:** [Developer Guide](https://doc.edgefirst.ai/latest/perception/) • [Latest Release](https://github.com/EdgeFirstAI/samples/releases/latest) • [Contributing](CONTRIBUTING.md)
 
 ---
 
@@ -18,13 +18,13 @@ This repository provides sample applications demonstrating how to subscribe to a
 
 Download the ZIP file for your platform from the [latest release](https://github.com/EdgeFirstAI/samples/releases/latest):
 
-| Platform | Download |
-|----------|----------|
-| **Linux x86_64** | `edgefirst-samples-linux-x86_64.zip` |
-| **Linux aarch64** | `edgefirst-samples-linux-aarch64.zip` |
-| **macOS Intel** | `edgefirst-samples-macos-x86_64.zip` |
-| **macOS Apple Silicon** | `edgefirst-samples-macos-aarch64.zip` |
-| **Windows x86_64** | `edgefirst-samples-windows-x86_64.zip` |
+| Platform                | Download                               |
+|-------------------------|----------------------------------------|
+| **Linux x86_64**        | `edgefirst-samples-linux-x86_64.zip`   |
+| **Linux aarch64**       | `edgefirst-samples-linux-aarch64.zip`  |
+| **macOS Intel**         | `edgefirst-samples-macos-x86_64.zip`   |
+| **macOS Apple Silicon** | `edgefirst-samples-macos-aarch64.zip`  | 
+| **Windows x86_64**      | `edgefirst-samples-windows-x86_64.zip` |
 
 Extract the archive and navigate to the directory:
 
@@ -47,7 +47,13 @@ All samples support both **local** (on-device) and **remote** (over network) con
 
 > **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
 
----
+For python equivalent commands, first follow the [prerequisites](#prerequisites) for creating and activating a virtual environment and installing the python requirements to run the commands.
+
+```bash
+python ../python/list-topics.py
+
+python ../python/list-topics.py --remote 192.168.1.100:7447
+```
 
 ---
 
@@ -455,6 +461,15 @@ Alternative integrations:
 - **Foxglove Studio:** ROS2-compatible visualization → [Guide](https://doc.edgefirst.ai/develop/platforms/foxglove/)
 - **EdgeFirst Studio:** Publish recordings for MLOps workflows → [Platform](https://doc.edgefirst.ai/develop/platforms/publishing/)
 - **Maivin WebUI:** JavaScript/HTML interface → [GitHub](https://github.com/MaivinAI/webui)
+
+## Python QuickStart
+
+**Python:**
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
 ## Building from Source
 

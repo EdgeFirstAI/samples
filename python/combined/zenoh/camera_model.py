@@ -1,21 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-from argparse import ArgumentParser
+"""EdgeFirst Samples - Camera + Model (Zenoh).
+
+Subscribes to Zenoh topics to fetch model outputs (e.g. `rt/model/boxes2d`,
+`rt/model/mask`/`rt/model/mask_compressed`) alongside camera frames, then
+visualizes the results with Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
 import asyncio
+from argparse import ArgumentParser
 import io
 import sys
-import av
-import zenoh
 import threading
-import time
+
+import av
+import cv2
 import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
-from edgefirst.schemas.edgefirst_msgs import Detect
-from edgefirst.schemas.sensor_msgs import PointCloud2
-from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
-import threading
+import zenoh
+import zstd
+
+from edgefirst.schemas.edgefirst_msgs import Detect, Mask
 
 
 class FrameSize:
@@ -128,23 +138,34 @@ async def boxes2d_handler(drain, frame_storage):
         thread.join()
 
 
-def clusters_worker(msg):
-    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
-    points = decode_pcd(pcd)
-    clusters = [p for p in points if p.cluster_id > 0]
-    if not clusters:
-        rr.log("/pointcloud/clusters", rr.Points3D([], colors=[]))
-        return
-    max_id = max(p.cluster_id for p in clusters)
-    pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
-    rr.log("/pointcloud/clusters", rr.Points3D(pos, colors=colors))
+def mask_worker(msg, frame_size, remote):
+    mask = Mask.deserialize(msg.payload.to_bytes())
+    if remote:
+        decoded_array = zstd.decompress(bytes(mask.mask))
+        np_arr = np.frombuffer(decoded_array, np.uint8).reshape(
+            mask.height, mask.width, -1
+        )
+    else:
+        np_arr = np.asarray(mask.mask, dtype=np.uint8)
+        np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
+    np_arr = cv2.resize(np_arr, frame_size)
+    np_arr = np.argmax(np_arr, axis=2)
+
+    rr.log("/camera/mask", rr.SegmentationImage(np_arr))
 
 
-async def clusters_handler(drain):
+async def mask_handler(drain, frame_storage, remote):
+    _ = await frame_storage.get()
+    rr.log(
+        "/",
+        rr.AnnotationContext(
+            [(0, "background", (0, 0, 0, 0)), (1, "person", (0, 255, 0))]
+        ),
+    )
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=clusters_worker, args=[msg])
+        frame_size = await frame_storage.get()
+        thread = threading.Thread(target=mask_worker, args=[msg, frame_size, remote])
         thread.start()
 
         while thread.is_alive():
@@ -152,34 +173,29 @@ async def clusters_handler(drain):
         thread.join()
 
 
-async def main_async(session):
+async def main_async(session, args):
     blueprint = rrb.Blueprint(
-        rrb.Grid(
-            contents=[
-                rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
-                rrb.Spatial3DView(origin="/pointcloud", name="Pointcloud Clusters"),
-            ]
-        )
+        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
 
     # Create drains
     loop = asyncio.get_running_loop()
     h264_drain = MessageDrain(loop)
-    boxes2d_drain = MessageDrain(loop)
-    radar_drain = MessageDrain(loop)
+    boxes_drain = MessageDrain(loop)
+    mask_drain = MessageDrain(loop)
     frame_size_storage = FrameSize()
 
-    # Declare subscribers
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
-    session.declare_subscriber("rt/model/boxes2d", boxes2d_drain.callback)
-    session.declare_subscriber("rt/radar/clusters", radar_drain.callback)
-
-    # Launch concurrent processing tasks
+    session.declare_subscriber("rt/model/boxes2d", boxes_drain.callback)
+    if args.remote:
+        session.declare_subscriber("rt/model/mask_compressed", mask_drain.callback)
+    else:
+        session.declare_subscriber("rt/model/mask", mask_drain.callback)
     await asyncio.gather(
         h264_handler(h264_drain, frame_size_storage),
-        boxes2d_handler(boxes2d_drain, frame_size_storage),
-        clusters_handler(radar_drain),
+        boxes2d_handler(boxes_drain, frame_size_storage),
+        mask_handler(mask_drain, frame_size_storage, args.remote),
     )
 
     while True:
@@ -187,7 +203,7 @@ async def main_async(session):
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Camera-Radar")
+    parser = ArgumentParser(description="EdgeFirst Samples - Camera-Model")
     parser.add_argument(
         "-r",
         "--remote",
@@ -213,7 +229,7 @@ def main():
     session = zenoh.open(config)
 
     try:
-        asyncio.run(main_async(session))
+        asyncio.run(main_async(session, args))
     except KeyboardInterrupt:
         session.close()
         sys.exit(0)

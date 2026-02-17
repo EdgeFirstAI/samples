@@ -1,22 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-from argparse import ArgumentParser
+"""EdgeFirst Samples - Camera + Radar (Zenoh).
+
+Subscribes to Zenoh topics to fetch radar cluster data (e.g. `rt/radar/clusters`)
+alongside camera and model topics, and visualizes the results with Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
 import asyncio
+from argparse import ArgumentParser
 import io
 import sys
-import av
-import zenoh
 import threading
-import time
-from collections import deque
+
+import av
 import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
+import zenoh
+
+from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
 from edgefirst.schemas.edgefirst_msgs import Detect
 from edgefirst.schemas.sensor_msgs import PointCloud2
-from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
-import threading
 
 
 class FrameSize:
@@ -168,19 +176,19 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     h264_drain = MessageDrain(loop)
     boxes2d_drain = MessageDrain(loop)
-    lidar_drain = MessageDrain(loop)
+    radar_drain = MessageDrain(loop)
     frame_size_storage = FrameSize()
 
     # Declare subscribers
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
     session.declare_subscriber("rt/model/boxes2d", boxes2d_drain.callback)
-    session.declare_subscriber("rt/lidar/clusters", lidar_drain.callback)
+    session.declare_subscriber("rt/radar/clusters", radar_drain.callback)
 
     # Launch concurrent processing tasks
     await asyncio.gather(
         h264_handler(h264_drain, frame_size_storage),
         boxes2d_handler(boxes2d_drain, frame_size_storage),
-        clusters_handler(lidar_drain),
+        clusters_handler(radar_drain),
     )
 
     while True:
@@ -188,7 +196,7 @@ async def main_async(session):
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Camera-Lidar")
+    parser = ArgumentParser(description="EdgeFirst Samples - Camera-Radar")
     parser.add_argument(
         "-r",
         "--remote",

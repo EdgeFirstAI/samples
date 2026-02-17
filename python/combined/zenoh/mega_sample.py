@@ -1,21 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+"""EdgeFirst Samples - Mega Sample (Zenoh).
+
+Subscribes to multiple Zenoh topics (camera, model outputs, LiDAR/radar/GPS,
+and fusion topics) to provide an end-to-end, all-in-one visualization and
+processing example.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
+import asyncio
 from argparse import ArgumentParser
+import ctypes
+import io
+import os
+import sys
+import threading
 import time
+
+import av
+import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
 import zenoh
-import ctypes
-import os
-import asyncio
-import sys
-import threading
-import io
-import av
-import numpy as np
-from edgefirst.schemas.sensor_msgs import PointCloud2
+
 from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
+from edgefirst.schemas.sensor_msgs import PointCloud2
 
 # Constants for syscall
 SYS_pidfd_open = 434  # From syscall.h

@@ -47,7 +47,9 @@ def info_worker(msg):
     width = info.width
     height = info.height
     rr.log(
-        "CameraInfo", rr.TextLog("Camera Width: %d Camera Height: %d" % (width, height))
+        "CameraInfo", rr.TextLog(
+            "Camera Width: %d Camera Height: %d" %
+            (width, height))
     )
 
 
@@ -95,7 +97,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

@@ -67,7 +67,11 @@ async def jpeg_handler(drain):
 
 async def main_async(session):
     blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+        rrb.Grid(
+            contents=[
+                rrb.Spatial2DView(
+                    origin="/camera",
+                    name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
 
@@ -103,7 +107,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

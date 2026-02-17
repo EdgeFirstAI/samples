@@ -1,18 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-from argparse import ArgumentParser
+"""EdgeFirst Samples - Resize (Zenoh + HAL).
+
+Subscribes to Zenoh camera topics (e.g. `rt/camera/h264`), decodes frames,
+applies HAL-based resize/rotation, and logs the transformed frames to Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
 import asyncio
+from argparse import ArgumentParser
 import io
 import sys
-import av
-import zenoh
-import time
 import threading
+
+import av
+import numpy as np
 import rerun as rr
 import rerun.blueprint as rrb
+import zenoh
+
 import edgefirst_hal as ef
-import numpy as np
 
 
 class MessageDrain:
@@ -46,8 +56,11 @@ def h264_worker(msg, raw_data, container):
             raw_data.seek(0)
             raw_data.truncate(0)
             for frame in packet.decode():
-                frame_array = frame.to_ndarray(format="rgb24")          
-                ef_im = ef.TensorImage(frame_array.shape[1], frame_array.shape[0], ef.FourCC.RGB)
+                frame_array = frame.to_ndarray(format="rgb24")
+                ef_im = ef.TensorImage(
+                    frame_array.shape[1],
+                    frame_array.shape[0],
+                    ef.FourCC.RGB)
                 ef_im.copy_from_numpy(frame_array)
                 converter = ef.ImageProcessor()
                 output = ef.TensorImage(640, 640, ef.FourCC.RGB)
@@ -64,7 +77,9 @@ async def h264_handler(drain):
     container = av.open(raw_data, format="h264", mode="r")
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=h264_worker, args=[msg, raw_data, container])
+        thread = threading.Thread(
+            target=h264_worker, args=[
+                msg, raw_data, container])
         thread.start()
 
         while thread.is_alive():
@@ -100,7 +115,11 @@ def main():
     args.memory_limit = 10
     rr.script_setup(args, sys.argv[0])
     blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+        rrb.Grid(
+            contents=[
+                rrb.Spatial2DView(
+                    origin="/camera",
+                    name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
 
@@ -109,7 +128,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

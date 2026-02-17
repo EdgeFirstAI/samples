@@ -32,6 +32,12 @@ The following table shows which examples are supported across various platforms.
 python python/camera/local/gstreamer.py --camera=/dev/video3
 ```
 
+By default the display is rendered using wayland sink. However, you can render the display using PyCairo using the command
+
+```bash
+python python/camera/local/gstreamer.py --camera=/dev/video3 --use-cairo
+```
+
 ### **2. OpenCV Camera Example**
 
 **Purpose:** Demonstrate reading from the camera using OpenCV. 

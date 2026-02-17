@@ -1,19 +1,31 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-from argparse import ArgumentParser
+"""EdgeFirst Samples - Camera/Model Decoder (Zenoh + HAL).
+
+Subscribes to Zenoh topics (e.g. `rt/camera/h264`) to decode incoming frames,
+runs a YOLO ONNX model, and publishes decoded model outputs (boxes/masks) to
+Rerun for visualization.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
 import asyncio
+from argparse import ArgumentParser
 import io
 import sys
-import av
-import zenoh
 import threading
-import onnxruntime as ort
+
+import av
 import numpy as np
-from edgefirst.schemas.edgefirst_msgs import Detect, Mask
-import edgefirst_hal as ef
+import onnxruntime as ort
 import rerun as rr
 import rerun.blueprint as rrb
+import zenoh
+
+import edgefirst_hal as ef
+from edgefirst.schemas.edgefirst_msgs import Detect, Mask
 
 
 class FrameSize:
@@ -52,7 +64,8 @@ class MessageDrain:
         return latest
 
 
-def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name):
+def h264_worker(msg, frame_storage, raw_data,
+                container, ort_session, input_name):
     try:
         raw_data.write(msg.payload.to_bytes())
         raw_data.seek(0)
@@ -63,32 +76,36 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                 frame_array = frame.to_ndarray(format="rgb24")
                 frame_height, frame_width = frame_array.shape[:2]
                 frame_storage.set(frame_width, frame_height)
-                
-                ef_im = ef.TensorImage(frame_array.shape[1], frame_array.shape[0], ef.FourCC.RGB)
+
+                ef_im = ef.TensorImage(
+                    frame_array.shape[1],
+                    frame_array.shape[0],
+                    ef.FourCC.RGB)
                 ef_im.copy_from_numpy(frame_array)
                 converter = ef.ImageProcessor()
                 output = ef.TensorImage(640, 640)
                 converter.convert(ef_im, output)
-                
+
                 out_array = np.zeros((640, 640, 3), dtype=np.uint8)
                 output.normalize_to_numpy(out_array)
-                out_array = np.transpose(out_array, (2, 0, 1))  # Channels x Height x Width
+                out_array = np.transpose(
+                    out_array, (2, 0, 1))  # Channels x Height x Width
                 # Prepare input for YOLO
                 input_tensor = out_array.astype(np.float32) / 255.0
                 input_tensor = np.expand_dims(input_tensor, axis=0)
-                
+
                 # Run inference
                 outputs = ort_session.run(None, {input_name: input_tensor})
-                
+
                 predictions = outputs[0]
-                boxes, scores, classes = ef.Decoder.decode_yolo_det(predictions.squeeze(),  (0.0040811873, -123),
-                0.25,
-                0.7,
-                max_boxes=50)
-                
+                boxes, scores, classes = ef.Decoder.decode_yolo_det(predictions.squeeze(), (0.0040811873, -123),
+                                                                    0.25,
+                                                                    0.7,
+                                                                    max_boxes=50)
+
                 # Log frame and detections to Rerun
                 rr.log("/camera/frame", rr.Image(frame_array))
-                
+
                 # Convert boxes to pixel coordinates and log
                 centers, sizes, labels = [], [], []
                 for box, score, cls_id in zip(boxes, scores, classes):
@@ -98,16 +115,16 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                     y1_px = int(y1 / 640.0 * frame_height)
                     x2_px = int(x2 / 640.0 * frame_width)
                     y2_px = int(y2 / 640.0 * frame_height)
-                    
+
                     center_x = (x1_px + x2_px) / 2
                     center_y = (y1_px + y2_px) / 2
                     width = x2_px - x1_px
                     height = y2_px - y1_px
-                    
+
                     centers.append((center_x, center_y))
                     sizes.append((width, height))
                     labels.append(f"class_{int(cls_id)} ({score:.2f})")
-                
+
                 rr.log(
                     "/camera/boxes",
                     rr.Boxes2D(centers=centers, sizes=sizes, labels=labels),
@@ -124,11 +141,12 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
 async def h264_handler(drain, frame_storage, ort_session, input_name):
     raw_data = io.BytesIO()
     container = av.open(raw_data, format="h264", mode="r")
-    
+
     while True:
         msg = await drain.get_latest()
         thread = threading.Thread(
-            target=h264_worker, args=[msg, frame_storage, raw_data, container, ort_session, input_name]
+            target=h264_worker, args=[
+                msg, frame_storage, raw_data, container, ort_session, input_name]
         )
         thread.start()
 
@@ -153,9 +171,11 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
             colors.append([0, 255, 0])
             labels.append(box.label)
         centers.append(
-            (int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1]))
+            (int(box.center_x * frame_size[0]),
+             int(box.center_y * frame_size[1]))
         )
-        sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
+        sizes.append(
+            (int(box.width * frame_size[0]), int(box.height * frame_size[1])))
     rr.log(
         "/camera/boxes",
         rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors),
@@ -194,7 +214,8 @@ async def main_async(session, ort_session, input_name):
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Camera-Model with YOLO")
+    parser = ArgumentParser(
+        description="EdgeFirst Samples - Camera-Model with YOLO")
     parser.add_argument(
         "-m",
         "--model-path",
@@ -215,7 +236,11 @@ def main():
     rr.script_setup(args, sys.argv[0])
 
     blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+        rrb.Grid(
+            contents=[
+                rrb.Spatial2DView(
+                    origin="/camera",
+                    name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
 
@@ -229,7 +254,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

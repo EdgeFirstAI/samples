@@ -1,19 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import DmaBuffer
-import rerun as rr
-import rerun.blueprint as rrb
+"""EdgeFirst Samples - DMA (Zenoh + HAL).
+
+Subscribes to Zenoh DMA topics (e.g. `rt/camera/dma`) to demonstrate direct
+DMA buffer access and renders frames via Rerun for visualization.
+
+This sample is intended to run locally on an EdgeFirst device; DMA buffers are
+not usable over remote connections.
+"""
+
+import asyncio
 from argparse import ArgumentParser
-import sys
-import mmap
 import ctypes
 import os
-import asyncio
-import time
+import sys
 import threading
+
+import rerun as rr
+import rerun.blueprint as rrb
+import zenoh
+
 import edgefirst_hal as ef
+from edgefirst.schemas.edgefirst_msgs import DmaBuffer
 
 # Constants for syscall
 SYS_pidfd_open = 434  # From syscall.h
@@ -62,14 +71,15 @@ def dma_worker(msg):
     pidfd = pidfd_open(dma_buf.pid)
     if pidfd < 0:
         return
-    
+
     fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
     if fd < 0:
         print("Unable to get fd from pidfd, ensure root permissions")
         sys.exit(1)
         return
-    
-    tensor = ef.Tensor.from_fd(fd, [dma_buf.width, dma_buf.height, 2], dtype="uint8")
+
+    tensor = ef.Tensor.from_fd(
+        fd, [dma_buf.width, dma_buf.height, 2], dtype="uint8")
     # Now fd can be used as a file descriptor
     with tensor.map() as mm:
         rr.log(
@@ -130,7 +140,11 @@ def main():
     args.memory_limit = 10
     rr.script_setup(args, sys.argv[0])
     blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+        rrb.Grid(
+            contents=[
+                rrb.Spatial2DView(
+                    origin="/camera",
+                    name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
 

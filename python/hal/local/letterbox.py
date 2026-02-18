@@ -168,7 +168,7 @@ class LetterboxGStreamerCapture(ResizedGStreamerCapture):
 
 class LetterboxOpenCVCapture(ResizedOpenCVCapture):
     def on_new_sample(self):
-        frame = super().on_new_sample()
+        frame = super(ResizedOpenCVCapture, self).on_new_sample()
         return cv2_letterbox(frame, size=self.size, method=self.method)
 
 

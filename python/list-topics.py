@@ -19,7 +19,7 @@ if __name__ == "__main__":
         "-t",
         "--time",
         type=float,
-        default=None,
+        default=5,
         help="Time in seconds to run command before exiting.",
     )
     args = args.parse_args()
@@ -45,7 +45,10 @@ if __name__ == "__main__":
     while True:
         if args.time is not None and time() - start >= args.time:
             break
-        msg = subscriber.recv()
+    
+        msg = subscriber.try_recv()
+        if msg is None:
+            continue
 
         # Ignore message if the topic is known otherwise save the topic
         topic = str(msg.key_expr)

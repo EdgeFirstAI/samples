@@ -16,6 +16,7 @@ Specify `--camera <device>` to select a different camera device, 0.
 
 from typing import Optional, Tuple
 from argparse import ArgumentParser
+import time
 import os
 
 from PIL import Image
@@ -129,8 +130,19 @@ class ResizedGStreamerCapture(GStreamerCapture):
             )
 
             dst_tensor = hal_resize(tensor, size=self.size)
-            channels = 1 if dst_tensor.format == ef.FourCC.GREY else 4
 
+            self.frame_count += 1
+            elapsed = time.perf_counter() - self.window_start
+            if elapsed >= 1.0:
+                self.fetch_fps = self.frame_count / elapsed
+                self.frame_count = 0
+                self.window_start = time.perf_counter()
+                if self.process is not None:
+                    self.cpu_percent = self.process.cpu_percent(interval=None)
+            performance = f"CPU: {self.cpu_percent:.1f}%  FPS: {self.fetch_fps:.1f}"
+            print(performance, end="\r")
+
+            channels = 1 if dst_tensor.format == ef.FourCC.GREY else 4
             if self.use_cairo and self.cairo_window is not None:
                 with dst_tensor.map() as m:
                     n = np.array(m.view()).reshape((dst_tensor.height,

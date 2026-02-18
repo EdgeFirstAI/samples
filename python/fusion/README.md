@@ -23,7 +23,7 @@ These examples can be run with an EdgeFirst Platform with the Zenoh and fusion s
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python zenoh/boxes3d.py --remote 10.10.41.67:7447
+python python/fusion/zenoh/boxes3d.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server
@@ -35,7 +35,7 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform.
 ```bash
-python zenoh/boxes3d.py --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/fusion/zenoh/boxes3d.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **2. LiDAR (Fusion)**
@@ -48,7 +48,7 @@ python zenoh/boxes3d.py --connect --url rerun+http://<PC IP address>:9876/proxy
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python zenoh/lidar.py --remote 10.10.41.67:7447
+python python/fusion/zenoh/lidar.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server
@@ -60,7 +60,7 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform.
 ```bash
-python zenoh/lidar.py --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/fusion/zenoh/lidar.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **3. Occupancy Grid**
@@ -73,7 +73,7 @@ python zenoh/lidar.py --connect --url rerun+http://<PC IP address>:9876/proxy
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python zenoh/occupancy.py --remote 10.10.41.67:7447
+python python/fusion/zenoh/occupancy.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server
@@ -85,7 +85,7 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform.
 ```bash
-python zenoh/occupancy.py --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/fusion/zenoh/occupancy.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **4. Model Output**
@@ -98,7 +98,7 @@ python zenoh/occupancy.py --connect --url rerun+http://<PC IP address>:9876/prox
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python zenoh/model_output.py --remote 10.10.41.67:7447
+python python/fusion/zenoh/model_output.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server
@@ -110,7 +110,7 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform.
 ```bash
-python zenoh/model_output.py --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/fusion/zenoh/model_output.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **5. Model Output Tracked**
@@ -123,7 +123,7 @@ python zenoh/model_output.py --connect --url rerun+http://<PC IP address>:9876/p
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python zenoh/model_output_tracked.py --remote 10.10.41.67:7447
+python python/fusion/zenoh/model_output_tracked.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server
@@ -135,7 +135,7 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform.
 ```bash
-python zenoh/model_output_tracked.py --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/fusion/zenoh/model_output_tracked.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **6. Radar (Fusion)**
@@ -148,7 +148,7 @@ python zenoh/model_output_tracked.py --connect --url rerun+http://<PC IP address
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python zenoh/radar.py --remote 10.10.41.67:7447
+python python/fusion/zenoh/radar.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server
@@ -160,6 +160,5 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform.
 ```bash
-python zenoh/radar.py --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/fusion/zenoh/radar.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
-

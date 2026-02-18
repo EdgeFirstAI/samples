@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut topics = HashSet::new();
     let start = Instant::now();
 
-    while let Ok(msg) = subscriber.recv() {
+    while let Ok(msg) = subscriber.try_recv() {
         if start.elapsed().as_secs() >= 5 {
             break;
         }

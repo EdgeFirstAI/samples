@@ -173,7 +173,9 @@ def jpeg_worker(msg, frame_storage):
 async def jpeg_handler(drain, frame_storage):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=jpeg_worker, args=[msg, frame_storage])
+        thread = threading.Thread(
+            target=jpeg_worker, args=[
+                msg, frame_storage])
         thread.start()
 
         while thread.is_alive():
@@ -199,14 +201,22 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
             colors.append([0, 255, 0])
             labels.append(box.label)
         centers.append(
-            (int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1]))
+            (int(box.center_x * frame_size[0]),
+             int(box.center_y * frame_size[1]))
         )
-        sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
-    rr.log("/camera/boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
+        sizes.append(
+            (int(box.width * frame_size[0]), int(box.height * frame_size[1])))
+    rr.log(
+        "/camera/boxes",
+        rr.Boxes2D(
+            centers=centers,
+            sizes=sizes,
+            labels=labels))
     rr.log(
         "/metrics/detection_inference",
         rr.Scalars(
-            float(detection.model_time.sec) + float(detection.model_time.nanosec / 1e9)
+            float(detection.model_time.sec) +
+            float(detection.model_time.nanosec / 1e9)
         ),
     )
 
@@ -258,7 +268,9 @@ async def mask_handler(drain, frame_storage, remote):
     while True:
         msg = await drain.get_latest()
         frame_size = await frame_storage.get()
-        thread = threading.Thread(target=mask_worker, args=[msg, frame_size, remote])
+        thread = threading.Thread(
+            target=mask_worker, args=[
+                msg, frame_size, remote])
         thread.start()
 
         while thread.is_alive():
@@ -289,11 +301,16 @@ def boxes3d_worker(msg):
 
     detection = Detect.deserialize(msg.payload.to_bytes())
     # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
-    # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
+    # We will convert them to a normal frame of reference, where x is forward,
+    # y is left, and z is up
     centers = [(x.distance, -x.center_x, -x.center_y) for x in detection.boxes]
     sizes = [(x.width, x.width, x.height) for x in detection.boxes]
 
-    rr.log("/pointcloud/fusion/boxes", rr.Boxes3D(centers=centers, sizes=sizes))
+    rr.log(
+        "/pointcloud/fusion/boxes",
+        rr.Boxes3D(
+            centers=centers,
+            sizes=sizes))
 
 
 async def boxes3d_handler(drain):
@@ -316,7 +333,8 @@ def radar_worker(msg):
         return
     max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+              for p in clusters]
     rr.log("/pointcloud/radar/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -342,7 +360,8 @@ def lidar_worker(msg):
         return
     max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+              for p in clusters]
     rr.log("/pointcloud/lidar/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -437,14 +456,22 @@ async def main_async(args, session):
     if args.remote is None and "rt/model/mask" in model_topics:
         session.declare_subscriber("rt/model/mask", mask_drain.callback)
     elif args.remote is not None and "rt/model/mask_compressed" in model_topics:
-        session.declare_subscriber("rt/model/mask_compressed", mask_drain.callback)
+        session.declare_subscriber(
+            "rt/model/mask_compressed",
+            mask_drain.callback)
     elif "rt/model/mask" in model_topics:
         session.declare_subscriber("rt/model/mask", mask_drain.callback)
     elif "rt/model/mask_compressed" in model_topics:
-        session.declare_subscriber("rt/model/mask_compressed", mask_drain.callback)
+        session.declare_subscriber(
+            "rt/model/mask_compressed",
+            mask_drain.callback)
 
     if "rt/model/mask" in model_topics or "rt/model/mask_compressed" in model_topics:
-        async_funcs.append(mask_handler(mask_drain, frame_size_storage, args.remote))
+        async_funcs.append(
+            mask_handler(
+                mask_drain,
+                frame_size_storage,
+                args.remote))
 
     if "rt/gps" in misc_topics:
         session.declare_subscriber("rt/gps", gps_drain.callback)
@@ -490,8 +517,12 @@ def main():
             contents=[
                 rrb.MapView(origin="/gps", name="GPS"),
                 rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
-                rrb.Spatial3DView(origin="/pointcloud", name="Pointcloud Clusters"),
-                rrb.TimeSeriesView(origin="/metrics", name="Model Information"),
+                rrb.Spatial3DView(
+                    origin="/pointcloud",
+                    name="Pointcloud Clusters"),
+                rrb.TimeSeriesView(
+                    origin="/metrics",
+                    name="Model Information"),
             ]
         )
     )
@@ -503,7 +534,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % remote)
     session = zenoh.open(config)

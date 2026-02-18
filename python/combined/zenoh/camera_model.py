@@ -18,8 +18,8 @@ import sys
 import threading
 
 import av
-import cv2
 import numpy as np
+from PIL import Image
 import rerun as rr
 import rerun.blueprint as rrb
 import zenoh
@@ -113,9 +113,11 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
             colors.append([0, 255, 0])
             labels.append(box.label)
         centers.append(
-            (int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1]))
+            (int(box.center_x * frame_size[0]),
+             int(box.center_y * frame_size[1]))
         )
-        sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
+        sizes.append(
+            (int(box.width * frame_size[0]), int(box.height * frame_size[1])))
     rr.log(
         "/camera/boxes",
         rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors),
@@ -148,7 +150,9 @@ def mask_worker(msg, frame_size, remote):
     else:
         np_arr = np.asarray(mask.mask, dtype=np.uint8)
         np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
-    np_arr = cv2.resize(np_arr, frame_size)
+    np_arr = np.array(
+        Image.fromarray(np_arr).resize(
+            frame_size, Image.NEAREST))
     np_arr = np.argmax(np_arr, axis=2)
 
     rr.log("/camera/mask", rr.SegmentationImage(np_arr))
@@ -165,7 +169,9 @@ async def mask_handler(drain, frame_storage, remote):
     while True:
         msg = await drain.get_latest()
         frame_size = await frame_storage.get()
-        thread = threading.Thread(target=mask_worker, args=[msg, frame_size, remote])
+        thread = threading.Thread(
+            target=mask_worker, args=[
+                msg, frame_size, remote])
         thread.start()
 
         while thread.is_alive():
@@ -175,7 +181,11 @@ async def mask_handler(drain, frame_storage, remote):
 
 async def main_async(session, args):
     blueprint = rrb.Blueprint(
-        rrb.Grid(contents=[rrb.Spatial2DView(origin="/camera", name="Camera Feed")])
+        rrb.Grid(
+            contents=[
+                rrb.Spatial2DView(
+                    origin="/camera",
+                    name="Camera Feed")])
     )
     rr.send_blueprint(blueprint)
 
@@ -189,7 +199,9 @@ async def main_async(session, args):
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
     session.declare_subscriber("rt/model/boxes2d", boxes_drain.callback)
     if args.remote:
-        session.declare_subscriber("rt/model/mask_compressed", mask_drain.callback)
+        session.declare_subscriber(
+            "rt/model/mask_compressed",
+            mask_drain.callback)
     else:
         session.declare_subscriber("rt/model/mask", mask_drain.callback)
     await asyncio.gather(
@@ -223,7 +235,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

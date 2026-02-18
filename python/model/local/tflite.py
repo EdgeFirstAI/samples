@@ -1,7 +1,14 @@
 from typing import List
+from argparse import ArgumentParser
 import os
 
 import numpy as np
+
+try:
+    import cv2
+    _OPENCV_AVAILABLE = True
+except ImportError:
+    _OPENCV_AVAILABLE = False
 
 try:
     from tflite_runtime.interpreter import Interpreter, load_delegate  # type: ignore
@@ -21,6 +28,7 @@ from python.model.local.metadata import load_tflite_metadata
 from python.model.local.transforms import (decode_yolo_boxes,
                                            decode_yolo_masks, 
                                            dequantize, crop_masks)
+from python.hal.local.letterbox import cv2_letterbox
 from python.hal.local.resize import cv2_resize
 from python.model.local.nms import nms
 
@@ -176,4 +184,86 @@ class TFLiteRunner:
                 masks = crop_masks(masks, boxes)
                 
         return boxes, classes, scores, masks
+    
 
+def main():
+    opts = ArgumentParser(
+        description="Run TFLite model on a sample image"
+    )
+    opts.add_argument("--model", type=str, required=True, 
+                      help="Path to TFLite model")
+    opts.add_argument("--image", type=str, required=True,
+                      help="Path to input image")
+    opts.add_argument('-s', '--score', type=float, default=0.50,
+                      help='Specify the score threshold for NMS')
+    opts.add_argument('-i', '--iou', type=float, default=0.50,
+                      help='Specify the IoU threshold for NMS')
+    opts.add_argument('--max-boxes', type=int, default=300,
+                      help='Specify the maximum number of devices')
+    opts.add_argument('--save', type=str, 
+                      help='Whether to save the output visualization as output.jpg')
+    args = opts.parse_args()
+
+    if os.path.splitext(os.path.basename(args.model))[-1] != ".tflite":
+        raise NotImplementedError(
+            "Only quantized Ultralytics TFLite models are supported in this sample.")
+    
+    runner = TFLiteRunner(
+        model_path=args.model,
+        score=args.score,
+        iou=args.iou,
+        max_boxes=args.max_boxes
+    )
+
+    if not _OPENCV_AVAILABLE:
+        raise ImportError("OpenCV is required to run this sample. Please install OpenCV and try again.")    
+
+    input_tensor = cv2.imread(args.image)
+    input_tensor = cv2_letterbox(input_tensor, size=runner.input_shape)
+    boxes, classes, scores, masks = runner.inference(input_tensor)
+
+    num_dets = 0 if boxes is None else int(boxes.shape[0])
+    print(f"Found objects: {num_dets}")
+    if num_dets > 0:
+        for i in range(num_dets):
+            label = (
+                runner.labels[classes[i]]
+                if runner.labels is not None and classes is not None
+                else classes[i]
+            )
+            print(
+                f"  - {label}: score={scores[i]:.3f} box={boxes[i].tolist()}"
+            )
+    
+    # Visualize outputs
+    if args.save:
+        save_path = os.path.expanduser(args.save)
+        # Create parent directory only
+        parent_dir = os.path.dirname(save_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+        # Denormalize box coordinates
+        boxes[:, [0, 2]] *= runner.input_shape[1]
+        boxes[:, [1, 3]] *= runner.input_shape[0]
+        boxes = boxes.astype(np.int32)
+
+        alpha = 0.50
+        for i in range(boxes.shape[0]):
+            cv2.putText(
+                input_tensor,
+                f"{runner.labels[classes[i]] if runner.labels is not None else classes[i]}: {scores[i]:.2f}",
+                (boxes[i, 0], boxes[i, 1] - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
+            )
+            cv2.rectangle(input_tensor,
+                            (boxes[i, 0], boxes[i, 1]),
+                            (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
+            input_tensor[masks[i] > 0] = (
+                input_tensor[masks[i] > 0] * (1 - alpha) +
+                np.array([0, 255, 0]) * alpha
+            )
+        cv2.imwrite(save_path, input_tensor)
+
+if __name__ == "__main__":
+    main()

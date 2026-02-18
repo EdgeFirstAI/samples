@@ -1,15 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import Mask
-import rerun as rr
+"""EdgeFirst Samples - Boxes3D (Zenoh).
+
+Subscribes to Zenoh topics that publish 3D bounding boxes (e.g.
+`rt/fusion/boxes3d`) and logs Box3D outputs to Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
+import asyncio
 from argparse import ArgumentParser
 import sys
-import numpy as np
-import asyncio
-import time
 import threading
+
+import rerun as rr
+import zenoh
+
+from edgefirst.schemas.edgefirst_msgs import Detect
 
 
 class MessageDrain:
@@ -31,24 +40,25 @@ class MessageDrain:
         return latest
 
 
-def model_output_worker(msg):
-    mask = Mask.deserialize(msg.payload.to_bytes())
-    np_arr = np.asarray(mask.mask, dtype=np.uint8)
-    np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
-    np_arr = np.argmax(np_arr, axis=2)
+def boxes3d_worker(msg):
+    detection = Detect.deserialize(msg.payload.to_bytes())
+    # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
+    # We will convert them to a normal frame of reference, where x is forward,
+    # y is left, and z is up
+    centers = [(x.distance, -x.center_x, -x.center_y) for x in detection.boxes]
+    sizes = [(x.width, x.width, x.height) for x in detection.boxes]
+
     rr.log(
-        "/",
-        rr.AnnotationContext(
-            [(0, "background", (0, 0, 0)), (1, "person", (255, 0, 0))]
-        ),
-    )
-    rr.log("mask", rr.SegmentationImage(np_arr))
+        "/pointcloud/fusion/boxes",
+        rr.Boxes3D(
+            centers=centers,
+            sizes=sizes))
 
 
-async def model_output_handler(drain):
+async def boxes3d_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=model_output_worker, args=[msg])
+        thread = threading.Thread(target=boxes3d_worker, args=[msg])
         thread.start()
 
         while thread.is_alive():
@@ -61,17 +71,15 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/fusion/model_output/tracked", drain.callback)
-    await asyncio.gather((model_output_handler(drain)))
+    session.declare_subscriber("rt/fusion/boxes3d", drain.callback)
+    await asyncio.gather((boxes3d_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(
-        description="EdgeFirst Samples - Fusion Model Output - Tracked"
-    )
+    parser = ArgumentParser(description="EdgeFirst Samples - Boxes3D")
     parser.add_argument(
         "-r",
         "--remote",
@@ -91,7 +99,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

@@ -13,6 +13,7 @@ Specify --resolution to output the frame in a different resolution, e.g. 1280x72
 
 from argparse import ArgumentParser
 import os
+import time
 
 import numpy as np
 
@@ -36,9 +37,16 @@ except ImportError:
 try:
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk, Gdk, GdkPixbuf
+    import cairo
     _PYCAIRO_AVAILABLE = True
 except Exception:
     _PYCAIRO_AVAILABLE = False
+
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
 
 
 class GStreamerCapture:
@@ -55,6 +63,12 @@ class GStreamerCapture:
         self.cairo_window = CairoWindow() if self.use_cairo else None
 
         self.frame_count = 0
+        self.window_start = time.perf_counter()
+        self.fetch_fps = 0.0
+        self.cpu_percent = 0.0
+        self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
+        if self.process is not None:
+            self.process.cpu_percent(interval=None)
         self.loop = GLib.MainLoop()
         self.pipeline = self._build_pipeline()
 
@@ -127,13 +141,22 @@ class GStreamerCapture:
         finally:
             buffer.unmap(map_info)
 
+        self.frame_count += 1
+        elapsed = time.perf_counter() - self.window_start
+        if elapsed >= 1.0:
+            self.fetch_fps = self.frame_count / elapsed
+            self.frame_count = 0
+            self.window_start = time.perf_counter()
+            if self.process is not None:
+                self.cpu_percent = self.process.cpu_percent(interval=None)
+
+        performance = f"CPU: {self.cpu_percent:.1f}%  FPS: {self.fetch_fps:.1f}"
         if self.use_cairo and self.cairo_window is not None:
             GLib.idle_add(self.cairo_window.update_frame, frame)
             if self.cairo_window.closed:
                 return True
 
-        self.frame_count += 1
-        print(f"Pulled frame: {self.frame_count}", end="\r")
+        print(performance, end="\r")
         return False
 
     def on_error(self, bus, msg):
@@ -152,6 +175,9 @@ class CairoWindow:
     def __init__(self, title: str = "Camera"):
         if not _PYCAIRO_AVAILABLE:
             raise RuntimeError("pycairo/GTK is not available")
+        ok, _argv = Gtk.init_check()
+        if not ok:
+            raise RuntimeError("Gtk couldn't be initialized")
         self.title = title
         self.window = Gtk.Window(title=title)
         self.area = Gtk.DrawingArea()
@@ -160,16 +186,18 @@ class CairoWindow:
         self.area.connect("draw", self._on_draw)
         self.window.show_all()
         self.frame = None
+        self.overlay_text = ""
         self.closed = False
         self._size_set = False
 
     def _on_destroy(self, *_args):
         self.closed = True
 
-    def update_frame(self, frame: np.ndarray):
+    def update_frame(self, frame: np.ndarray, overlay_text: str = ""):
         if self.closed:
             return False
         self.frame = frame
+        self.overlay_text = overlay_text
         if not self._size_set:
             h, w = frame.shape[:2]
             self.window.resize(w, h)
@@ -200,6 +228,19 @@ class CairoWindow:
         )
         Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
         cr.paint()
+
+        if self.overlay_text:
+            cr.set_source_rgba(0, 0, 0, 0.5)
+            cr.rectangle(5, 5, 500, 28)
+            cr.fill()
+            cr.set_source_rgb(0, 1, 0)
+            cr.select_font_face(
+                "Sans",
+                cairo.FONT_SLANT_NORMAL,
+                cairo.FONT_WEIGHT_BOLD)
+            cr.set_font_size(16)
+            cr.move_to(12, 24)
+            cr.show_text(self.overlay_text)
         return False
 
 
@@ -213,7 +254,7 @@ def main():
     args = opts.parse_args()
 
     capture = GStreamerCapture(
-        int(args.camera) if args.camera.isdigit() else args.camera, 
+        int(args.camera) if args.camera.isdigit() else args.camera,
         use_cairo=args.use_cairo)
     capture.run()
 

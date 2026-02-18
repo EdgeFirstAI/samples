@@ -8,7 +8,6 @@ from argparse import ArgumentParser
 import sys
 import rerun as rr
 import asyncio
-import time
 import threading
 
 
@@ -40,7 +39,8 @@ def radar_worker(msg):
         return
     max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+              for p in clusters]
     rr.log("fusion/radar", rr.Points3D(pos, colors=colors))
 
 
@@ -88,7 +88,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

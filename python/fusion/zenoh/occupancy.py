@@ -1,15 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import Mask
-import rerun as rr
+"""EdgeFirst Samples - Occupancy Grid (Zenoh).
+
+Subscribes to Zenoh topics that publish occupancy grid data (e.g.
+`rt/fusion/occupancy`) and visualizes the resulting point cloud in Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
+import asyncio
 from argparse import ArgumentParser
 import sys
-import numpy as np
-import asyncio
-import time
 import threading
+
+import rerun as rr
+import zenoh
+
+from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
+from edgefirst.schemas.sensor_msgs import PointCloud2
 
 
 class MessageDrain:
@@ -31,24 +41,26 @@ class MessageDrain:
         return latest
 
 
-def model_output_worker(msg):
-    mask = Mask.deserialize(msg.payload.to_bytes())
-    np_arr = np.asarray(mask.mask, dtype=np.uint8)
-    np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
-    np_arr = np.argmax(np_arr, axis=2)
-    rr.log(
-        "/",
-        rr.AnnotationContext(
-            [(0, "background", (0, 0, 0)), (1, "person", (255, 0, 0))]
-        ),
-    )
-    rr.log("mask", rr.SegmentationImage(np_arr))
+def occupancy_worker(msg):
+    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
+    points = decode_pcd(pcd)
+    if not points:
+        rr.log("fusion/occupancy", rr.Points3D(positions=[], colors=[]))
+        return
+    max_class = max(max([p.vision_class for p in points]), 1)
+    pos = [[p.x, p.y, p.z] for p in points]
+    colors = [
+        colormap(
+            turbo_colormap,
+            p.vision_class /
+            max_class) for p in points]
+    rr.log("fusion/occupancy", rr.Points3D(positions=pos, colors=colors))
 
 
-async def model_output_handler(drain):
+async def occupancy_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=model_output_worker, args=[msg])
+        thread = threading.Thread(target=occupancy_worker, args=[msg])
         thread.start()
 
         while thread.is_alive():
@@ -61,15 +73,15 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/fusion/model_output", drain.callback)
-    await asyncio.gather((model_output_handler(drain)))
+    session.declare_subscriber("rt/fusion/occupancy", drain.callback)
+    await asyncio.gather((occupancy_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Fusion Model Output")
+    parser = ArgumentParser(description="EdgeFirst Samples - Fusion Occupancy")
     parser.add_argument(
         "-r",
         "--remote",
@@ -89,7 +101,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

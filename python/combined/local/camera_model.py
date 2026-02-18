@@ -3,7 +3,7 @@
 
 """EdgeFirst Samples - Camera Model Sample (Local - on-device).
 
-Reads from the camera, /dev/video3 by default and runs the model 
+Reads from the camera, /dev/video3 by default and runs the model
 inference on the captured frames and displays the frames in a window if available.
 
 This example is intended to run locally on target.
@@ -11,6 +11,7 @@ Specify `--camera <device>` to select a different camera device, 0.
 """
 
 from argparse import ArgumentParser
+import time
 import os
 
 import numpy as np
@@ -33,18 +34,18 @@ except ImportError:
 
 import edgefirst_hal as ef
 
-from python.hal.local.letterbox import (LetterboxGStreamerCapture, 
-                                        LetterboxOpenCVCapture, 
+from python.hal.local.letterbox import (LetterboxGStreamerCapture,
+                                        LetterboxOpenCVCapture,
                                         hal_letterbox, CONVERTER)
 from python.model.local.tflite import TFLiteRunner
 
 
 class GStreamerInference(LetterboxGStreamerCapture):
     def __init__(
-        self, 
-        camera: str, 
-        model_path: str, 
-        score: float = 0.50, 
+        self,
+        camera: str,
+        model_path: str,
+        score: float = 0.50,
         iou: float = 0.50,
         max_boxes: int = 300
     ):
@@ -76,7 +77,7 @@ class GStreamerInference(LetterboxGStreamerCapture):
         self.runner.model.invoke()
         outputs = [self.runner.model.get_tensor(output["index"])
                    for output in self.runner.output_details]
-        
+
         boxes, scores, classes, masks = self.decoder.decode(
             outputs, max_boxes=self.runner.max_boxes
         )
@@ -91,6 +92,7 @@ class GStreamerInference(LetterboxGStreamerCapture):
         )
 
     def on_new_sample(self, app_sink):
+        start_pipeline = time.perf_counter()
         sample = app_sink.pull_sample()
 
         caps = sample.get_caps()
@@ -115,6 +117,7 @@ class GStreamerInference(LetterboxGStreamerCapture):
                 fourcc=fourcc
             )
             hal_letterbox(tensor, self.dst)
+
             self.inference()
 
             channels = 1 if self.dst.format == ef.FourCC.GREY else 4
@@ -126,7 +129,15 @@ class GStreamerInference(LetterboxGStreamerCapture):
                     if channels == 4:
                         n = n[:, :, :3]
                     n = np.ascontiguousarray(n, dtype=np.uint8)
-                    GLib.idle_add(self.cairo_window.update_frame, n)
+
+                    end_pipeline = time.perf_counter() - start_pipeline
+                    if self.process is not None:
+                        self.cpu_percent = self.process.cpu_percent(interval=None)
+                    performance = f"CPU: {
+                        self.cpu_percent:.2f}% | End2End Latency: {
+                        end_pipeline * 1000:.2f} ms"
+
+                    GLib.idle_add(self.cairo_window.update_frame, n, performance)
                     if self.cairo_window.closed:
                         return True
         finally:
@@ -153,13 +164,13 @@ class OpenCVInference(LetterboxOpenCVCapture):
         )
         super().__init__(camera, size=self.runner.input_shape, method=method)
 
-
     def on_new_sample(self):
+        start_pipeline = time.perf_counter()
         frame = super().on_new_sample()
         boxes, classes, scores, masks = self.runner.inference(frame)
         height, width, _ = frame.shape
 
-        # Denormalize box coordinates 
+        # Denormalize box coordinates
         boxes[:, [0, 2]] *= width
         boxes[:, [1, 3]] *= height
         boxes = boxes.astype(np.int32)
@@ -167,22 +178,36 @@ class OpenCVInference(LetterboxOpenCVCapture):
         if _OPENCV_AVAILABLE:
             alpha = 0.50
             for i in range(boxes.shape[0]):
+                cv2.rectangle(frame,
+                              (boxes[i, 0], boxes[i, 1]),
+                              (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
+                if masks is not None:
+                    frame[masks[i] > 0] = (
+                        frame[masks[i] > 0] * (1 - alpha) +
+                        np.array([0, 255, 0]) * alpha
+                    )
                 cv2.putText(
-                    frame, 
-                    f"{self.runner.labels[classes[i]] if self.runner.labels is not None else classes[i]}: {scores[i]:.2f}",
-                    (boxes[i, 0], boxes[i, 1] - 10), 
+                    frame,
+                    f"{self.runner.labels[classes[i]] if 
+                       self.runner.labels is not None else classes[i]}: {
+                           scores[i]:.2f}",
+                    (boxes[i, 0], boxes[i, 1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
                 )
-                cv2.rectangle(frame, 
-                              (boxes[i, 0], boxes[i, 1]), 
-                              (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
-                frame[masks[i] > 0] = (
-                    frame[masks[i] > 0] * (1 - alpha) +
-                    np.array([0, 255, 0]) * alpha
-                )
+            
+            end_pipeline = time.perf_counter() - start_pipeline
+            if self.process is not None:
+                self.cpu_percent = self.process.cpu_percent(interval=None)
+            performance = f"CPU: {
+                self.cpu_percent:.2f}% | End2End Latency: {
+                end_pipeline * 1000:.2f} ms"
+            cv2.putText(
+                frame, performance, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                (0, 255, 0), 2, cv2.LINE_AA,
+            )
         return frame
 
-    
+
 def main():
     opts = ArgumentParser(
         description='Camera Letterbox')
@@ -202,11 +227,12 @@ def main():
     args = opts.parse_args()
 
     if os.path.splitext(os.path.basename(args.model))[-1] != ".tflite":
-        raise NotImplementedError("Only quantized Ultralytics TFLite models are supported in this sample.")
+        raise NotImplementedError(
+            "Only quantized Ultralytics TFLite models are supported in this sample.")
 
     if args.method in ["opencv", "pillow"]:
         capture = OpenCVInference(
-            int(args.camera) if args.camera.isdigit() else args.camera, 
+            int(args.camera) if args.camera.isdigit() else args.camera,
             model_path=args.model,
             method=args.method,
             score=args.score,
@@ -217,7 +243,7 @@ def main():
         # GStreamer captures is intended for HAL in this use-case to show
         # benefits with the HAL optimizations.
         capture = GStreamerInference(
-            int(args.camera) if args.camera.isdigit() else args.camera, 
+            int(args.camera) if args.camera.isdigit() else args.camera,
             model_path=args.model,
             score=args.score,
             iou=args.iou,

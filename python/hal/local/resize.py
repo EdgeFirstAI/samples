@@ -75,6 +75,7 @@ def pillow_resize(image: np.ndarray,
     im = im.resize(size)
     return np.array(im)
 
+
 class ResizedGStreamerCapture(GStreamerCapture):
     def __init__(self, camera: str, size: Optional[tuple] = None):
         super().__init__(camera, use_cairo=True)
@@ -159,7 +160,6 @@ class ResizedOpenCVCapture(OpenCVCapture):
         if self.method == "opencv":
             return cv2_resize(frame, self.size)
         return pillow_resize(frame, self.size)
-
 
 
 def main():

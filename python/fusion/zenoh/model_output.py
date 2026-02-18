@@ -1,15 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.sensor_msgs import PointCloud2
-from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
+"""EdgeFirst Samples - Model Output (Zenoh).
+
+Subscribes to Zenoh topics that publish model outputs (e.g.
+`rt/fusion/model_output`) and visualizes segmentation masks in Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
+import asyncio
 from argparse import ArgumentParser
 import sys
-import rerun as rr
-import asyncio
-import time
 import threading
+
+import numpy as np
+import rerun as rr
+import zenoh
+
+from edgefirst.schemas.edgefirst_msgs import Mask
 
 
 class MessageDrain:
@@ -31,23 +41,24 @@ class MessageDrain:
         return latest
 
 
-def lidar_worker(msg):
-    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
-    points = decode_pcd(pcd)
-    clusters = [p for p in points if p.cluster_id > 0]
-    if not clusters:
-        rr.log("fusion/lidar", rr.Points3D([], colors=[]))
-        return
-    max_id = max(p.cluster_id for p in clusters)
-    pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
-    rr.log("fusion/lidar", rr.Points3D(pos, colors=colors))
+def model_output_worker(msg):
+    mask = Mask.deserialize(msg.payload.to_bytes())
+    np_arr = np.asarray(mask.mask, dtype=np.uint8)
+    np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
+    np_arr = np.argmax(np_arr, axis=2)
+    rr.log(
+        "/",
+        rr.AnnotationContext(
+            [(0, "background", (0, 0, 0)), (1, "person", (255, 0, 0))]
+        ),
+    )
+    rr.log("mask", rr.SegmentationImage(np_arr))
 
 
-async def lidar_handler(drain):
+async def model_output_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=lidar_worker, args=[msg])
+        thread = threading.Thread(target=model_output_worker, args=[msg])
         thread.start()
 
         while thread.is_alive():
@@ -60,15 +71,16 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/fusion/lidar", drain.callback)
-    await asyncio.gather((lidar_handler(drain)))
+    session.declare_subscriber("rt/fusion/model_output", drain.callback)
+    await asyncio.gather((model_output_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Fusion - Lidar")
+    parser = ArgumentParser(
+        description="EdgeFirst Samples - Fusion Model Output")
     parser.add_argument(
         "-r",
         "--remote",
@@ -88,7 +100,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

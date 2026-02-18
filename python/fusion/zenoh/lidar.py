@@ -1,14 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import Detect
+"""EdgeFirst Samples - Fusion LiDAR (Zenoh).
+
+Subscribes to Zenoh topics that publish LiDAR data (e.g. `rt/fusion/lidar`)
+and visualizes clustered point clouds in Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
+import asyncio
 from argparse import ArgumentParser
 import sys
-import rerun as rr
-import asyncio
-import time
 import threading
+
+import rerun as rr
+import zenoh
+
+from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
+from edgefirst.schemas.sensor_msgs import PointCloud2
 
 
 class MessageDrain:
@@ -30,20 +41,24 @@ class MessageDrain:
         return latest
 
 
-def boxes3d_worker(msg):
-    detection = Detect.deserialize(msg.payload.to_bytes())
-    # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
-    # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
-    centers = [(x.distance, -x.center_x, -x.center_y) for x in detection.boxes]
-    sizes = [(x.width, x.width, x.height) for x in detection.boxes]
+def lidar_worker(msg):
+    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
+    points = decode_pcd(pcd)
+    clusters = [p for p in points if p.cluster_id > 0]
+    if not clusters:
+        rr.log("fusion/lidar", rr.Points3D([], colors=[]))
+        return
+    max_id = max(p.cluster_id for p in clusters)
+    pos = [[p.x, p.y, p.z] for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+              for p in clusters]
+    rr.log("fusion/lidar", rr.Points3D(pos, colors=colors))
 
-    rr.log("/pointcloud/fusion/boxes", rr.Boxes3D(centers=centers, sizes=sizes))
 
-
-async def boxes3d_handler(drain):
+async def lidar_handler(drain):
     while True:
         msg = await drain.get_latest()
-        thread = threading.Thread(target=boxes3d_worker, args=[msg])
+        thread = threading.Thread(target=lidar_worker, args=[msg])
         thread.start()
 
         while thread.is_alive():
@@ -56,15 +71,15 @@ async def main_async(session):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/fusion/boxes3d", drain.callback)
-    await asyncio.gather((boxes3d_handler(drain)))
+    session.declare_subscriber("rt/fusion/lidar", drain.callback)
+    await asyncio.gather((lidar_handler(drain)))
 
     while True:
         asyncio.sleep(0.001)
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - Boxes3D")
+    parser = ArgumentParser(description="EdgeFirst Samples - Fusion - Lidar")
     parser.add_argument(
         "-r",
         "--remote",
@@ -84,7 +99,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

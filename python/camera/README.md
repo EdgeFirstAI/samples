@@ -2,8 +2,6 @@
 
 This section provides sample applications for reading from the camera connected to the device using Python. There are multiple ways to read from the camera either through external libraries such as GStreamer or OpenCV as shown in the **local** directory or by subscribing to Zenoh topics hosted by an [EdgeFirst Platform](https://doc.edgefirst.ai/latest/platforms/) as shown in the **zenoh** directory.
 
-Prior to running the following examples, ensure that you have followed the [Python Quick Start](../../README.md#python-quickstart) which shows how to set up a [Python virtual environment](https://docs.python.org/3/library/venv.html) and installs the required dependencies. 
-
 > Note: For any of these programs press CTRL-C to quit.
 
 ## Local Examples
@@ -51,10 +49,11 @@ python python/camera/local/opencv.py --camera=0
 
 ## Zenoh Examples
 
+Prior to running the following examples, ensure that you have followed the [Python Quick Start](../../README.md#python-quickstart) which shows how to set up a [Python virtual environment](https://docs.python.org/3/library/venv.html) and installs the required dependencies. 
+
 These examples are only supported in [EdgeFirst Platforms](https://doc.edgefirst.ai/latest/platforms/) such as the Maivin or Raivin. These platforms publishes data in Zenoh (ROS-like) topics which are unique to these platforms where other devices can then use to subscribe and recieve data.
 
-These examples can be run with an EdgeFirst Platform with the Zenoh and the camera
-service enabled.
+These examples can be run with an EdgeFirst Platform with the Zenoh and the camera services enabled.
 
 `sudo systemctl enable --now zenohd`
 `sudo systemctl enable --now camera`
@@ -71,7 +70,7 @@ A host machine such as a PC with a monitor connected can be used to run the foll
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python .\python\camera\zenoh\info.py --remote 10.10.41.67:7447
+python python/camera/zenoh/info.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server.
@@ -96,7 +95,7 @@ python python/camera/zenoh/info.py --connect --url rerun+http://<PC IP address>:
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python .\python\camera\zenoh\dma.py --remote 10.10.41.67:7447
+python python/camera/zenoh/dma.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server.
@@ -121,7 +120,7 @@ python python/camera/zenoh/dma.py --connect --url rerun+http://<PC IP address>:9
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python .\python\camera\zenoh\jpeg.py --remote 10.10.41.67:7447
+python python/camera/zenoh/jpeg.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server.
@@ -146,7 +145,7 @@ python python/camera/zenoh/jpeg.py --connect --url rerun+http://<PC IP address>:
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python .\python\camera\zenoh\h264.py.py --remote 10.10.41.67:7447
+python python/camera/zenoh/h264.py.py --remote 10.10.41.67:7447
 ```
 
 2. Connect via proxy server.

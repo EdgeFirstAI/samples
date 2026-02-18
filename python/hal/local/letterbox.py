@@ -15,6 +15,7 @@ Specify `--camera <device>` to select a different camera device, 0.
 
 from typing import Optional
 from argparse import ArgumentParser
+import time
 import os
 
 import numpy as np
@@ -42,6 +43,7 @@ from python.hal.local.resize import ResizedOpenCVCapture, ResizedGStreamerCaptur
 
 
 CONVERTER = ef.ImageProcessor()
+
 
 def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
                   constant: int = 114):
@@ -133,6 +135,18 @@ class LetterboxGStreamerCapture(ResizedGStreamerCapture):
             )
 
             hal_letterbox(tensor, self.dst)
+
+            self.frame_count += 1
+            elapsed = time.perf_counter() - self.window_start
+            if elapsed >= 1.0:
+                self.fetch_fps = self.frame_count / elapsed
+                self.frame_count = 0
+                self.window_start = time.perf_counter()
+                if self.process is not None:
+                    self.cpu_percent = self.process.cpu_percent(interval=None)
+            performance = f"CPU: {self.cpu_percent:.1f}%  FPS: {self.fetch_fps:.1f}"
+            print(performance, end="\r")
+
             channels = 1 if self.dst.format == ef.FourCC.GREY else 4
             if self.use_cairo and self.cairo_window is not None:
                 with self.dst.map() as m:
@@ -181,7 +195,7 @@ def main():
         # GStreamer captures is intended for HAL in this use-case to show
         # benefits with the HAL optimizations.
         capture = LetterboxGStreamerCapture(
-            int(args.camera) if args.camera.isdigit() else args.camera, 
+            int(args.camera) if args.camera.isdigit() else args.camera,
             size=(camera_width, camera_height))
     capture.run()
 

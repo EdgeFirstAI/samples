@@ -12,12 +12,19 @@ Specify `--camera <device>` to select a different camera device, 0.
 
 from argparse import ArgumentParser
 from typing import Union
+import time
 
 try:
     import cv2
     _OPENCV_AVAILABLE = True
 except ImportError:
     _OPENCV_AVAILABLE = False
+
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
 
 
 class OpenCVCapture:
@@ -31,6 +38,14 @@ class OpenCVCapture:
         if not self.cap.isOpened():
             raise RuntimeError(f"Cannot open camera {self.device_index}")
         self.window_available = self.has_display()
+
+        self.frame_count = 0
+        self.window_start = time.perf_counter()
+        self.fetch_fps = 0.0
+        self.cpu_percent = 0.0
+        self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
+        if self.process is not None:
+            self.process.cpu_percent(interval=None)
 
     @staticmethod
     def has_display() -> bool:
@@ -57,9 +72,21 @@ class OpenCVCapture:
             int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
             int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
         print("Press CTRL-C to stop")
+
         while True:
             # Capture frame-by-frame
             frame = self.on_new_sample()
+
+            self.frame_count += 1
+            elapsed = time.perf_counter() - self.window_start
+            if elapsed >= 1.0:
+                self.fetch_fps = self.frame_count / elapsed
+                self.frame_count = 0
+                self.window_start = time.perf_counter()
+                if self.process is not None:
+                    self.cpu_percent = self.process.cpu_percent(interval=None)
+            performance = f"CPU: {self.cpu_percent:.1f}%  FPS: {self.fetch_fps:.1f}"
+            print(performance, end="\r")
 
             if self.window_available:
                 cv2.imshow("Camera", frame)

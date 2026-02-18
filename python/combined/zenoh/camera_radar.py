@@ -112,9 +112,11 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
             colors.append([0, 255, 0])
             labels.append(box.label)
         centers.append(
-            (int(box.center_x * frame_size[0]), int(box.center_y * frame_size[1]))
+            (int(box.center_x * frame_size[0]),
+             int(box.center_y * frame_size[1]))
         )
-        sizes.append((int(box.width * frame_size[0]), int(box.height * frame_size[1])))
+        sizes.append(
+            (int(box.width * frame_size[0]), int(box.height * frame_size[1])))
     rr.log(
         "/camera/boxes",
         rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors),
@@ -146,7 +148,8 @@ def clusters_worker(msg):
         return
     max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+              for p in clusters]
     rr.log("/pointcloud/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -166,7 +169,9 @@ async def main_async(session):
         rrb.Grid(
             contents=[
                 rrb.Spatial2DView(origin="/camera", name="Camera Feed"),
-                rrb.Spatial3DView(origin="/pointcloud", name="Pointcloud Clusters"),
+                rrb.Spatial3DView(
+                    origin="/pointcloud",
+                    name="Pointcloud Clusters"),
             ]
         )
     )
@@ -216,7 +221,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

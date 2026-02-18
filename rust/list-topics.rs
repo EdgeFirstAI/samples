@@ -22,16 +22,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             break;
         }
 
-        // Ignore message if the topic is known otherwise save the topic
-        if topics.contains(msg.key_expr().as_str()) {
+        if msg.is_none() {
             continue;
         }
-        topics.insert(msg.key_expr().to_string());
+
+        // Ignore message if the topic is known otherwise save the topic
+        if topics.contains(msg.clone().expect("No messages found").key_expr().as_str()) {
+            continue;
+        }
+        topics.insert(msg.clone().expect("No messages found").key_expr().to_string());
 
         // Capture the message encoding MIME type then split on the first ';' to get the schema
-        let schema = msg.encoding().to_string();
+        let schema = msg.clone().expect("No messages found").encoding().to_string();
         let schema = schema.splitn(2, ';').last().unwrap_or_default();
-        println!("topic: {} → {}", msg.key_expr(), schema);
+        println!("topic: {} → {}", msg.clone().expect("No messages found").key_expr(), schema);
     }
 
     Ok(())

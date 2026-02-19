@@ -85,7 +85,9 @@ class OpenCVCapture:
                 self.window_start = time.perf_counter()
                 if self.process is not None:
                     self.cpu_percent = self.process.cpu_percent(interval=None)
-            performance = f"CPU: {self.cpu_percent:.1f}%  FPS: {self.fetch_fps:.1f}"
+            performance = f"CPU: {
+                self.cpu_percent:.1f}%  FPS: {
+                self.fetch_fps:.1f}"
             print(performance, end="\r")
 
             if self.window_available:

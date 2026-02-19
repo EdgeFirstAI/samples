@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import Detect
-from argparse import ArgumentParser
+"""
+Subscribes to the Zenoh topic 'rt/model/boxes2d' to fetch and visualize 2D bounding box detections.
+
+- Receives serialized Detect messages from EdgeFirst schemas
+- Uses Rerun for visualization of 2D boxes
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
-import rerun as rr
-import asyncio
-import time
 import threading
+import asyncio
+from argparse import ArgumentParser
+
+import zenoh
+import rerun as rr
+from edgefirst.schemas.edgefirst_msgs import Detect
 
 
 class MessageDrain:
@@ -86,7 +94,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

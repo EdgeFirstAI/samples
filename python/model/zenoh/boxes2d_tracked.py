@@ -1,15 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+"""
+Subscribes to a Zenoh topic (rt/model/boxes2d) to receive and visualize
+2D bounding box detections with tracking information.
+
+- Receives serialized Detect messages from EdgeFirst schemas
+- Uses Rerun for visualization of tracked 2D boxes
+- Supports remote or local Zenoh endpoints
+"""
+
+import sys
+import threading
+import asyncio
+from argparse import ArgumentParser
+
+import numpy as np
+import rerun as rr
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Detect
-from argparse import ArgumentParser
-import sys
-import rerun as rr
-import asyncio
-import time
-import numpy as np
-import threading
 
 
 class MessageDrain:
@@ -52,7 +61,8 @@ def boxes2d_worker(msg, boxes_tracked):
         centers.append((box.center_x, box.center_y))
         sizes.append((box.width, box.height))
     rr.log(
-        "boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors)
+        "boxes", rr.Boxes2D(centers=centers, sizes=sizes,
+                            labels=labels, colors=colors)
     )
 
 
@@ -61,7 +71,9 @@ async def boxes2d_handler(drain):
     while True:
         msg = await drain.get_latest()
 
-        thread = threading.Thread(target=boxes2d_worker, args=[msg, boxes_tracked])
+        thread = threading.Thread(
+            target=boxes2d_worker, args=[
+                msg, boxes_tracked])
         thread.start()
 
         while thread.is_alive():
@@ -102,7 +114,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

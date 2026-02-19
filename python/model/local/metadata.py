@@ -1,4 +1,17 @@
-# https://doc.edgefirst.ai/latest/models/metadata/
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
+"""
+Utilities for loading, parsing, and displaying model metadata from various formats (TFLite, ONNX, JSON, YAML).
+
+- Provides MetaData class for structured access and pretty-printing
+- Supports extracting metadata from model files and archives
+- Used for model inspection and validation in EdgeFirst workflows
+
+Metadata follows the same structure specified in the EdgeFirst documentation:
+https://doc.edgefirst.ai/latest/models/metadata/
+
+"""
 
 from typing import Union, Tuple, List
 from argparse import ArgumentParser
@@ -8,6 +21,7 @@ import ast
 import os
 
 import yaml
+
 
 class MetaData:
     def __init__(self, metadata: Union[dict, None]):
@@ -56,8 +70,8 @@ def load_tflite_metadata(
                 with zip_ref.open("labels.txt") as f:
                     labels_text = f.read().decode("utf-8")
                     labels = [line.rstrip()
-                                for line in labels_text.splitlines()
-                                if line not in ["\n", "", "\t"]]
+                              for line in labels_text.splitlines()
+                              if line not in ["\n", "", "\t"]]
             else:
                 print(
                     "[WARNING] - The model file does not contain the 'labels.txt'.")
@@ -66,7 +80,7 @@ def load_tflite_metadata(
 
 def load_onnx_metadata(
         model_path: str) -> Tuple[Union[dict, None], Union[List[str], None]]:
-    
+
     metadata = None
     labels = None
 
@@ -97,6 +111,7 @@ def load_onnx_metadata(
             ) from e
     return metadata, labels
 
+
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Model Metadata")
     parser.add_argument(
@@ -108,18 +123,20 @@ def main():
     args = parser.parse_args()
 
     if args.model:
-        if os.path.splitext(args.model)[1].lower()  == ".onnx":
+        if os.path.splitext(args.model)[1].lower() == ".onnx":
             metadata, labels = load_onnx_metadata(args.model)
         elif os.path.splitext(args.model)[1].lower() == ".tflite":
             metadata, labels = load_tflite_metadata(args.model)
         else:
-            print(f"[ERROR] - Unsupported model format {os.path.splitext(args.model)[1]}. ")
+            print(
+                f"[ERROR] - Unsupported model format {os.path.splitext(args.model)[1]}. ")
             return
-    
+
         print("Labels:", labels)
         metadata_obj = MetaData(metadata)
         metadata_obj.print()
         print(f"{metadata_obj.get_quick_metadata('outputs')=}")
+
 
 if __name__ == "__main__":
     main()

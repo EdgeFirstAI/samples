@@ -1,5 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
 """
-Implementations for the Non-Maximum Suppression (NMS) algorithms.
+Implements Non-Maximum Suppression (NMS) algorithms for object detection and instance segmentation.
+
+- Provides multiple NMS backends (TensorFlow, NumPy, Torch)
+- Supports bounding boxes, scores, and optional masks
+- Used for post-processing model outputs in EdgeFirst workflows
 """
 
 from typing import Tuple
@@ -421,3 +428,24 @@ def numpy_nms(
         order = order[inds + 1]
 
     return np.array(keep, dtype=np.int32)
+
+
+if __name__ == "__main__":
+
+    boxes = np.array([
+        [10, 10, 50, 50],   # Box 0 (high score)
+        [12, 12, 48, 48],   # Box 1 (overlaps heavily with box 0)
+        [60, 60, 100, 100],  # Box 2 (non-overlapping)
+    ], dtype=np.float32)
+    scores = np.array([0.95, 0.90, 0.80], dtype=np.float32)
+
+    boxes, classes, scores, _ = nms(
+        boxes=boxes,
+        scores=scores,
+        iou_threshold=0.70,
+        nms_type="numpy"
+    )
+
+    print("Boxes:", boxes)
+    print("Classes:", classes)
+    print("Scores:", scores)

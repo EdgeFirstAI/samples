@@ -1,14 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import ModelInfo
-import rerun as rr
-from argparse import ArgumentParser
+"""
+Subscribes to a Zenoh topic to fetch and display model information.
+
+- Receives serialized ModelInfo messages from EdgeFirst schemas
+- Uses Rerun for logging model name and type
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
-import time
-import asyncio
 import threading
+import asyncio
+from argparse import ArgumentParser
+
+import zenoh
+import rerun as rr
+from edgefirst.schemas.edgefirst_msgs import ModelInfo
 
 
 class MessageDrain:
@@ -36,7 +44,10 @@ def info_worker(msg):
     info = ModelInfo.deserialize(msg.payload.to_bytes())
     m_type = info.model_type
     m_name = info.model_name
-    rr.log("ModelInfo", rr.TextLog("Model Name: %s Model Type: %s" % (m_name, m_type)))
+    rr.log(
+        "ModelInfo", rr.TextLog(
+            "Model Name: %s Model Type: %s" %
+            (m_name, m_type)))
 
 
 async def info_handler(drain):
@@ -83,7 +94,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

@@ -1,7 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
+"""
+Image and tensor transformation utilities for model preprocessing
+and postprocessing in EdgeFirst workflows.
+
+- Includes box format conversions, mask cropping, dequantization,
+and YOLO output decoding
+- Used for preparing model inputs and interpreting outputs
+"""
 
 from typing import Tuple, Union
 
 import numpy as np
+
 
 def xcycwh2xyxy(boxes: np.ndarray) -> np.ndarray:
     return np.concatenate([
@@ -20,7 +32,7 @@ def crop_masks(
     r = np.arange(w, dtype=boxes.dtype)[None, None, :]  # rows shape(1,1,w)
     c = np.arange(h, dtype=boxes.dtype)[None, :, None]  # cols shape(1,h,1)
 
-    cropped = masks * ((r >= x1 * w) * (r < x2 * w) 
+    cropped = masks * ((r >= x1 * w) * (r < x2 * w)
                        * (c >= y1 * h) * (c < y2 * h))
     return cropped
 

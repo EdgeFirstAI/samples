@@ -132,12 +132,14 @@ class GStreamerInference(LetterboxGStreamerCapture):
 
                     end_pipeline = time.perf_counter() - start_pipeline
                     if self.process is not None:
-                        self.cpu_percent = self.process.cpu_percent(interval=None)
+                        self.cpu_percent = self.process.cpu_percent(
+                            interval=None)
                     performance = f"CPU: {
                         self.cpu_percent:.2f}% | End2End Latency: {
                         end_pipeline * 1000:.2f} ms"
 
-                    GLib.idle_add(self.cairo_window.update_frame, n, performance)
+                    GLib.idle_add(
+                        self.cairo_window.update_frame, n, performance)
                     if self.cairo_window.closed:
                         return True
         finally:
@@ -188,13 +190,13 @@ class OpenCVInference(LetterboxOpenCVCapture):
                     )
                 cv2.putText(
                     frame,
-                    f"{self.runner.labels[classes[i]] if 
+                    f"{self.runner.labels[classes[i]] if
                        self.runner.labels is not None else classes[i]}: {
                            scores[i]:.2f}",
                     (boxes[i, 0], boxes[i, 1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
                 )
-            
+
             end_pipeline = time.perf_counter() - start_pipeline
             if self.process is not None:
                 self.cpu_percent = self.process.cpu_percent(interval=None)

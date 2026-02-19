@@ -1,16 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import zenoh
-from edgefirst.schemas.edgefirst_msgs import Mask
-from argparse import ArgumentParser
+"""
+Subscribes to a Zenoh topic to fetch and visualize compressed output masks.
+
+- Receives serialized Mask messages from EdgeFirst schemas
+- Decompresses mask data using zstd
+- Uses Rerun for visualization
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
-import rerun as rr
-import asyncio
-import time
 import threading
+import asyncio
+from argparse import ArgumentParser
+
 import zstd
 import numpy as np
+import zenoh
+import rerun as rr
+from edgefirst.schemas.edgefirst_msgs import Mask
 
 
 class MessageDrain:
@@ -94,7 +103,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

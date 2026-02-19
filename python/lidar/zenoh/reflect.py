@@ -1,15 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import numpy as np
-import rerun as rr
-import zenoh
+"""
+Subscribes to Zenoh topics to fetch and visualize LiDAR reflectivity images.
+
+- Receives Image messages from EdgeFirst schemas
+- Processes mono8-encoded reflectivity images for visualization in Rerun
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
-import asyncio
-import time
-from argparse import ArgumentParser
-from edgefirst.schemas.sensor_msgs import Image
 import threading
+import asyncio
+from argparse import ArgumentParser
+
+import numpy as np
+import zenoh
+import rerun as rr
+from edgefirst.schemas.sensor_msgs import Image
 
 
 class MessageDrain:
@@ -40,7 +48,11 @@ def reflect_worker(msg):
         return
 
     data = (
-        np.array(reflect.data).reshape((reflect.height, reflect.width)).astype(np.uint8)
+        np.array(
+            reflect.data).reshape(
+            (reflect.height,
+             reflect.width)).astype(
+            np.uint8)
     )
     rr.log("lidar/depth", rr.Image(data))
 
@@ -89,7 +101,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

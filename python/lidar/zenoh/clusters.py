@@ -1,15 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import rerun as rr
-import zenoh
-from argparse import ArgumentParser
-from edgefirst.schemas import turbo_colormap, colormap, decode_pcd
-from edgefirst.schemas.sensor_msgs import PointCloud2
-import asyncio
-import time
+"""
+Subscribes to Zenoh topics to fetch and visualize LiDAR cluster data.
+
+- Receives PointCloud2 messages from EdgeFirst schemas
+- Decodes and colors clusters for visualization in Rerun
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
 import threading
+import asyncio
+from argparse import ArgumentParser
+
+import zenoh
+import rerun as rr
+from edgefirst.schemas import turbo_colormap, colormap, decode_pcd
+from edgefirst.schemas.sensor_msgs import PointCloud2
 
 
 class MessageDrain:
@@ -40,7 +48,8 @@ def clusters_worker(msg):
         return
     max_id = max(p.cluster_id for p in clusters)
     pos = [[p.x, p.y, p.z] for p in clusters]
-    colors = [colormap(turbo_colormap, p.cluster_id / max_id) for p in clusters]
+    colors = [colormap(turbo_colormap, p.cluster_id / max_id)
+              for p in clusters]
     rr.log("lidar/clusters", rr.Points3D(pos, colors=colors))
 
 
@@ -88,7 +97,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

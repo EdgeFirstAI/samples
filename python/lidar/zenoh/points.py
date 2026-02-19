@@ -1,15 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-import rerun as rr
-import zenoh
+"""
+Subscribes to Zenoh topics to fetch and visualize LiDAR point cloud data.
+
+- Receives PointCloud2 messages from EdgeFirst schemas
+- Decodes and visualizes point clouds in Rerun
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
+import threading
 import asyncio
-import time
 from argparse import ArgumentParser
+
+import zenoh
+import rerun as rr
 from edgefirst.schemas import decode_pcd
 from edgefirst.schemas.sensor_msgs import PointCloud2
-import threading
 
 
 class MessageDrain:
@@ -82,7 +90,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

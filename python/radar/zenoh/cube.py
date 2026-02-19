@@ -1,15 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-from argparse import ArgumentParser
-import numpy as np
-import rerun as rr
-import zenoh
+"""
+Subscribes to Zenoh topics to fetch and visualize radar cube data.
+
+- Receives RadarCube messages from EdgeFirst schemas
+- Processes and visualizes radar cube tensors in Rerun
+- Supports both remote and local Zenoh endpoints
+"""
+
 import sys
-import asyncio
-import time
-from edgefirst.schemas.edgefirst_msgs import RadarCube
 import threading
+import asyncio
+from argparse import ArgumentParser
+
+import numpy as np
+import zenoh
+import rerun as rr
+from edgefirst.schemas.edgefirst_msgs import RadarCube
 
 
 class MessageDrain:
@@ -36,7 +44,15 @@ def cube_worker(msg):
     data = np.array(radar_cube.cube).reshape(radar_cube.shape)
     # Take the absolute value of the data to improve visualization.
     data = np.abs(data)
-    rr.log("radar/cube", rr.Tensor(data, dim_names=["SEQ", "RANGE", "RX", "DOPPLER"]))
+    rr.log(
+        "radar/cube",
+        rr.Tensor(
+            data,
+            dim_names=[
+                "SEQ",
+                "RANGE",
+                "RX",
+                "DOPPLER"]))
 
 
 async def cube_handler(drain):
@@ -83,7 +99,8 @@ def main():
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)

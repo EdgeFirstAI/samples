@@ -4,12 +4,10 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
-use edgefirst::image::{TensorImage, ImageConverter, RGB};
-use edgefirst::image::ImageConverterTrait;
-use edgefirst::tensor::{Tensor, TensorMemory, TensorMapTrait, TensorTrait};
-use edgefirst::tensor::Error as TensorError;
-use edgefirst::image::{Rotation, Flip, Crop};
-use edgefirst::decoder::Decoder as EFDecoder;
+use edgefirst_hal::image::{TensorImage, ImageProcessor, RGB};
+use edgefirst_hal::image::ImageProcessorTrait;
+use edgefirst_hal::tensor::{Tensor, TensorMemory, TensorTrait};
+use edgefirst_hal::image::{Rotation, Flip, Crop};
 use openh264::decoder::Decoder;
 use openh264::formats::YUVSource;
 use openh264::nal_units;
@@ -55,8 +53,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let tensor_image = TensorImage::from_tensor(tensor, RGB)
                 .map_err(|e| format!("Failed to create TensorImage: {:?}", e))?;
             // println!("Created TensorImage of size {}x{}", tensor_image.width(), tensor_image.height());
-            let mut converter = ImageConverter::new()
-                .map_err(|e| format!("Failed to create ImageConverter: {:?}", e))?;
+            let mut converter = ImageProcessor::new()
+                .map_err(|e| format!("Failed to create ImageProcessor: {:?}", e))?;
             let mut dst = TensorImage::new(1920, 1080, RGB, None)
                 .map_err(|e| format!("Failed to create destination TensorImage: {:?}", e))?;
             converter.convert(&tensor_image, &mut dst, Rotation::Rotate180, Flip::None, Crop::default())

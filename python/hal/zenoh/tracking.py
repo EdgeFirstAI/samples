@@ -243,14 +243,14 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                     # Use HAL decoder for YOLO output
                     boxes, scores, class_ids = ef.Decoder.decode_yolo_det(
                         predictions.squeeze(),
-                        anchors=(0.0040811873, -123),
-                        confidence_threshold=CONFIDENCE_THRESHOLD,
-                        nms_threshold=NMS_THRESHOLD,
+                        quant_boxes=(0.0040811873, -123),
+                        score_threshold=CONFIDENCE_THRESHOLD,
+                        iou_threshold=NMS_THRESHOLD,
                         max_boxes=MAX_DETECTIONS,
                     )
 
-                    tracked_objects = tracker.update(
-                        boxes, scores, class_ids, time.time())
+                    # tracked_objects = tracker.update(
+                    #     boxes, scores, class_ids, time.time())
 
                     # Convert boxes to normalized coordinates and track
                     detections = []
@@ -356,8 +356,8 @@ async def main_async(session, args):
     print(f"Model loaded. Input: {input_name}")
 
     # Initialize tracker
-    # tracker = SimpleTracker()
-    tracker = ef.ByteTrack()
+    tracker = SimpleTracker()
+    # tracker = ef.ByteTrack()
 
     print("Zenoh session opened")
 

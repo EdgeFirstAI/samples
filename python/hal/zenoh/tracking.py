@@ -24,7 +24,6 @@ from argparse import ArgumentParser
 import io
 import sys
 import threading
-import time
 
 import av
 import numpy as np

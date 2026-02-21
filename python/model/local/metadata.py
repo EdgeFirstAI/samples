@@ -135,8 +135,10 @@ def main():
         print("Labels:", labels)
         metadata_obj = MetaData(metadata)
         metadata_obj.print()
-        print(f"{metadata_obj.get_quick_metadata('outputs')=}")
 
-
+        outputs = metadata_obj.get_quick_metadata('outputs')
+        for i, o in enumerate(outputs):
+            print(f"Output {i}: {o}\n")
+            
 if __name__ == "__main__":
     main()

@@ -4,56 +4,16 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![EdgeFirst Studio](https://img.shields.io/badge/EdgeFirst-Studio-green)](https://edgefirst.studio)
 
-**Ready-to-run examples for working with EdgeFirst Perception Middleware topics.**
+**Ready-to-run examples for working with the end-to-end EdgeFirst pipeline and EdgeFirst Perception Middleware topics.**
 
-This repository provides sample applications demonstrating how to subscribe to and process topics from **EdgeFirst Perception Middleware**—a modular edge AI platform for vision, LiDAR, radar, and sensor fusion on embedded Linux devices.
+This repository contains sample applications that demonstrate the complete EdgeFirst pipeline — from sensor capture and model inference to visualization of results.
+
+The examples are divided into "local" and "zenoh" applications:
+
+* Local applications run natively on the device. They use either [GStreamer](https://gstreamer.freedesktop.org/) or [OpenCV](https://opencv.org/) to capture camera input, load and execute the model for inference, and render the output in a display window.
+* Zenoh applications demonstrate how to subscribe to and process topics published by the EdgeFirst Perception Middleware — a modular edge AI platform for vision, LiDAR, radar, and sensor fusion available on EdgeFirst Platforms. These examples use [Zenoh](https://zenoh.io/) for data transport and [Rerun](https://rerun.io/) for visualization.
 
 **Quick Links:** [Developer Guide](https://doc.edgefirst.ai/latest/perception/) • [Latest Release](https://github.com/EdgeFirstAI/samples/releases/latest) • [Contributing](CONTRIBUTING.md)
-
----
-
-## Quick Start
-
-### Download Pre-Built Binaries
-
-Download the ZIP file for your platform from the [latest release](https://github.com/EdgeFirstAI/samples/releases/latest):
-
-| Platform                | Download                               |
-|-------------------------|----------------------------------------|
-| **Linux x86_64**        | `edgefirst-samples-linux-x86_64.zip`   |
-| **Linux aarch64**       | `edgefirst-samples-linux-aarch64.zip`  |
-| **macOS Intel**         | `edgefirst-samples-macos-x86_64.zip`   |
-| **macOS Apple Silicon** | `edgefirst-samples-macos-aarch64.zip`  | 
-| **Windows x86_64**      | `edgefirst-samples-windows-x86_64.zip` |
-
-Extract the archive and navigate to the directory:
-
-```bash
-unzip edgefirst-samples-linux-x86_64.zip
-cd edgefirst-samples-linux-x86_64
-```
-
-### Running the Samples
-
-All samples support both **local** (on-device) and **remote** (over network) connections:
-
-```bash
-# Local mode - auto-discovers topics on EdgeFirst device
-./list-topics
-
-# Remote mode - connect to EdgeFirst device at specific IP
-./list-topics --remote 192.168.1.100:7447
-```
-
-> **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
-
-For python equivalent commands, first follow the [prerequisites](#prerequisites) for creating and activating a virtual environment and installing the python requirements to run the commands.
-
-```bash
-python ../python/list-topics.py
-
-python ../python/list-topics.py --remote 192.168.1.100:7447
-```
 
 ---
 
@@ -87,7 +47,142 @@ graph LR
     zenoh --> apps[Your Applications]
 ```
 
-These samples demonstrate how to subscribe to EdgeFirst Perception topics, deserialize messages, and process sensor data in your own applications.
+These "zenoh" samples demonstrate how to subscribe to EdgeFirst Perception topics, deserialize messages, and process sensor data in your own applications.
+
+---
+
+## Building from Source
+
+> Note: the following build instructions were tested using WSL2 with Ubuntu 5.15.
+
+### Prerequisites
+
+**Python:**
+
+> Note: when running the "local" examples, skip these steps since all the libraries needed are already part of the device's BSP. If you plan to use the "zenoh" examples in your PC, proceed to the instructions below.
+
+1. For the running the Python "zenoh" examples first install [Python 3.10 or higher](https://www.python.org/downloads/)
+
+2. Once installed, create and activate a [Python virtual environment](https://docs.python.org/3/library/venv.html) and install the requirements
+
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+**Rust:**
+
+1. For building the Rust applications, first install [Rust](https://rust-lang.org/learn/get-started/)
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+2. If you have Rust already installed, update to the latest version
+
+```bash
+sudo apt update && apt upgrade
+rustup update
+```
+
+### Clone and Build
+
+```bash
+git clone https://github.com/EdgeFirstAI/samples.git
+cd samples
+
+# Build all Rust examples (release mode)
+cargo build --release --all-targets
+
+# Build with Rerun visualization support
+cargo build --release --all-targets --features rerun
+
+# Run any example
+cargo run --bin list-topics --release
+
+# Python examples (no build required)
+python python/list-topics.py
+```
+
+### Building for Specific Targets
+
+```bash
+# Linux aarch64 cross-compilation
+sudo apt install build-essential
+sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+rustup target add aarch64-unknown-linux-gnu
+RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" cargo build --release --target aarch64-unknown-linux-gnu
+
+# macOS Apple Silicon - requires a MAC machine to build
+cargo build --release --target aarch64-apple-darwin
+
+# Windows
+sudo apt install mingw-w64
+rustup target add x86_64-pc-windows-gnu
+cargo build --release --target x86_64-pc-windows-gnu
+```
+
+## Quick Start
+
+### Download Pre-Built Binaries
+
+Download the ZIP file for your platform from the [latest release](https://github.com/EdgeFirstAI/samples/releases/latest):
+
+| Platform                | Download                               |
+|-------------------------|----------------------------------------|
+| **Linux x86_64**        | `edgefirst-samples-linux-x86_64.zip`   |
+| **Linux aarch64**       | `edgefirst-samples-linux-aarch64.zip`  |
+| **macOS Intel**         | `edgefirst-samples-macos-x86_64.zip`   |
+| **macOS Apple Silicon** | `edgefirst-samples-macos-aarch64.zip`  | 
+| **Windows x86_64**      | `edgefirst-samples-windows-x86_64.zip` |
+
+Extract the archive and navigate to the directory:
+
+```bash
+unzip edgefirst-samples-linux-x86_64.zip
+cd edgefirst-samples-linux-x86_64
+```
+
+### Running the Samples
+
+#### Required setup (WSL)
+
+> **Note**  
+> WSL does not provide a native Linux display server by default.  
+> If you plan to run the `zenoh` examples inside WSL, you must configure WSL with a working display backend (e.g., WSLg with GPU support).
+
+Install the necessary graphics utilities:
+
+```bash
+sudo apt install mesa-utils vulkan-tools
+```
+
+If needed, force Vulkan as the rendering backend:
+
+```bash
+export WGPU_BACKEND=vulkan
+```
+
+All samples support both **local** (on-device) and **remote** (over network) connections:
+
+```bash
+# Local mode - auto-discovers topics on EdgeFirst device
+./list-topics
+
+# Remote mode - connect to EdgeFirst device at specific IP
+./list-topics --remote 192.168.1.100:7447
+```
+
+> **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
+
+For python equivalent commands, first follow the [prerequisites](#prerequisites) for creating and activating a virtual environment and installing the python requirements to run the commands.
+
+```bash
+python ../python/list-topics.py
+
+python ../python/list-topics.py --remote 192.168.1.100:7447
+```
 
 ---
 
@@ -462,71 +557,6 @@ Alternative integrations:
 - **EdgeFirst Studio:** Publish recordings for MLOps workflows → [Platform](https://doc.edgefirst.ai/develop/platforms/publishing/)
 - **Maivin WebUI:** JavaScript/HTML interface → [GitHub](https://github.com/MaivinAI/webui)
 
-## Python QuickStart
-
-**Python:**
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-## Building from Source
-
-### Prerequisites
-
-**Rust:**
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-**Python:**
-```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Clone and Build
-
-```bash
-git clone https://github.com/EdgeFirstAI/samples.git
-cd samples
-
-# Build all Rust examples (release mode)
-cargo build --release --all-targets
-
-# Build with Rerun visualization support
-cargo build --release --all-targets --features rerun
-
-# Run any example
-cargo run --bin list-topics --release
-
-# Python examples (no build required)
-python python/list_topics.py
-```
-
-### Building for Specific Targets
-
-```bash
-# Linux aarch64 cross-compilation
-rustup target add aarch64-unknown-linux-gnu
-cargo build --release --target aarch64-unknown-linux-gnu
-
-# macOS Apple Silicon
-cargo build --release --target aarch64-apple-darwin
-
-# Windows
-cargo build --release --target x86_64-pc-windows-msvc
-```
-
-## Documentation
-
-- **[Architecture Guide](ARCHITECTURE.md)** - In-depth technical overview
-- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute
-- **[Security Policy](SECURITY.md)** - Vulnerability reporting
-- **[EdgeFirst Developer Guide](https://doc.edgefirst.ai/develop/perception/dev/)** - Official documentation
-- **[Platform Documentation](https://doc.edgefirst.ai/develop/platforms/)** - Supported platforms
 
 ## Examples Overview
 
@@ -541,6 +571,14 @@ cargo build --release --target x86_64-pc-windows-msvc
 | **Fusion** | `fusion-boxes3d`, `fusion-occupancy`, `fusion-lidar`, `fusion-radar`, `fusion-model-output` | `fusion/boxes3d.py`, `fusion/occupancy.py`, `fusion/lidar.py` | Multi-sensor integration |
 | **Navigation** | `imu`, `gps` | `imu.py`, `gps.py` | Inertial and positioning data |
 
+## Extra Reading Material
+
+- **[Architecture Guide](ARCHITECTURE.md)** - In-depth technical overview
+- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute
+- **[Security Policy](SECURITY.md)** - Vulnerability reporting
+- **[EdgeFirst Developer Guide](https://doc.edgefirst.ai/latest/perception/dev/)** - Official documentation
+- **[Platform Documentation](https://doc.edgefirst.ai/latest/platforms/)** - Supported platforms
+
 ## Support
 
 ### Community Resources
@@ -554,7 +592,7 @@ cargo build --release --target x86_64-pc-windows-msvc
 
 - **[EdgeFirst Studio](https://edgefirst.studio):** MLOps platform for edge AI model deployment
 - **[EdgeFirst Modules](https://doc.edgefirst.ai/):** Pre-built perception modules
-- **Hardware Platforms:**
+- **[Hardware Platforms](https://doc.edgefirst.ai/latest/platforms/):**
   - **Maivin:** Edge AI development platform
   - **Raivin:** Automotive-grade edge AI platform
 
@@ -599,7 +637,11 @@ Third-party dependencies are listed in [NOTICE](NOTICE) with their respective li
 Built with:
 - [Zenoh](https://zenoh.io/) - High-performance pub/sub middleware
 - [Rerun](https://rerun.io/) - Visualization framework
+- [GStreamer](https://gstreamer.freedesktop.org/) - Pipeline-based multimedia framework
+- [OpenCV](https://opencv.org/) - Open source computer vision
+- [Ultralytics](https://www.ultralytics.com/) - Open source AI framework for training YOLO models
 - [Rust](https://www.rust-lang.org/) - Systems programming language
+- [Python](https://www.python.org/) - General purpose programming language
 - The EdgeFirst team and open source contributors
 
 ---

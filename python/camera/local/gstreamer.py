@@ -153,12 +153,12 @@ class GStreamerCapture:
         performance = f"CPU: {
             self.cpu_percent:.1f}%  FPS: {
             self.fetch_fps:.1f}"
+        print(performance, end="\r")
+        
         if self.use_cairo and self.cairo_window is not None:
             GLib.idle_add(self.cairo_window.update_frame, frame)
             if self.cairo_window.closed:
                 return True
-
-        print(performance, end="\r")
         return False
 
     def on_error(self, bus, msg):

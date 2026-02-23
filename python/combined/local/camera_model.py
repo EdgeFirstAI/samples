@@ -37,7 +37,7 @@ import edgefirst_hal as ef
 from python.hal.local.letterbox import (LetterboxGStreamerCapture,
                                         LetterboxOpenCVCapture,
                                         hal_letterbox, CONVERTER)
-from python.model.local.tflite import TFLiteRunner
+from python.model.local.tflite import HALRunner, OpenCVRunner
 
 
 class GStreamerInference(LetterboxGStreamerCapture):
@@ -49,16 +49,11 @@ class GStreamerInference(LetterboxGStreamerCapture):
         iou: float = 0.50,
         max_boxes: int = 300
     ):
-        self.runner = TFLiteRunner(
+        self.runner = HALRunner(
             model_path=model_path,
             score=score,
             iou=iou,
             max_boxes=max_boxes
-        )
-        self.decoder = ef.Decoder(
-            self.runner.metadata,
-            score_threshold=self.runner.score,
-            iou_threshold=self.runner.iou
         )
         super().__init__(camera, size=self.runner.input_shape)
 
@@ -78,7 +73,7 @@ class GStreamerInference(LetterboxGStreamerCapture):
         outputs = [self.runner.model.get_tensor(output["index"])
                    for output in self.runner.output_details]
 
-        boxes, scores, classes, masks = self.decoder.decode(
+        boxes, scores, classes, masks = self.runner.decoder.decode(
             outputs, max_boxes=self.runner.max_boxes
         )
 
@@ -158,7 +153,7 @@ class OpenCVInference(LetterboxOpenCVCapture):
         iou: float = 0.50,
         max_boxes: int = 300
     ):
-        self.runner = TFLiteRunner(
+        self.runner = OpenCVRunner(
             model_path=model_path,
             score=score,
             iou=iou,
@@ -166,10 +161,34 @@ class OpenCVInference(LetterboxOpenCVCapture):
         )
         super().__init__(camera, size=self.runner.input_shape, method=method)
 
+    def inference(self, input_tensor):
+        # For quantized models, run input quantization parameters.
+        if self.runner.input_quantization is not None:
+            if self.runner.input_type == np.int8:
+                scale, zero_point = self.runner.input_quantization
+                # Apply proper INT8 quantization: quantized = round(normalized / scale) + zero_point
+                # First normalize to [0, 1] range, then quantize
+                normalized = input_tensor.astype(np.float32) / 255.0
+                quantized = np.round(
+                    normalized / scale).astype(np.int32) + zero_point
+                input_tensor = np.clip(quantized, -128, 127).astype(np.int8)
+
+        input_tensor = input_tensor[None]
+        # Directly copy the input tensor into the model for TFLite.
+        if self.runner.input_tensor is not None:
+            np.copyto(self.runner.input_tensor(), input_tensor)
+
+        self.runner.model.invoke()
+
+        outputs = [self.runner.model.get_tensor(output["index"])
+                   for output in self.runner.output_details]
+
+        return self.runner.decode_outputs(outputs)
+
     def on_new_sample(self):
         start_pipeline = time.perf_counter()
         frame = super().on_new_sample()
-        boxes, classes, scores, masks = self.runner.inference(frame)
+        boxes, classes, scores, masks = self.inference(frame)
         height, width, _ = frame.shape
 
         # Denormalize box coordinates
@@ -207,6 +226,7 @@ class OpenCVInference(LetterboxOpenCVCapture):
                 frame, performance, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                 (0, 255, 0), 2, cv2.LINE_AA,
             )
+
         return frame
 
 

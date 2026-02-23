@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rr_box =
         rerun::Boxes3D::from_half_sizes([(0.5, 0.5, 0.5)]).with_fill_mode(rerun::FillMode::Solid);
     rr.log("box", &rr_box)?;
-    rr.log("box", &rerun::Transform3D::default().with_axis_length(2.0))?;
+    rr.log("box", &rerun::TransformAxes3D::default().with_axis_length(2.0))?;
 
     while let Ok(msg) = subscriber.recv() {
         let imu: IMU = cdr::deserialize(&msg.payload().to_bytes())?;

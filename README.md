@@ -129,11 +129,23 @@ cargo build --release --target x86_64-pc-windows-gnu
 
 Local examples are run in the device to demonstrate how the end-to-end EdgeFirst pipeline is run on target. Currently the local examples are written in Python (*Rust is coming soon*).
 
-Start by copying the examples on target using SCP.
+1. If you haven't already, clone the repository.
+
+```bash
+git clone https://github.com/EdgeFirstAI/samples.git
+```
+
+2. Start by copying the samples directory onto the device such as an [i.MX 8M Plus EVK](https://www.nxp.com/products/i.MX8MPLUS) using SCP.
 
 ```bash
 scp -r ./samples <username>@192.168.1.100:~/
 ```
+
+> Note: Replace 192.168.1.100 with your device's IP.
+
+3. SSH into the device and cd into the samples directory with `cd samples`.
+
+> Note: For the following applications press CTRL-C on your keyboard to stop.
 
 ### 📷 **1. Stream Camera and Display** 
 
@@ -146,39 +158,49 @@ scp -r ./samples <username>@192.168.1.100:~/
 1. Using GStreamer pipelines to stream from the camera
 
 ```bash
-python python/camera/local/gstreamer.py --camera=/dev/video3
+python3 python/camera/local/gstreamer.py --camera=/dev/video3
 ```
 
 2. Using OpenCV to stream from the camera
 
 ```bash
-python python/camera/local/opencv.py --camera=0
+python3 python/camera/local/opencv.py --camera=/dev/video3
 ```
 
-> Note: For more information please [README.md](python/camera/README.md)
+**What You'll See:**
+- Live camera stream from the monitor
+- For opencv.py you will see the CPU usage and the FPS performance `CPU: 43.6%  FPS: 30.0` on the terminal
+- For gstreamer.py when enabling `--use-cairo` you will see the CPU usage and the FPS performance `CPU: 46.5%  FPS: 30.0` on the terminal. Otherwise, waylandsink is used in the pipeline, which prevents FPS from being calculated and displayed
 
+> Note: For more information please [README.md](python/camera/README.md)
 
 ### 🤖 **2. Model Inference and Display Detections** 
 
 **Purpose:** Demonstrate reading from the camera and invoke the model for inference and display the outputs on the monitor using either GStreamer or OpenCV.
 
-**Source Code:** Rust(*coming soon*) • [Python](python/combined/local)
+**Source Code:** Rust(*coming soon*) • [Python](python/combined/local/camera_model.py)
 
 **Usage:**
 
 > Note: This example currently only supports quantized Ultralytics TFLite models.
 
-1. Using GStreamer pipelines to stream from the camera and HAL to invoke the model for inference
+1. Using GStreamer pipelines to stream from the camera and HAL to invoke the model for inference (default)
 
 ```bash
-python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=hal
+python3 -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 
 ```
 
 2. Using OpenCV to stream from the camera and invoke the model for inference
 
 ```bash
-python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=0 --method=opencv
+python3 -m python.combined.local.camera_model --model /path/my/model.tflite --camera=0 --method=opencv
 ```
+
+**What You'll See:**
+- Live camera stream from the monitor with bounding boxes and/or masks around objects detected by the model.
+- Performance overlays on the top left corner showing CPU usage and end-to-end latency in milliseconds.
+
+![Sample Output](images/camera_model_output.jpg)
 
 > Note: For more information please [README.md](python/combined/README.md)
 
@@ -214,6 +236,14 @@ python -m python.hal.local.letterbox -s 640x640
 python -m python.hal.local.letterbox -m opencv -s 640x640
 ```
 
+**What You'll See:**
+- Live camera stream from the monitor with the frame size set to the size specified.
+- You will see CPU usage and FPS performance `CPU: 147.4%  FPS: 60.1` on the terminal
+
+| Resized | Letterbox |
+|---------|-----------|
+| ![Resized Capture](images/resize_opencv_output.jpg) | ![Letterbox Capture](images/letterbox_opencv_output.jpg) |
+
 > Note: For more information please [README.md](python/hal/README.md)
 
 ### 🤖 **4. Single Image Model Inference** 
@@ -229,14 +259,26 @@ python -m python.hal.local.letterbox -m opencv -s 640x640
 1. Using HAL to load the image and decode model outputs
 
 ```bash
-python -m python.model.local.tflite --model-path /path/to/model.tflite --image /path/to/image.jpg
+python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg
 ```
 
 2. Using OpenCV to load the image and decode model outputs
 
 ```bash
-python -m python.model.local.tflite --model-path /path/to/model.tflite --image /path/to/image.jpg --method opencv
+python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg --method opencv
 ```
+
+**What You'll See:**
+- A list of found objects printed on the terminal as shown below
+  ```bash
+  Found objects: 3
+  - coffeecup: score=0.985 box=[0.02500000037252903, 0.26249998807907104, 0.29374998807907104, 0.48124998807907104]
+  - coffeecup: score=0.985 box=[0.4124999940395355, 0.2874999940395355, 0.612500011920929, 0.48750001192092896]
+  - coffeecup: score=0.985 box=[0.20000000298023224, 0.42500001192092896, 0.5375000238418579, 0.6625000238418579]
+  ```
+- When `--save` option is set, an image file will be saved on disk with the output visualizations as shown below.
+
+![Sample Output](images/sample-coffee-cup-output.jpg) 
 
 > Note: For more information please [README.md](python/model/README.md)
 
@@ -251,16 +293,37 @@ python -m python.model.local.tflite --model-path /path/to/model.tflite --image /
 1. Extract TFLite metadata
 
 ```bash
-python python/model/local/metadata.py --model-path /path/to/model.tflite
+python python/model/local/metadata.py --model /path/to/model.tflite
 ```
 
 2. Extract ONNX metadata
 
 ```bash
-python python/model/local/metadata.py --model-path /path/to/model.onnx
+python python/model/local/metadata.py --model /path/to/model.onnx
 ```
 
-> Note: For more information please [README.md](python/model/README.md)
+**What You'll See:**
+- The contents of the metadata will be printed on the terminal.
+  ```bash
+  Labels: ['coffeecup']
+  Model Metadata:
+  - host:
+          studio_server:
+          session: t-2432
+          username: sebastien
+  - dataset:
+          name:
+          id: ds-d06
+          classes: ['coffeecup']
+  - deployment:
+          name: coffeecup-yolov8n-seg-rgb
+          description:
+          author: AuZone Technologies Inc
+          model_name: coffeecup-yolov8n-seg-rgb-t-2432
+  ...
+  ```
+
+> Note: For more information on how the Model Metadata is formatted, see our [documentation](https://doc.edgefirst.ai/latest/models/metadata/)
 
 ---
 
@@ -317,9 +380,9 @@ All samples support both **local** (on-device) and **remote** (over network) con
 2. Python CLI
 
 ```bash
-python python/list-topics.py
+python3 python/list-topics.py # Local mode
 
-python python/list-topics.py --remote 192.168.1.100:7447
+python python/list-topics.py --remote 192.168.1.100:7447 # Remote mode
 ```
 
 > **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
@@ -349,7 +412,7 @@ This is the simplest starting point—it connects to the Zenoh network and lists
 2. Python CLI
 
 ```bash
-python python/list-topics.py
+python3 python/list-topics.py
 
 python python/list-topics.py --remote 192.168.1.100:7447
 ```
@@ -381,19 +444,34 @@ This is the **most comprehensive example**, showcasing EdgeFirst's edge vision c
 1. Rust CLI
 
 ```bash
-# Run with Rerun visualization (recommended)
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./mega-sample
 
-# Remote connection
+# Run on the PC with a monitor and establish a remote connection with the device.
 ./mega-sample --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
-python python/combined/zenoh/mega_sample.py
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
+python3 python/combined/zenoh/mega_sample.py
 
+# Run on the PC with a monitor and establish a remote connection with the device.
 python python/combined/zenoh/mega_sample.py --remote 192.168.1.100:7447
+```
+
+As an alternative, if your device is not connected to a monitor, you can direct the visualization towards your PC's monitor by setting up a proxy server.
+
+Run the following command in your PC. You should get the following URL link in the form: `rerun+http://<PC IP address>:9876/proxy`
+```bash
+rerun --bind <PC IP address>
+```
+
+Run the following command in your device.
+```bash
+# python3 python/combined/zenoh/mega_sample.py --connect --url rerun+http://<PC IP address>:9876/proxy
+./mega-sample --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 **What You'll See:**
@@ -425,13 +503,28 @@ This example shows the **power of running vision models at the edge**—low-late
 1. Rust CLI
 
 ```bash
-./camera-dma  # Must run on EdgeFirst device
+# The following must be run on an EdgeFirst device. This requires a monitor connected to the device.
+./camera-dma 
 ```
 
 2. Python CLI
 
 ```bash
-python python/camera/zenoh/dma.py
+# The following must be run on an EdgeFirst device. This requires a monitor connected to the device.
+python3 python/camera/zenoh/dma.py
+```
+
+As an alternative, if your device is not connected to a monitor, you can direct the visualization towards your PC's monitor by setting up a proxy server.
+
+Run the following command in your PC. You should get the following URL link in the form: `rerun+http://<PC IP address>:9876/proxy`
+```bash
+rerun --bind <PC IP address>
+```
+
+Run the following command in your device.
+```bash
+# python3 python/camera/zenoh/dma.py --connect --url rerun+http://<PC IP address>:9876/proxy
+./camera-dma  --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 #### Camera H.264 Stream

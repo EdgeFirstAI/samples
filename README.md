@@ -471,7 +471,7 @@ rerun --bind <PC IP address>
 Run the following command in your device.
 ```bash
 # python3 python/combined/zenoh/mega_sample.py --connect --url rerun+http://<PC IP address>:9876/proxy
-./mega-sample --connect --url rerun+http://<PC IP address>:9876/proxy
+./mega-sample --connect rerun+http://<PC IP address>:9876/proxy
 ```
 
 **What You'll See:**
@@ -480,6 +480,8 @@ Run the following command in your device.
 - Segmentation overlay showing classified regions
 - 3D point cloud with fused sensor data (if LiDAR/radar enabled)
 - GPS map position (if GPS available)
+
+![Mega Sample Rerun Visualization](images/mega_sample_output.jpg)
 
 This example shows the **power of running vision models at the edge**—low-latency ML inference with synchronized multi-sensor fusion, all processed on embedded hardware.
 
@@ -537,12 +539,20 @@ Decodes H.264-encoded camera streams. Works remotely and reduces network bandwid
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
+./camera-h264
+
+# Run on the PC with a monitor and establish a remote connection with the device.
 ./camera-h264 --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
+python python/camera/zenoh/h264.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
 python python/camera/zenoh/h264.py --remote 192.168.1.100:7447
 ```
 
@@ -556,13 +566,21 @@ Retrieves camera calibration and configuration (resolution, distortion parameter
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./camera-info
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./camera-info --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/camera/zenoh/info.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/camera/zenoh/info.py --remote 192.168.1.100:7447
 ```
 
 > Note: For more information please [README.md](python/camera/README.md)
@@ -585,13 +603,21 @@ Displays detected objects with class labels, confidence scores, and bounding box
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./model-boxes
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./model-boxes --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/model/zenoh/boxes2d.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/model/zenoh/boxes2d.py --remote 192.168.1.100:7447
 ```
 
 #### Tracked Objects
@@ -604,13 +630,21 @@ Shows object tracking with persistent IDs across frames.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./model-boxes_tracked
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./model-boxes_tracked --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/model/zenoh/boxes2d_tracked.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/model/zenoh/boxes2d_tracked.py --remote 192.168.1.100:7447
 ```
 
 #### Segmentation Masks
@@ -623,13 +657,21 @@ Processes pixel-level semantic segmentation results.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./model-mask
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./model-mask --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/model/zenoh/mask.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/model/zenoh/mask.py --remote 192.168.1.100:7447
 ```
 
 #### Compressed Masks
@@ -642,13 +684,21 @@ Handles ZSTD-compressed segmentation masks for reduced bandwidth.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./model-compressed_mask
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./model-compressed_mask --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/model/zenoh/compressed_mask.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/model/zenoh/compressed_mask.py --remote 192.168.1.100:7447
 ```
 
 #### Model Info
@@ -661,13 +711,21 @@ Retrieves model metadata (name, type, input/output dimensions, class labels).
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./model-info
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./model-info --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/model/zenoh/model_info.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/model/zenoh/model_info.py --remote 192.168.1.100:7447
 ```
 
 > Note: For more information please [README.md](python/model/README.md)
@@ -688,13 +746,21 @@ Displays detected radar targets as 3D points with velocity information.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./radar-targets
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./radar-targets --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/radar/zenoh/targets.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/radar/zenoh/targets.py --remote 192.168.1.100:7447
 ```
 
 #### Radar Clusters
@@ -707,13 +773,21 @@ Shows clustered radar detections for object-level tracking.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./radar-clusters
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./radar-clusters --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/radar/zenoh/clusters.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/radar/zenoh/clusters.py --remote 192.168.1.100:7447
 ```
 
 #### Radar Cube
@@ -726,13 +800,21 @@ Processes raw range-Doppler-azimuth radar cube data.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./radar-cube
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./radar-cube --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/radar/zenoh/cube.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/radar/zenoh/cube.py --remote 192.168.1.100:7447
 ```
 
 #### Radar Info
@@ -745,13 +827,21 @@ Retrieves radar configuration (range resolution, field of view, update rate).
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./radar-info
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./radar-info --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/radar/zenoh/info.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/radar/zenoh/info.py --remote 192.168.1.100:7447
 ```
 
 ---
@@ -770,13 +860,21 @@ Visualizes 3D LiDAR point clouds.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./lidar-points
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./lidar-points --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/lidar/zenoh/points.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/lidar/zenoh/points.py --remote 192.168.1.100:7447
 ```
 
 #### Depth Images
@@ -789,13 +887,21 @@ Converts LiDAR data to 2D depth map representation.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./lidar-depth
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./lidar-depth --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/lidar/zenoh/depth.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/lidar/zenoh/depth.py --remote 192.168.1.100:7447
 ```
 
 #### LiDAR Clusters
@@ -808,13 +914,21 @@ Shows segmented point cloud clusters (e.g., individual objects or ground plane).
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./lidar-clusters
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./lidar-clusters --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/lidar/zenoh/clusters.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/lidar/zenoh/clusters.py --remote 192.168.1.100:7447
 ```
 
 #### Reflectivity
@@ -827,13 +941,21 @@ Displays LiDAR intensity/reflectivity data as a 2D image.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./lidar-reflect
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./lidar-reflect --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/lidar/zenoh/reflect.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/lidar/zenoh/reflect.py --remote 192.168.1.100:7447
 ```
 
 ---
@@ -852,13 +974,21 @@ python python/lidar/zenoh/reflect.py
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./fusion-boxes3d
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./fusion-boxes3d --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/fusion/zenoh/boxes3d.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/fusion/zenoh/boxes3d.py --remote 192.168.1.100:7447
 ```
 
 #### Occupancy Grids
@@ -871,13 +1001,21 @@ python python/fusion/zenoh/boxes3d.py
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./fusion-occupancy
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./fusion-occupancy --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/fusion/zenoh/occupancy.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/fusion/zenoh/occupancy.py --remote 192.168.1.100:7447
 ```
 
 #### Fused Model Output
@@ -890,13 +1028,21 @@ Combined detection results from vision models and sensor fusion.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./fusion-model-output
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./fusion-model-output --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/fusion/zenoh/model_output.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/fusion/zenoh/model_output.py --remote 192.168.1.100:7447
 ```
 
 #### Fused Radar
@@ -909,13 +1055,21 @@ Radar data transformed into camera coordinate frame.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./fusion-radar
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./fusion-radar --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/fusion/zenoh/radar.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/fusion/zenoh/radar.py --remote 192.168.1.100:7447
 ```
 
 #### Fused LiDAR
@@ -928,13 +1082,21 @@ LiDAR point cloud projected into camera perspective.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./fusion-lidar
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./fusion-lidar --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/fusion/zenoh/lidar.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/fusion/zenoh/lidar.py --remote 192.168.1.100:7447
 ```
 
 ---
@@ -953,13 +1115,21 @@ Reads accelerometer, gyroscope, and orientation data.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./imu
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./imu --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/imu.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/imu.py --remote 192.168.1.100:7447
 ```
 
 #### GPS Fix
@@ -972,13 +1142,21 @@ Displays GPS latitude/longitude coordinates and fix quality.
 1. Rust CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 ./gps
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+./gps --remote 192.168.1.100:7447
 ```
 
 2. Python CLI
 
 ```bash
+# Run locally on device with Rerun visualization. This requires a monitor connected to the device.
 python python/gps.py
+
+# Run on the PC with a monitor and establish a remote connection with the device.
+python python/gps.py --remote 192.168.1.100:7447
 ```
 
 ---

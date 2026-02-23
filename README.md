@@ -61,7 +61,7 @@ These "zenoh" samples demonstrate how to subscribe to EdgeFirst Perception topic
 
 > Note: when running the "local" examples, skip these steps since all the libraries needed are already part of the device's BSP. If you plan to use the "zenoh" examples in your PC, proceed to the instructions below.
 
-1. For the running the Python "zenoh" examples first install [Python 3.10 or higher](https://www.python.org/downloads/)
+1. For running the Python "zenoh" examples first install [Python 3.10 or higher](https://www.python.org/downloads/)
 
 2. Once installed, create and activate a [Python virtual environment](https://docs.python.org/3/library/venv.html) and install the requirements
 
@@ -123,11 +123,169 @@ rustup target add x86_64-pc-windows-gnu
 cargo build --release --target x86_64-pc-windows-gnu
 ```
 
-## Quick Start
+---
 
-### Download Pre-Built Binaries
+## Local Examples
 
-Download the ZIP file for your platform from the [latest release](https://github.com/EdgeFirstAI/samples/releases/latest):
+Local examples are run in the device to demonstrate how the end-to-end EdgeFirst pipeline is run on target. Currently the local examples are written in Python (*Rust is coming soon*).
+
+Start by copying the examples on target using SCP.
+
+```bash
+scp -r ./samples <username>@192.168.1.100:~/
+```
+
+### 📷 **1. Stream Camera and Display** 
+
+**Purpose:** Demonstrate reading from the camera using either GStreamer or OpenCV.
+
+**Source Code:** Rust(*coming soon*) • [Python](python/camera/local)
+
+**Usage:**
+
+1. Using GStreamer pipelines to stream from the camera
+
+```bash
+python python/camera/local/gstreamer.py --camera=/dev/video3
+```
+
+2. Using OpenCV to stream from the camera
+
+```bash
+python python/camera/local/opencv.py --camera=0
+```
+
+> Note: For more information please [README.md](python/camera/README.md)
+
+
+### 🤖 **2. Model Inference and Display Detections** 
+
+**Purpose:** Demonstrate reading from the camera and invoke the model for inference and display the outputs on the monitor using either GStreamer or OpenCV.
+
+**Source Code:** Rust(*coming soon*) • [Python](python/combined/local)
+
+**Usage:**
+
+> Note: This example currently only supports quantized Ultralytics TFLite models.
+
+1. Using GStreamer pipelines to stream from the camera and HAL to invoke the model for inference
+
+```bash
+python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=hal
+```
+
+2. Using OpenCV to stream from the camera and invoke the model for inference
+
+```bash
+python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=0 --method=opencv
+```
+
+> Note: For more information please [README.md](python/combined/README.md)
+
+### 📷 **3. Letterbox and Resizing Operations using HAL** 
+
+**Purpose:** Demonstrate reading from the camera and perform letterbox or resizing operations on the fetched frames using the [Hardware Abstraction Layer](https://github.com/EdgeFirstAI/hal) (HAL).
+
+**Source Code:** Rust(*coming soon*) • [Python](python/hal/local)
+
+**Usage:**
+
+1. Stream from the camera using GStreamer and resize the frames using HAL (default)
+
+```bash
+python -m python.hal.local.resize -s 640x360
+```
+
+2. Stream from the camera using OpenCV and resize the frames using OpenCV
+
+```bash
+python -m python.hal.local.resize -m opencv -s 640x360
+```
+
+3. Stream from the camera using GStreamer and letterbox the frames using HAL (default)
+
+```bash
+python -m python.hal.local.letterbox -s 640x640
+```
+
+4. Stream from the camera using OpenCV and letterbox the frames using OpenCV
+
+```bash
+python -m python.hal.local.letterbox -m opencv -s 640x640
+```
+
+> Note: For more information please [README.md](python/hal/README.md)
+
+### 🤖 **4. Single Image Model Inference** 
+
+**Purpose:** Demonstrate a simple application for loading an image and running model inference on the image.
+
+**Source Code:** Rust(*coming soon*) • [Python](python/model/local/tflite.py)
+
+**Usage:**
+
+> Note: This example currently only supports quantized Ultralytics TFLite models.
+
+1. Using HAL to load the image and decode model outputs
+
+```bash
+python -m python.model.local.tflite --model-path /path/to/model.tflite --image /path/to/image.jpg
+```
+
+2. Using OpenCV to load the image and decode model outputs
+
+```bash
+python -m python.model.local.tflite --model-path /path/to/model.tflite --image /path/to/image.jpg --method opencv
+```
+
+> Note: For more information please [README.md](python/model/README.md)
+
+### 🤖 **5. Model Metadata Extraction** 
+
+**Purpose:** Demonstrate a simple application for extracting model metadata from ONNX or TFLite models trained in [EdgeFirst Studio](https://edgefirst.studio/).
+
+**Source Code:** Rust(*coming soon*) • [Python](python/model/local/metadata.py)
+
+**Usage:**
+
+1. Extract TFLite metadata
+
+```bash
+python python/model/local/metadata.py --model-path /path/to/model.tflite
+```
+
+2. Extract ONNX metadata
+
+```bash
+python python/model/local/metadata.py --model-path /path/to/model.onnx
+```
+
+> Note: For more information please [README.md](python/model/README.md)
+
+---
+
+## Zenoh Sample Applications
+
+Zenoh examples requires an [EdgeFirst Platform](https://doc.edgefirst.ai/latest/platforms/) (Maivin or Raivin). These examples can be run either on the PC or on the device. These examples subscribes to [Zenoh](https://zenoh.io/docs/overview/what-is-zenoh/) topics managed by the platform to transmit ROS2 CDR messages over the network. 
+
+> **Note: WSL Native Display**  
+> WSL does not provide a native Linux display server by default. If you plan to run the `zenoh` examples inside WSL, you must configure WSL with a working display backend (e.g., WSLg with GPU support).
+>
+> Install the necessary graphics utilities:
+>
+> ```bash
+> sudo apt install mesa-utils vulkan-tools
+> ```
+>
+> If needed, force Vulkan as the rendering backend:
+>
+> ```bash
+> export WGPU_BACKEND=vulkan
+> ```
+
+### Quick Start
+
+Start by downloading the pre-build binaries. Download the ZIP file for your platform from the [latest release](https://github.com/EdgeFirstAI/samples/releases/latest):
 
 | Platform                | Download                               |
 |-------------------------|----------------------------------------|
@@ -144,27 +302,9 @@ unzip edgefirst-samples-linux-x86_64.zip
 cd edgefirst-samples-linux-x86_64
 ```
 
-### Running the Samples
-
-#### Required setup (WSL)
-
-> **Note**  
-> WSL does not provide a native Linux display server by default.  
-> If you plan to run the `zenoh` examples inside WSL, you must configure WSL with a working display backend (e.g., WSLg with GPU support).
-
-Install the necessary graphics utilities:
-
-```bash
-sudo apt install mesa-utils vulkan-tools
-```
-
-If needed, force Vulkan as the rendering backend:
-
-```bash
-export WGPU_BACKEND=vulkan
-```
-
 All samples support both **local** (on-device) and **remote** (over network) connections:
+
+1. Rust CLI
 
 ```bash
 # Local mode - auto-discovers topics on EdgeFirst device
@@ -174,19 +314,17 @@ All samples support both **local** (on-device) and **remote** (over network) con
 ./list-topics --remote 192.168.1.100:7447
 ```
 
-> **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
-
-For python equivalent commands, first follow the [prerequisites](#prerequisites) for creating and activating a virtual environment and installing the python requirements to run the commands.
+2. Python CLI
 
 ```bash
-python ../python/list-topics.py
+python python/list-topics.py
 
-python ../python/list-topics.py --remote 192.168.1.100:7447
+python python/list-topics.py --remote 192.168.1.100:7447
 ```
 
----
+> **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
 
-## Sample Applications
+---
 
 ### 🔍 **1. List Topics** - "Hello World" Example
 
@@ -197,12 +335,23 @@ python ../python/list-topics.py --remote 192.168.1.100:7447
 This is the simplest starting point—it connects to the Zenoh network and lists all published topics under the `rt/` namespace. Use this to verify connectivity and see what data sources are available.
 
 **Usage:**
+
+1. Rust CLI
+
 ```bash
 # Local discovery
 ./list-topics
 
 # Remote connection
 ./list-topics --remote 192.168.1.100:7447
+```
+
+2. Python CLI
+
+```bash
+python python/list-topics.py
+
+python python/list-topics.py --remote 192.168.1.100:7447
 ```
 
 **Topics Discovered:**
@@ -218,7 +367,7 @@ This is the simplest starting point—it connects to the Zenoh network and lists
 
 **Purpose:** Demonstrates the core EdgeFirst Perception workflow—live camera feed with real-time object detection and segmentation.
 
-**Source Code:** [Rust](rust/combined/mega_sample.rs) • [Python](python/combined/mega_sample.py)
+**Source Code:** [Rust](rust/combined/mega_sample.rs) • [Python](python/combined/zenoh/mega_sample.py)
 
 This is the **most comprehensive example**, showcasing EdgeFirst's edge vision capabilities. It subscribes to multiple topics simultaneously:
 - **Camera H.264 stream** (`rt/camera/h264`) - Decodes and displays live video
@@ -228,12 +377,23 @@ This is the **most comprehensive example**, showcasing EdgeFirst's edge vision c
 - **GPS location** (`rt/gps`) - Device location on map (optional)
 
 **Usage:**
+
+1. Rust CLI
+
 ```bash
 # Run with Rerun visualization (recommended)
 ./mega-sample
 
 # Remote connection
 ./mega-sample --remote 192.168.1.100:7447
+```
+
+2. Python CLI
+
+```bash
+python python/combined/zenoh/mega_sample.py
+
+python python/combined/zenoh/mega_sample.py --remote 192.168.1.100:7447
 ```
 
 **What You'll See:**
@@ -245,6 +405,8 @@ This is the **most comprehensive example**, showcasing EdgeFirst's edge vision c
 
 This example shows the **power of running vision models at the edge**—low-latency ML inference with synchronized multi-sensor fusion, all processed on embedded hardware.
 
+> Note: For more information please [README.md](python/combined/README.md)
+
 ---
 
 ### 📷 **3. Camera Examples** - Image Acquisition
@@ -254,37 +416,63 @@ This example shows the **power of running vision models at the edge**—low-late
 **Why Separate Examples?** While `mega-sample` shows the complete pipeline, these focused examples help you understand camera-specific topics in isolation.
 
 #### Camera DMA (Zero-Copy Buffers)
-**Source:** [Rust](rust/camera/dma.rs) • [Python](python/camera/dma.py)  
+**Source:** [Rust](rust/camera/dma.rs) • [Python](python/camera/zenoh/dma.py)  
 **Topic:** `rt/camera/dma`  
-**Message:** [DmaBuf](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#dmabuf)
+**Message:** [DmaBuf](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#dmabuffer)
 
 **Linux-only** example showing high-performance zero-copy camera access using DMA buffers. This is the **fastest** way to access camera frames with minimal CPU overhead—ideal for real-time processing.
+
+1. Rust CLI
 
 ```bash
 ./camera-dma  # Must run on EdgeFirst device
 ```
 
+2. Python CLI
+
+```bash
+python python/camera/zenoh/dma.py
+```
+
 #### Camera H.264 Stream
-**Source:** [Rust](rust/camera/h264.rs) • [Python](python/camera/h264.py)  
+**Source:** [Rust](rust/camera/h264.rs) • [Python](python/camera/zenoh/h264.py)  
 **Topic:** `rt/camera/h264`  
-**Message:** [CompressedVideo](https://doc.edgefirst.ai/develop/perception/api/foxglove_msgs/#compressedvideo)
+**Message:** [CompressedVideo](https://doc.edgefirst.ai/latest/perception/api/foxglove_msgs/#compressedvideo)
 
 Decodes H.264-encoded camera streams. Works remotely and reduces network bandwidth.
+
+1. Rust CLI
 
 ```bash
 ./camera-h264 --remote 192.168.1.100:7447
 ```
 
+2. Python CLI
+
+```bash
+python python/camera/zenoh/h264.py --remote 192.168.1.100:7447
+```
+
 #### Camera Info
-**Source:** [Rust](rust/camera/camera_info.rs) • [Python](python/camera/camera_info.py)  
+**Source:** [Rust](rust/camera/info.rs) • [Python](python/camera/zenoh/info.py)  
 **Topic:** `rt/camera/info`  
-**Message:** [CameraInfo](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#camerainfo)
+**Message:** [CameraInfo](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#camerainfo)
 
 Retrieves camera calibration and configuration (resolution, distortion parameters, frame rate).
+
+1. Rust CLI
 
 ```bash
 ./camera-info
 ```
+
+2. Python CLI
+
+```bash
+python python/camera/zenoh/info.py
+```
+
+> Note: For more information please [README.md](python/camera/README.md)
 
 ---
 
@@ -295,59 +483,101 @@ Retrieves camera calibration and configuration (resolution, distortion parameter
 These examples focus solely on **processing ML inference results** without the camera feed, making it easier to understand model output handling.
 
 #### 2D Bounding Boxes
-**Source:** [Rust](rust/model/boxes2d.rs) • [Python](python/model/boxes2d.py)  
+**Source:** [Rust](rust/model/boxes2d.rs) • [Python](python/model/zenoh/boxes2d.py)  
 **Topic:** `rt/model/boxes2d`  
-**Message:** [BoundingBox2DArray](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#boundingbox2darray)
+**Message:** [BoundingBox2DArray](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#box)
 
 Displays detected objects with class labels, confidence scores, and bounding box coordinates.
+
+1. Rust CLI
 
 ```bash
 ./model-boxes
 ```
 
+2. Python CLI
+
+```bash
+python python/model/zenoh/boxes2d.py
+```
+
 #### Tracked Objects
-**Source:** [Rust](rust/model/boxes2d_tracked.rs) • [Python](python/model/boxes2d_tracked.py)  
+**Source:** [Rust](rust/model/boxes2d_tracked.rs) • [Python](python/model/zenoh/boxes2d_tracked.py)  
 **Topic:** `rt/model/boxes2d_tracked`  
-**Message:** [BoundingBox2DArray](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#boundingbox2darray)
+**Message:** [BoundingBox2DArray](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#box)
 
 Shows object tracking with persistent IDs across frames.
+
+1. Rust CLI
 
 ```bash
 ./model-boxes_tracked
 ```
 
+2. Python CLI
+
+```bash
+python python/model/zenoh/boxes2d_tracked.py
+```
+
 #### Segmentation Masks
-**Source:** [Rust](rust/model/mask.rs) • [Python](python/model/mask.py)  
+**Source:** [Rust](rust/model/mask.rs) • [Python](python/model/zenoh/mask.py)  
 **Topic:** `rt/model/mask`  
-**Message:** [Mask](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#mask)
+**Message:** [Mask](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#mask)
 
 Processes pixel-level semantic segmentation results.
+
+1. Rust CLI
 
 ```bash
 ./model-mask
 ```
 
+2. Python CLI
+
+```bash
+python python/model/zenoh/mask.py
+```
+
 #### Compressed Masks
-**Source:** [Rust](rust/model/compressed_mask.rs) • [Python](python/model/compressed_mask.py)  
+**Source:** [Rust](rust/model/compressed_mask.rs) • [Python](python/model/zenoh/compressed_mask.py)  
 **Topic:** `rt/model/compressed_mask`  
-**Message:** [CompressedMask](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#compressedmask)
+**Message:** [CompressedMask](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#compressedmask)
 
 Handles ZSTD-compressed segmentation masks for reduced bandwidth.
+
+1. Rust CLI
 
 ```bash
 ./model-compressed_mask
 ```
 
+2. Python CLI
+
+```bash
+python python/model/zenoh/compressed_mask.py
+```
+
 #### Model Info
-**Source:** [Rust](rust/model/model_info.rs) • [Python](python/model/model_info.py)  
+**Source:** [Rust](rust/model/model_info.rs) • [Python](python/model/zenoh/model_info.py)  
 **Topic:** `rt/model/info`  
-**Message:** [ModelInfo](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#modelinfo)
+**Message:** [ModelInfo](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#modelinfo)
 
 Retrieves model metadata (name, type, input/output dimensions, class labels).
+
+1. Rust CLI
 
 ```bash
 ./model-info
 ```
+
+2. Python CLI
+
+```bash
+python python/model/zenoh/model_info.py
+```
+
+> Note: For more information please [README.md](python/model/README.md)
 
 ---
 
@@ -356,47 +586,79 @@ Retrieves model metadata (name, type, input/output dimensions, class labels).
 **Purpose:** Process radar detections, clusters, and range-Doppler-azimuth data.
 
 #### Radar Targets
-**Source:** [Rust](rust/radar/targets.rs) • [Python](python/radar/targets.py)  
+**Source:** [Rust](rust/radar/targets.rs) • [Python](python/radar/zenoh/targets.py)  
 **Topic:** `rt/radar/targets`  
-**Message:** [PointCloud2](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#pointcloud2)
+**Message:** [PointCloud2](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#pointcloud2)
 
 Displays detected radar targets as 3D points with velocity information.
+
+1. Rust CLI
 
 ```bash
 ./radar-targets
 ```
 
+2. Python CLI
+
+```bash
+python python/radar/zenoh/targets.py
+```
+
 #### Radar Clusters
-**Source:** [Rust](rust/radar/clusters.rs) • [Python](python/radar/clusters.py)  
+**Source:** [Rust](rust/radar/clusters.rs) • [Python](python/radar/zenoh/clusters.py)  
 **Topic:** `rt/radar/clusters`  
-**Message:** [PointCloud2](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#pointcloud2)
+**Message:** [PointCloud2](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#pointcloud2)
 
 Shows clustered radar detections for object-level tracking.
+
+1. Rust CLI
 
 ```bash
 ./radar-clusters
 ```
 
+2. Python CLI
+
+```bash
+python python/radar/zenoh/clusters.py
+```
+
 #### Radar Cube
-**Source:** [Rust](rust/radar/cube.rs) • [Python](python/radar/cube.py)  
+**Source:** [Rust](rust/radar/cube.rs) • [Python](python/radar/zenoh/cube.py)  
 **Topic:** `rt/radar/cube`  
-**Message:** [RadarCube](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#radarcube)
+**Message:** [RadarCube](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#radarcube)
 
 Processes raw range-Doppler-azimuth radar cube data.
+
+1. Rust CLI
 
 ```bash
 ./radar-cube
 ```
 
+2. Python CLI
+
+```bash
+python python/radar/zenoh/cube.py
+```
+
 #### Radar Info
-**Source:** [Rust](rust/radar/info.rs) • [Python](python/radar/info.py)  
+**Source:** [Rust](rust/radar/info.rs) • [Python](python/radar/zenoh/info.py)  
 **Topic:** `rt/radar/info`  
-**Message:** [RadarInfo](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#radarinfo)
+**Message:** [RadarInfo](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#radarinfo)
 
 Retrieves radar configuration (range resolution, field of view, update rate).
 
+1. Rust CLI
+
 ```bash
 ./radar-info
+```
+
+2. Python CLI
+
+```bash
+python python/radar/zenoh/info.py
 ```
 
 ---
@@ -406,47 +668,79 @@ Retrieves radar configuration (range resolution, field of view, update rate).
 **Purpose:** Handle LiDAR point clouds, depth images, and clustering.
 
 #### Point Clouds
-**Source:** [Rust](rust/lidar/points.rs) • [Python](python/lidar/points.py)  
+**Source:** [Rust](rust/lidar/points.rs) • [Python](python/lidar/zenoh/points.py)  
 **Topic:** `rt/lidar/points`  
-**Message:** [PointCloud2](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#pointcloud2)
+**Message:** [PointCloud2](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#pointcloud2)
 
 Visualizes 3D LiDAR point clouds.
+
+1. Rust CLI
 
 ```bash
 ./lidar-points
 ```
 
+2. Python CLI
+
+```bash
+python python/lidar/zenoh/points.py
+```
+
 #### Depth Images
-**Source:** [Rust](rust/lidar/depth.rs) • [Python](python/lidar/depth.py)  
+**Source:** [Rust](rust/lidar/depth.rs) • [Python](python/lidar/zenoh/depth.py)  
 **Topic:** `rt/lidar/depth`  
-**Message:** [Image](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#image)
+**Message:** [Image](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#image)
 
 Converts LiDAR data to 2D depth map representation.
+
+1. Rust CLI
 
 ```bash
 ./lidar-depth
 ```
 
+2. Python CLI
+
+```bash
+python python/lidar/zenoh/depth.py
+```
+
 #### LiDAR Clusters
-**Source:** [Rust](rust/lidar/clusters.rs) • [Python](python/lidar/clusters.py)  
+**Source:** [Rust](rust/lidar/clusters.rs) • [Python](python/lidar/zenoh/clusters.py)  
 **Topic:** `rt/lidar/clusters`  
-**Message:** [PointCloud2](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#pointcloud2)
+**Message:** [PointCloud2](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#pointcloud2)
 
 Shows segmented point cloud clusters (e.g., individual objects or ground plane).
+
+1. Rust CLI
 
 ```bash
 ./lidar-clusters
 ```
 
+2. Python CLI
+
+```bash
+python python/lidar/zenoh/clusters.py
+```
+
 #### Reflectivity
-**Source:** [Rust](rust/lidar/reflect.rs) • [Python](python/lidar/reflect.py)  
+**Source:** [Rust](rust/lidar/reflect.rs) • [Python](python/lidar/zenoh/reflect.py)  
 **Topic:** `rt/lidar/reflect`  
-**Message:** [Image](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#image)
+**Message:** [Image](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#image)
 
 Displays LiDAR intensity/reflectivity data as a 2D image.
 
+1. Rust CLI
+
 ```bash
 ./lidar-reflect
+```
+
+2. Python CLI
+
+```bash
+python python/lidar/zenoh/reflect.py
 ```
 
 ---
@@ -456,58 +750,98 @@ Displays LiDAR intensity/reflectivity data as a 2D image.
 **Purpose:** Combine camera, LiDAR, and radar data for comprehensive scene understanding.
 
 #### 3D Bounding Boxes
-**Source:** [Rust](rust/fusion/boxes3d.rs) • [Python](python/fusion/boxes3d.py)  
+**Source:** [Rust](rust/fusion/boxes3d.rs) • [Python](python/fusion/zenoh/boxes3d.py)  
 **Topic:** `rt/fusion/boxes3d`  
-**Message:** [BoundingBox3DArray](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#boundingbox3darray)
+**Message:** [BoundingBox3DArray](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#boundingbox3darray)
 
 3D object detections fused from multiple sensors.
+
+1. Rust CLI
 
 ```bash
 ./fusion-boxes3d
 ```
 
+2. Python CLI
+
+```bash
+python python/fusion/zenoh/boxes3d.py
+```
+
 #### Occupancy Grids
-**Source:** [Rust](rust/fusion/occupancy.rs) • [Python](python/fusion/occupancy.py)  
+**Source:** [Rust](rust/fusion/occupancy.rs) • [Python](python/fusion/zenoh/occupancy.py)  
 **Topic:** `rt/fusion/occupancy`  
-**Message:** [OccupancyGrid](https://doc.edgefirst.ai/develop/perception/api/nav_msgs/#occupancygrid)
+**Message:** [OccupancyGrid](https://doc.edgefirst.ai/latest/perception/api/nav_msgs/#occupancygrid)
 
 2D occupancy map for navigation and obstacle avoidance.
+
+1. Rust CLI
 
 ```bash
 ./fusion-occupancy
 ```
 
+2. Python CLI
+
+```bash
+python python/fusion/zenoh/occupancy.py
+```
+
 #### Fused Model Output
-**Source:** [Rust](rust/fusion/model_output.rs) • [Python](python/fusion/model_output.py)  
+**Source:** [Rust](rust/fusion/model_output.rs) • [Python](python/fusion/zenoh/model_output.py)  
 **Topic:** `rt/fusion/model_output`  
-**Message:** [Detect](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#detect)
+**Message:** [Detect](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#detect)
 
 Combined detection results from vision models and sensor fusion.
+
+1. Rust CLI
 
 ```bash
 ./fusion-model-output
 ```
 
+2. Python CLI
+
+```bash
+python python/fusion/zenoh/model_output.py
+```
+
 #### Fused Radar
-**Source:** [Rust](rust/fusion/radar.rs) • [Python](python/fusion/radar.py)  
+**Source:** [Rust](rust/fusion/radar.rs) • [Python](python/fusion/zenoh/radar.py)  
 **Topic:** `rt/fusion/radar`  
-**Message:** [PointCloud2](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#pointcloud2)
+**Message:** [PointCloud2](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#pointcloud2)
 
 Radar data transformed into camera coordinate frame.
+
+1. Rust CLI
 
 ```bash
 ./fusion-radar
 ```
 
+2. Python CLI
+
+```bash
+python python/fusion/zenoh/radar.py
+```
+
 #### Fused LiDAR
-**Source:** [Rust](rust/fusion/lidar.rs) • [Python](python/fusion/lidar.py)  
+**Source:** [Rust](rust/fusion/lidar.rs) • [Python](python/fusion/zenoh/lidar.py)  
 **Topic:** `rt/fusion/lidar`  
-**Message:** [PointCloud2](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#pointcloud2)
+**Message:** [PointCloud2](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#pointcloud2)
 
 LiDAR point cloud projected into camera perspective.
 
+1. Rust CLI
+
 ```bash
 ./fusion-lidar
+```
+
+2. Python CLI
+
+```bash
+python python/fusion/zenoh/lidar.py
 ```
 
 ---
@@ -519,23 +853,39 @@ LiDAR point cloud projected into camera perspective.
 #### IMU Data
 **Source:** [Rust](rust/imu.rs) • [Python](python/imu.py)  
 **Topic:** `rt/imu`  
-**Message:** [Imu](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#imu)
+**Message:** [Imu](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#imu)
 
 Reads accelerometer, gyroscope, and orientation data.
+
+1. Rust CLI
 
 ```bash
 ./imu
 ```
 
+2. Python CLI
+
+```bash
+python python/imu.py
+```
+
 #### GPS Fix
 **Source:** [Rust](rust/gps.rs) • [Python](python/gps.py)  
 **Topic:** `rt/gps`  
-**Message:** [NavSatFix](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#navsatfix)
+**Message:** [NavSatFix](https://doc.edgefirst.ai/latest/perception/api/sensor_msgs/#navsatfix)
 
 Displays GPS latitude/longitude coordinates and fix quality.
 
+1. Rust CLI
+
 ```bash
 ./gps
+```
+
+2. Python CLI
+
+```bash
+python python/gps.py
 ```
 
 ---
@@ -556,7 +906,6 @@ Alternative integrations:
 - **Foxglove Studio:** ROS2-compatible visualization → [Guide](https://doc.edgefirst.ai/develop/platforms/foxglove/)
 - **EdgeFirst Studio:** Publish recordings for MLOps workflows → [Platform](https://doc.edgefirst.ai/develop/platforms/publishing/)
 - **Maivin WebUI:** JavaScript/HTML interface → [GitHub](https://github.com/MaivinAI/webui)
-
 
 ## Examples Overview
 

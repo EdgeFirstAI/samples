@@ -29,7 +29,6 @@ import threading
 
 import av
 import numpy as np
-import onnxruntime as ort
 import rerun as rr
 import rerun.blueprint as rrb
 import zenoh
@@ -39,6 +38,11 @@ import edgefirst_hal as ef
 from python.model.local.onnx import HALRunner as HALONNXRunner
 from python.model.local.tflite import HALRunner as HALTFLiteRunner
 
+
+# Shared storage for latest decoded frame
+latest_frame_lock = threading.Lock()
+latest_frame = None
+frame_available_event = threading.Event()
 
 # Track state configuration
 MAX_DISTANCE = 0.15  # Maximum normalized distance for track association
@@ -199,6 +203,129 @@ class MessageDrain:
         return latest
 
 
+def h264_handler_sync(drain, loop):
+    global latest_frame
+    decoder = av.CodecContext.create("h264", "r")
+
+    while True:
+        future = asyncio.run_coroutine_threadsafe(
+            drain.get_latest(),
+            loop
+        )
+        msg = future.result()
+        packet = av.Packet(msg.payload.to_bytes())
+
+        try:
+            frames = decoder.decode(packet)
+        except av.error.InvalidDataError:
+            continue  # wait for valid keyframe
+
+        for frame in frames:
+            with latest_frame_lock:
+                latest_frame = frame
+            frame_available_event.set()
+
+
+def inference_handler_sync(
+    frame_storage: FrameSize,
+    runner: Union[HALONNXRunner, HALTFLiteRunner],
+    tracker: SimpleTracker
+):
+    global latest_frame
+    while True:
+        # Wait until a new frame is available
+        frame_available_event.wait()
+        with latest_frame_lock:
+            frame_to_process = latest_frame
+            latest_frame = None
+            frame_available_event.clear()
+
+        if frame_to_process is None:
+            continue
+
+        frame_array = frame_to_process.to_ndarray(format="rgb24")
+        h, w = frame_array.shape[:2]
+        frame_storage.set(w, h)
+
+        # Use edgefirst_hal for image preprocessing
+        # Create input tensor from frame
+        frame_storage.tensor_image.copy_from_numpy(frame_array)
+        # Run model inference
+        boxes, scores, classes, masks = runner.static_infer(
+            frame_storage.tensor_image)
+
+        # Convert boxes to center coordinates and track
+        detections = [((box[0] + box[2]) / 2.0,
+                       (box[1] + box[3]) / 2.0,
+                       f"class_{int(cls_id)}")
+                      for box, cls_id in zip(boxes, classes)]
+
+        # Update tracker
+        tracked_objects = tracker.update(detections)
+
+        runner.converter.render_to_image(
+            runner.dst,
+            bbox=boxes,
+            scores=scores,
+            classes=classes,
+            seg=masks
+        )
+
+        with runner.dst.map() as m:
+            n = np.array(m.view()).reshape((runner.dst.height,
+                                            runner.dst.width, 4))
+            n = n[:, :, :3]  # RGB
+            n = np.ascontiguousarray(n, dtype=np.uint8)
+
+            # Log frame and detections
+            rr.log("/camera/frame", rr.Image(n))
+
+        # Log tracked objects
+        if tracked_objects:
+            centers = []
+            sizes = []
+            labels = []
+            colors = []
+
+            for track_id, label, cx, cy, color in tracked_objects:
+                # Convert to pixel coordinates for visualization
+                px = cx * runner.input_shape[1]
+                py = cy * runner.input_shape[0]
+
+                # Assume ~5% of frame width for box size (adjust as
+                # needed)
+                box_width = runner.input_shape[1] * 0.05
+                box_height = runner.input_shape[0] * 0.05
+
+                centers.append((px, py))
+                sizes.append((box_width, box_height))
+                labels.append(f"{label}: {track_id[:8]}")
+                colors.append(color)
+
+            rr.log(
+                "camera/tracked_objects",
+                rr.Boxes2D(
+                    centers=centers,
+                    sizes=sizes,
+                    labels=labels,
+                    colors=colors
+                ),
+            )
+
+        # Log tracker statistics
+        rr.log(
+            "tracker/active_tracks",
+            rr.Scalars(len(tracker.tracks)),
+        )
+        rr.log(
+            "tracker/detections_per_frame",
+            rr.Scalars(len(detections)),
+        )
+        if len(tracked_objects) > 0:
+            print(f"Frame: {len(detections)} detections, "
+                  f"{len(tracked_objects)} active tracks")
+
+
 def h264_worker(
     msg: zenoh.Sample, frame_storage: FrameSize,
     container: av.container.InputContainer,
@@ -217,12 +344,6 @@ def h264_worker(
             try:
                 if packet.size == 0:
                     continue
-                # # Check if this packet contains a key frame
-                # is_keyframe = getattr(packet, "is_keyframe", False)
-                # # Drop non-key frames until key frame arrives.
-                # # Ensures non-stuttered outputs at the expense of FPS drop.
-                # if not is_keyframe:
-                #     continue
                 for frame in packet.decode():
                     # Decode frame to RGB24
                     frame_array = frame.to_ndarray(format="rgb24")
@@ -357,11 +478,15 @@ async def main_async(session: zenoh.Session,
 
     # Subscribe to H.264 stream
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
-    # Start processing
-    await asyncio.gather(
-        h264_handler(h264_drain, frame_size_storage, runner, tracker),
-    )
+    # Start decoder thread
+    threading.Thread(target=h264_handler_sync,
+                     args=(h264_drain, loop),
+                     daemon=True).start()
 
+    # Start inference thread
+    threading.Thread(target=inference_handler_sync,
+                     args=(frame_size_storage, runner, tracker),
+                     daemon=True).start()
     # Keep running
     while True:
         await asyncio.sleep(0.001)

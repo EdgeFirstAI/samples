@@ -90,7 +90,6 @@ class TFLiteRunner:
             self.input_details[0]["shape"])
 
         self.metadata, self.labels = load_tflite_metadata(model_path)
-        self.metadata = None
         if self.metadata is None:
             self.metadata = MetaData.build_metadata(self.output_details)
 

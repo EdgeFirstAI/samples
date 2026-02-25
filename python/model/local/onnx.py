@@ -105,6 +105,7 @@ class ONNXRunner:
         outputs = self.ort_session.get_outputs()
 
         self.metadata, self.labels = load_onnx_metadata(model_path)
+        self.metadata = None
         if self.metadata is None:
             self.metadata = MetaData.build_metadata(outputs)
 
@@ -129,7 +130,7 @@ class HALRunner(ONNXRunner):
         )
         self.converter = ef.ImageProcessor()
 
-    def infer(self, tensor_image: ef.TensorImage):
+    def base_infer(self, tensor_image: ef.TensorImage):
         hal_letterbox(tensor_image, self.dst)
 
         input_array = np.zeros((self.dst.height,
@@ -148,9 +149,11 @@ class HALRunner(ONNXRunner):
             input_array = np.transpose(input_array, (2, 0, 1))
         input_array = input_array[None]  # Add batch dimension
 
-        outputs = self.ort_session.run(self.output_names,
-                                       {self.input_name: input_array})
+        return self.ort_session.run(self.output_names,
+                                    {self.input_name: input_array})
 
+    def infer(self, tensor_image: ef.TensorImage):
+        outputs = self.base_infer(tensor_image)
         # Normalize bounding boxes which is needed to decode the outputs.
         for x in outputs:
             if len(x.shape) == 3:
@@ -159,9 +162,42 @@ class HALRunner(ONNXRunner):
                         x[:, :4, :], width=self.input_shape[1],
                         height=self.input_shape[0]
                     )
+        return self.decoder.decode(outputs, max_boxes=self.max_boxes)
 
-        return self.decoder.decode(
-            outputs, max_boxes=self.max_boxes)
+    def static_infer(self, tensor_image: ef.TensorImage):
+        outputs = self.base_infer(tensor_image)
+
+        detection_output, segmentation_output = None, None
+        for x in outputs:
+            if len(x.shape) == 3:
+                if x.dtype in [np.float32, np.float16]:
+                    # Normalize bounding boxes which is needed to decode the
+                    # outputs.
+                    x[:, :4, :] = check_normalized_boxes(
+                        x[:, :4, :], width=self.input_shape[1],
+                        height=self.input_shape[0]
+                    )
+                detection_output = x[0]
+            elif len(x.shape) == 4:
+                segmentation_output = x[0]
+                # Tranpose (32, 160, 160) to (160, 160, 32)
+                segmentation_output = segmentation_output.transpose(
+                    1, 2, 0)  # (H, W, C)
+
+        if segmentation_output is not None and detection_output is not None:
+            return ef.Decoder.decode_yolo_segdet(
+                boxes=detection_output,
+                protos=segmentation_output,
+                score_threshold=self.score,
+                iou_threshold=self.iou,
+                max_boxes=self.max_boxes
+            )
+        return ef.Decoder.decode_yolo_det(
+            boxes=detection_output,
+            score_threshold=self.score,
+            iou_threshold=self.iou,
+            max_boxes=self.max_boxes
+        )
 
     def inference(self, image_path: str, save_path: str = None):
         tensor_image = ef.TensorImage.load(image_path)

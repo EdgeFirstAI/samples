@@ -217,12 +217,12 @@ def h264_worker(
             try:
                 if packet.size == 0:
                     continue
-                # Check if this packet contains a key frame
-                is_keyframe = getattr(packet, "is_keyframe", False)
-                # Drop non-key frames until key frame arrives.
-                # Ensures non-stuttered outputs at the expense of FPS drop.
-                if not is_keyframe:
-                    continue
+                # # Check if this packet contains a key frame
+                # is_keyframe = getattr(packet, "is_keyframe", False)
+                # # Drop non-key frames until key frame arrives.
+                # # Ensures non-stuttered outputs at the expense of FPS drop.
+                # if not is_keyframe:
+                #     continue
                 for frame in packet.decode():
                     # Decode frame to RGB24
                     frame_array = frame.to_ndarray(format="rgb24")
@@ -232,7 +232,7 @@ def h264_worker(
                     # Use edgefirst_hal for image preprocessing
                     # Create input tensor from frame
                     frame_storage.tensor_image.copy_from_numpy(frame_array)
-                    boxes, scores, classes, masks = runner.infer(
+                    boxes, scores, classes, masks = runner.static_infer(
                         frame_storage.tensor_image)
 
                     # tracked_objects = tracker.update(

@@ -31,6 +31,11 @@ from edgefirst.schemas.edgefirst_msgs import Detect
 from python.model.local.onnx import HALRunner as HALONNXRunner
 from python.model.local.tflite import HALRunner as HALTFLiteRunner
 
+# Shared storage for latest decoded frame
+latest_frame_lock = threading.Lock()
+latest_frame = None
+frame_available_event = threading.Event()
+
 
 class FrameSize:
     def __init__(self):
@@ -38,6 +43,7 @@ class FrameSize:
         self._event = asyncio.Event()
         self.raw_data = io.BytesIO()
         self.tensor_image = None
+        self._synced_to_keyframe = False
 
     def set(self, width: int, height: int):
         self._size = [width, height]
@@ -76,6 +82,88 @@ class MessageDrain:
         return latest
 
 
+def h264_handler_sync(drain, loop):
+    global latest_frame
+    decoder = av.CodecContext.create("h264", "r")
+
+    while True:
+        future = asyncio.run_coroutine_threadsafe(
+            drain.get_latest(),
+            loop
+        )
+        msg = future.result()
+        packet = av.Packet(msg.payload.to_bytes())
+
+        try:
+            frames = decoder.decode(packet)
+        except av.error.InvalidDataError:
+            continue  # wait for valid keyframe
+
+        for frame in frames:
+            with latest_frame_lock:
+                latest_frame = frame
+            frame_available_event.set()
+
+
+def inference_handler_sync(
+    frame_storage: FrameSize,
+    runner: Union[HALONNXRunner, HALTFLiteRunner]
+):
+    global latest_frame
+    while True:
+        # Wait until a new frame is available
+        frame_available_event.wait()
+        with latest_frame_lock:
+            frame_to_process = latest_frame
+            latest_frame = None
+            frame_available_event.clear()
+
+        if frame_to_process is None:
+            continue
+
+        frame_array = frame_to_process.to_ndarray(format="rgb24")
+        h, w = frame_array.shape[:2]
+        frame_storage.set(w, h)
+        frame_storage.tensor_image.copy_from_numpy(frame_array)
+
+        # Run model inference
+        boxes, scores, classes, masks = runner.static_infer(
+            frame_storage.tensor_image)
+
+        runner.converter.render_to_image(
+            runner.dst,
+            bbox=boxes,
+            scores=scores,
+            classes=classes,
+            seg=masks
+        )
+
+        with runner.dst.map() as m:
+            n = np.array(m.view()).reshape((runner.dst.height,
+                                            runner.dst.width, 4))
+            n = n[:, :, :3]  # RGB
+            n = np.ascontiguousarray(n, dtype=np.uint8)
+
+            # Log frame and detections
+            rr.log("/camera/frame", rr.Image(n))
+
+            centers = (boxes[:, [0, 1]] + boxes[:, [2, 3]]) / 2
+            centers *= [runner.input_shape[1], runner.input_shape[0]]
+            sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
+            sizes *= [runner.input_shape[1], runner.input_shape[0]]
+            labels = [
+                f"{runner.labels[int(cls_id)] if runner.labels is not None else f'class_{int(cls_id)}'} ({
+                    score:.2f})"
+                for cls_id, score in zip(classes, scores)
+            ]
+            rr.log(
+                "/camera/boxes",
+                rr.Boxes2D(
+                    centers=centers,
+                    sizes=sizes,
+                    labels=labels))
+
+
 def h264_worker(
     msg: zenoh.Sample, frame_storage: FrameSize,
     container: av.container.InputContainer, runner: Union[HALONNXRunner, HALTFLiteRunner]
@@ -83,55 +171,68 @@ def h264_worker(
     try:
         frame_storage.raw_data.write(msg.payload.to_bytes())
         frame_storage.raw_data.seek(0)
+        latest_frame = None
         for packet in container.demux():
             if packet.size == 0:
                 continue
-            # Check if this packet contains a key frame
-            is_keyframe = getattr(packet, "is_keyframe", False)
-            # Drop non-key frames until key frame arrives.
-            # Ensures non-stuttered outputs at the expense of FPS drop.
-            if not is_keyframe:
-                continue
+
+            if not frame_storage._synced_to_keyframe:
+                # Check if this packet contains a key frame
+                is_keyframe = getattr(packet, "is_keyframe", False)
+                # Drop non-key frames until key frame arrives.
+                # Ensures non-stuttered outputs at the expense of FPS drop.
+                if not is_keyframe:
+                    continue
+                frame_storage._synced_to_keyframe = True
+
             for frame in packet.decode():
-                frame_array = frame.to_ndarray(format="rgb24")
-                frame_height, frame_width = frame_array.shape[:2]
-                frame_storage.set(frame_width, frame_height)
+                latest_frame = frame
 
-                frame_storage.tensor_image.copy_from_numpy(frame_array)
-                boxes, scores, classes, masks = runner.infer(
-                    frame_storage.tensor_image)
+            if latest_frame is None:
+                continue
 
-                runner.converter.render_to_image(
-                    runner.dst,
-                    bbox=boxes,
-                    scores=scores,
-                    classes=classes,
-                    seg=masks
+            latest_frame = frame
+
+            # for frame in packet.decode():
+            frame_array = frame.to_ndarray(format="rgb24")
+            frame_height, frame_width = frame_array.shape[:2]
+            frame_storage.set(frame_width, frame_height)
+
+            frame_storage.tensor_image.copy_from_numpy(frame_array)
+            boxes, scores, classes, masks = runner.static_infer(
+                frame_storage.tensor_image)
+
+            runner.converter.render_to_image(
+                runner.dst,
+                bbox=boxes,
+                scores=scores,
+                classes=classes,
+                seg=masks
+            )
+
+            with runner.dst.map() as m:
+                n = np.array(m.view()).reshape((
+                    runner.dst.height, runner.dst.width, 4))
+                n = n[:, :, :3]  # RGB format
+                n = np.ascontiguousarray(n, dtype=np.uint8)
+
+                # Log frame and detections to Rerun
+                rr.log("/camera/frame", rr.Image(n))
+
+                # Convert boxes to pixel coordinates and log
+                centers = (boxes[:, [0, 1]] + boxes[:, [2, 3]]) / 2
+                centers *= [runner.input_shape[1], runner.input_shape[0]]
+                sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
+                sizes *= [runner.input_shape[1], runner.input_shape[0]]
+                labels = [f"{runner.labels[int(cls_id)]
+                             if runner.labels is not None else
+                             f'class_{int(cls_id)}'} ({score:.2f})" for
+                          cls_id, score in zip(classes, scores)]
+                rr.log(
+                    "/camera/boxes",
+                    rr.Boxes2D(
+                        centers=centers, sizes=sizes, labels=labels),
                 )
-
-                with runner.dst.map() as m:
-                    n = np.array(m.view()).reshape((
-                        runner.dst.height, runner.dst.width, 4))
-                    n = n[:, :, :3]  # RGB format
-                    n = np.ascontiguousarray(n, dtype=np.uint8)
-
-                    # Log frame and detections to Rerun
-                    rr.log("/camera/frame", rr.Image(n))
-
-                    # Convert boxes to pixel coordinates and log
-                    centers = (boxes[:, [0, 1]] + boxes[:, [2, 3]]) / 2
-                    centers *= [runner.input_shape[1], runner.input_shape[0]]
-                    sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
-                    sizes *= [runner.input_shape[1], runner.input_shape[0]]
-                    labels = [f"{runner.labels[int(cls_id)]
-                                 if runner.labels is not None else
-                                 f'class_{int(cls_id)}'} ({score:.2f})" for
-                              cls_id, score in zip(classes, scores)]
-                    rr.log(
-                        "/camera/boxes",
-                        rr.Boxes2D(
-                            centers=centers, sizes=sizes, labels=labels),
-                    )
 
             # Clear buffer after successful packet processing
             frame_storage.raw_data.seek(0)
@@ -212,10 +313,17 @@ async def main_async(session: zenoh.Session,
     frame_size_storage = FrameSize()
 
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
-    await asyncio.gather(
-        h264_handler(h264_drain, frame_size_storage, runner),
-    )
+    # # Start decoder thread
+    threading.Thread(target=h264_handler_sync,
+                     args=(h264_drain, loop),
+                     daemon=True).start()
 
+    # Start inference thread
+    threading.Thread(target=inference_handler_sync,
+                     args=(frame_size_storage, runner),
+                     daemon=True).start()
+
+    # Keep the async loop alive
     while True:
         await asyncio.sleep(0.001)
 

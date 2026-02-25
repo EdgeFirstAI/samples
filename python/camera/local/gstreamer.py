@@ -81,13 +81,13 @@ class GStreamerCapture:
 
     def _build_pipeline(self):
         if self.has_display() and not self.use_cairo:
-            # cmd: 
+            # cmd:
             # gst-launch-1.0 v4l2src device=/dev/video3 ! \
             # video/x-raw ! imxvideoconvert_g2d ! \
             # video/x-raw,format=RGBA ! queue ! waylandsink
             pipeline = Gst.parse_launch("""
                 v4l2src device=%s !
-                video/x-raw ! 
+                video/x-raw !
                 imxvideoconvert_g2d !
                 video/x-raw,format=RGBA !
                 queue !
@@ -98,12 +98,13 @@ class GStreamerCapture:
             # gst-launch-1.0 v4l2src device=/dev/video3 ! \
             # video/x-raw,format=YUY2 ! imxvideoconvert_g2d ! \
             # video/x-raw,format=RGBA ! queue ! \
-            # appsink sync=true max-buffers=1 drop=true name=sink emit-signals=true
+            # appsink sync=true max-buffers=1 drop=true name=sink
+            # emit-signals=true
             pipeline = Gst.parse_launch("""
                 v4l2src device=%s io-mode=dmabuf !
-                video/x-raw,format=YUY2 ! 
-                imxvideoconvert_g2d ! 
-                video/x-raw,format=RGBA ! 
+                video/x-raw,format=YUY2 !
+                imxvideoconvert_g2d !
+                video/x-raw,format=RGBA !
                 appsink sync=true max-buffers=1 drop=true name=sink emit-signals=true
             """ % (self.camera))
 

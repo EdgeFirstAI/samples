@@ -114,7 +114,7 @@ class HALRunner(TFLiteRunner):
         )
         self.converter = ef.ImageProcessor()
 
-    def infer(self, tensor_image: ef.TensorImage):
+    def base_infer(self, tensor_image: ef.TensorImage):
         # Input quantization
         zero_point = None
         if self.input_quantization is not None:
@@ -129,10 +129,37 @@ class HALRunner(TFLiteRunner):
                                     normalization=ef.Normalization.DEFAULT,
                                     zero_point=zero_point)
         self.model.invoke()
-        outputs = [self.model.get_tensor(output["index"])
-                   for output in self.output_details]
+        return [self.model.get_tensor(output["index"])
+                for output in self.output_details]
 
+    def infer(self, tensor_image: ef.TensorImage):
+        outputs = self.base_infer(tensor_image)
         return self.decoder.decode(outputs, max_boxes=self.max_boxes)
+
+    def static_infer(self, tensor_image: ef.TensorImage):
+        outputs = self.base_infer(tensor_image)
+
+        detection_output, segmentation_output = None, None
+        for x in outputs:
+            if len(x.shape) == 3:
+                detection_output = x[0]
+            elif len(x.shape) == 4:
+                segmentation_output = x[0]
+
+        if segmentation_output is not None and detection_output is not None:
+            return ef.Decoder.decode_yolo_segdet(
+                boxes=detection_output,
+                protos=segmentation_output,
+                score_threshold=self.score,
+                iou_threshold=self.iou,
+                max_boxes=self.max_boxes
+            )
+        return ef.Decoder.decode_yolo_det(
+            boxes=detection_output,
+            score_threshold=self.score,
+            iou_threshold=self.iou,
+            max_boxes=self.max_boxes
+        )
 
     def inference(self, image_path: str, save_path: str = None):
         tensor_image = ef.TensorImage.load(image_path)
@@ -166,7 +193,8 @@ class OpenCVRunner(TFLiteRunner):
 
         input_tensor = input_tensor[None]
         if self.input_shape[-1] == 3 and input_tensor.shape[-1] == 4:
-            # Drop alpha channel if model expects 3 channels but input has 4 channels
+            # Drop alpha channel if model expects 3 channels but input has 4
+            # channels
             input_tensor = input_tensor[:, :, :, :3]
         # Directly copy the input tensor into the model for TFLite.
         if self.input_tensor is not None:

@@ -189,7 +189,7 @@ class OpenCVInference(LetterboxOpenCVCapture):
                 cv2.rectangle(frame,
                               (boxes[i, 0], boxes[i, 1]),
                               (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
-                
+
                 if masks is not None:
                     frame[masks[i] > 0] = (
                         frame[masks[i] > 0] * (1 - alpha) +

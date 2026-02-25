@@ -12,28 +12,34 @@ IMPORTANT: Before creating a release, document all user-visible changes here.
 Empty releases should be avoided - ensure meaningful changes are listed.
 -->
 
-## [0.2.0] - 2026-02-20
+## [0.2.0] - 2026-02-27
 
 ### Added
 - Local camera examples for reading from the video4linux camera using either GStreamer or OpenCV
 - Local combined examples for running the YOLOv8 Ultralytics for inference and visualization support on the monitor using either PyCairo (GStreamer example) or OpenCV
-- Local HAL examples for demonstrating resizing and letterbox transformations using HAL vs OpenCV.
-- Local model examples for demonstrating how to read the model embedded metadata, run YOLOv8 Ultralytics on a sample image using either HAL or OpenCV
+- Local and Zenoh HAL examples for demonstrating resizing and letterbox transformations using HAL vs OpenCV
+- Local model examples for demonstrating how to read the model embedded metadata, run YOLOv8 Ultralytics (ONNX and TFLite) on a sample image using either HAL or OpenCV
 - Added small description docstrings of each sample at the top of the script
+- Extended support for TFLite models for decoder.py script, not just ONNX models.
 
 ### Fixed
 - Rust applications now automatically adds `tcp/` before the IP for the `--remote` CMD argument to avoid the user having to add this themselves
 - list-topics.py and list-topics.rs now uses try_recv rather than recv for recieving topic messages so that the timeout argument (default to 5 seconds) has an effect
-- Updates to HAL are now reflected such as changes to `ImageConverter` to `ImageProcessor`.
+- Updates to HAL are now reflected such as changes to `ImageConverter` to `ImageProcessor`
 - Cargo.toml now uses released edgefirst_hal package rather than searching for a local edgefirst directory
+- Applied latest changes to EdgeFirst Schemas which renames `DmaBuf` to `DmaBuffer`
+- Applied latest [migrations from 0.27 to 0.28 in rerun-sdk](https://rerun.io/docs/reference/migration/migration-0-28) which now uses `TransformAxes3D` instead of `Transform3D` for imu.rs
+- Fixed stuttered outputs when using H264 which is due to the loss of key frames. Process only if the keyframe is available, but may result in occasional drop in FPS.
 
 ### Changed
 - Structural changes to the Python examples to have a split "local" and "zenoh" examples
-- camera_info.rs has been renamed to info.rs to maintain naming pattern of other scripts.
+- camera_info.rs has been renamed to info.rs to maintain naming pattern of other scripts
+- Avoid usage of edgefirst_hal.Decoder.decode_yolo_det found in decoder.py and tracking.py scripts since this function is scheduled for deprecation. Furthermore, it returned unexpected outputs when tested. Using edgefirst_hal.Decoder.decode instead. 
 
 ### Documentation
 - Added sub README.md files under each Python group example to show usage of the "local" and "zenoh" examples
 - ReadMe structural changes to have build instructions at the top. Updated contents to include latest additions
+- ReadMe now shows local and remote command variants
 
 ## [0.1.2] - 2025-11-19
 

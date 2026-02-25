@@ -70,6 +70,12 @@ def h264_worker(msg, frame_storage, raw_data, container):
         try:
             if packet.size == 0:
                 continue
+            # Check if this packet contains a key frame
+            is_keyframe = getattr(packet, "is_keyframe", False)
+            # Drop non-key frames until key frame arrives.
+            # Ensures non-stuttered outputs at the expense of FPS drop.
+            if not is_keyframe:
+                continue
             raw_data.seek(0)
             raw_data.truncate(0)
             for frame in packet.decode():

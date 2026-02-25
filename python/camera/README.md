@@ -70,7 +70,7 @@ A host machine such as a PC with a monitor connected can be used to run the foll
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/camera/zenoh/info.py --remote 10.10.41.67:7447
+python python/camera/zenoh/info.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server.
@@ -95,7 +95,7 @@ python python/camera/zenoh/info.py --connect --url rerun+http://<PC IP address>:
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/camera/zenoh/dma.py --remote 10.10.41.67:7447
+python python/camera/zenoh/dma.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server.
@@ -120,7 +120,7 @@ python python/camera/zenoh/dma.py --connect --url rerun+http://<PC IP address>:9
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/camera/zenoh/jpeg.py --remote 10.10.41.67:7447
+python python/camera/zenoh/jpeg.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server.
@@ -145,7 +145,7 @@ python python/camera/zenoh/jpeg.py --connect --url rerun+http://<PC IP address>:
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/camera/zenoh/h264.py.py --remote 10.10.41.67:7447
+python python/camera/zenoh/h264.py.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server.

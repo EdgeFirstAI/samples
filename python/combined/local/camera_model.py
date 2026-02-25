@@ -35,9 +35,11 @@ except ImportError:
 import edgefirst_hal as ef
 
 from python.hal.local.letterbox import (LetterboxGStreamerCapture,
-                                        LetterboxOpenCVCapture,
-                                        hal_letterbox, CONVERTER)
-from python.model.local.tflite import HALRunner, OpenCVRunner
+                                        LetterboxOpenCVCapture)
+from python.model.local.tflite import (HALRunner as HALTFLiteRunner,
+                                       OpenCVRunner as OpenCVTFLiteRunner)
+from python.model.local.onnx import (HALRunner as HALONNXRunner,
+                                     OpenCVRunner as OpenCVONNXRunner)
 
 
 class GStreamerInference(LetterboxGStreamerCapture):
@@ -49,42 +51,27 @@ class GStreamerInference(LetterboxGStreamerCapture):
         iou: float = 0.50,
         max_boxes: int = 300
     ):
-        self.runner = HALRunner(
-            model_path=model_path,
-            score=score,
-            iou=iou,
-            max_boxes=max_boxes
-        )
-        super().__init__(camera, size=self.runner.input_shape)
+        if os.path.splitext(os.path.basename(model_path)
+                            )[-1].lower() == ".tflite":
+            self.runner = HALTFLiteRunner(
+                model_path=model_path,
+                score=score,
+                iou=iou,
+                max_boxes=max_boxes
+            )
+        elif os.path.splitext(os.path.basename(model_path))[-1].lower() == ".onnx":
+            self.runner = HALONNXRunner(
+                model_path=model_path,
+                score=score,
+                iou=iou,
+                max_boxes=max_boxes
+            )
+        else:
+            raise NotImplementedError(
+                "Only ONNX and TFLite Ultralytics models are supported in this sample.")
 
-    def inference(self):
-        zero_point = None
-        if self.runner.input_quantization is not None:
-            if self.runner.input_type == np.uint8:
-                # For uint8 quantized models, use zero_point=0 (raw pixel data)
-                zero_point = 0
-            elif self.runner.input_type == np.int8:
-                zero_point = abs(self.runner.input_quantization[-1])
-
-        self.dst.normalize_to_numpy(self.runner.input_tensor()[0, :, :, :],
-                                    normalization=ef.Normalization.DEFAULT,
-                                    zero_point=zero_point)
-        self.runner.model.invoke()
-        outputs = [self.runner.model.get_tensor(output["index"])
-                   for output in self.runner.output_details]
-
-        boxes, scores, classes, masks = self.runner.decoder.decode(
-            outputs, max_boxes=self.runner.max_boxes
-        )
-
-        # Render detections on the image using the HAL converter
-        CONVERTER.render_to_image(
-            self.dst,
-            bbox=boxes,
-            scores=scores,
-            classes=classes,
-            seg=masks
-        )
+        super().__init__(camera, size=(self.runner.input_shape[1],
+                                       self.runner.input_shape[0]))
 
     def on_new_sample(self, app_sink):
         start_pipeline = time.perf_counter()
@@ -111,9 +98,15 @@ class GStreamerInference(LetterboxGStreamerCapture):
                 shape=[height, width, channels],
                 fourcc=fourcc
             )
-            hal_letterbox(tensor, self.dst)
-
-            self.inference()
+            boxes, scores, classes, masks = self.runner.infer(tensor)
+            # Render detections on the image using the HAL converter
+            self.runner.converter.render_to_image(
+                self.dst,
+                bbox=boxes,
+                scores=scores,
+                classes=classes,
+                seg=masks
+            )
 
             channels = 1 if self.dst.format == ef.FourCC.GREY else 4
             if self.use_cairo and self.cairo_window is not None:
@@ -129,9 +122,10 @@ class GStreamerInference(LetterboxGStreamerCapture):
                     if self.process is not None:
                         self.cpu_percent = self.process.cpu_percent(
                             interval=None)
-                    performance = f"CPU: {
-                        self.cpu_percent:.2f}% | End2End Latency: {
-                        end_pipeline * 1000:.2f} ms"
+                    performance = (
+                        f"CPU: {self.cpu_percent:.2f}% | "
+                        f"End2End Latency: {end_pipeline * 1000:.2f} ms"
+                    )
 
                     GLib.idle_add(
                         self.cairo_window.update_frame, n, performance)
@@ -153,42 +147,35 @@ class OpenCVInference(LetterboxOpenCVCapture):
         iou: float = 0.50,
         max_boxes: int = 300
     ):
-        self.runner = OpenCVRunner(
-            model_path=model_path,
-            score=score,
-            iou=iou,
-            max_boxes=max_boxes
-        )
-        super().__init__(camera, size=self.runner.input_shape, method=method)
 
-    def inference(self, input_tensor):
-        # For quantized models, run input quantization parameters.
-        if self.runner.input_quantization is not None:
-            if self.runner.input_type == np.int8:
-                scale, zero_point = self.runner.input_quantization
-                # Apply proper INT8 quantization: quantized = round(normalized / scale) + zero_point
-                # First normalize to [0, 1] range, then quantize
-                normalized = input_tensor.astype(np.float32) / 255.0
-                quantized = np.round(
-                    normalized / scale).astype(np.int32) + zero_point
-                input_tensor = np.clip(quantized, -128, 127).astype(np.int8)
+        if os.path.splitext(os.path.basename(model_path)
+                            )[-1].lower() == ".tflite":
+            self.runner = OpenCVTFLiteRunner(
+                model_path=model_path,
+                score=score,
+                iou=iou,
+                max_boxes=max_boxes
+            )
+        elif os.path.splitext(os.path.basename(model_path))[-1].lower() == ".onnx":
+            self.runner = OpenCVONNXRunner(
+                model_path=model_path,
+                score=score,
+                iou=iou,
+                max_boxes=max_boxes
+            )
+        else:
+            raise NotImplementedError(
+                "Only ONNX and TFLite Ultralytics models are supported in this sample.")
 
-        input_tensor = input_tensor[None]
-        # Directly copy the input tensor into the model for TFLite.
-        if self.runner.input_tensor is not None:
-            np.copyto(self.runner.input_tensor(), input_tensor)
-
-        self.runner.model.invoke()
-
-        outputs = [self.runner.model.get_tensor(output["index"])
-                   for output in self.runner.output_details]
-
-        return self.runner.decode_outputs(outputs)
+        super().__init__(camera,
+                         size=(self.runner.input_shape[1],
+                               self.runner.input_shape[0]),
+                         method=method)
 
     def on_new_sample(self):
         start_pipeline = time.perf_counter()
         frame = super().on_new_sample()
-        boxes, classes, scores, masks = self.inference(frame)
+        boxes, scores, classes, masks = self.runner.infer(frame)
         height, width, _ = frame.shape
 
         # Denormalize box coordinates
@@ -209,9 +196,7 @@ class OpenCVInference(LetterboxOpenCVCapture):
                     )
                 cv2.putText(
                     frame,
-                    f"{self.runner.labels[classes[i]] if
-                       self.runner.labels is not None else classes[i]}: {
-                           scores[i]:.2f}",
+                    f"{self.runner.labels[classes[i]] if self.runner.labels is not None else classes[i]}: {scores[i]:.2f}",
                     (boxes[i, 0], boxes[i, 1] - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
                 )
@@ -219,14 +204,14 @@ class OpenCVInference(LetterboxOpenCVCapture):
             end_pipeline = time.perf_counter() - start_pipeline
             if self.process is not None:
                 self.cpu_percent = self.process.cpu_percent(interval=None)
-            performance = f"CPU: {
-                self.cpu_percent:.2f}% | End2End Latency: {
-                end_pipeline * 1000:.2f} ms"
+            performance = (
+                f"CPU: {self.cpu_percent:.2f}% | "
+                f"End2End Latency: {end_pipeline * 1000:.2f} ms"
+            )
             cv2.putText(
                 frame, performance, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                 (0, 255, 0), 2, cv2.LINE_AA,
             )
-
         return frame
 
 
@@ -247,10 +232,6 @@ def main():
     opts.add_argument('--max-boxes', type=int, default=300,
                       help='Specify the maximum number of devices')
     args = opts.parse_args()
-
-    if os.path.splitext(os.path.basename(args.model))[-1] != ".tflite":
-        raise NotImplementedError(
-            "Only quantized Ultralytics TFLite models are supported in this sample.")
 
     if args.method in ["opencv", "pillow"]:
         capture = OpenCVInference(

@@ -30,7 +30,8 @@ if __name__ == "__main__":
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
         # Ensure remote endpoint has tcp/ prefix
-        remote = args.remote if args.remote.startswith("tcp/") else f"tcp/{args.remote}"
+        remote = args.remote if args.remote.startswith(
+            "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % remote)
     session = zenoh.open(config)
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     while True:
         if args.time is not None and time() - start >= args.time:
             break
-    
+
         msg = subscriber.try_recv()
         if msg is None:
             continue

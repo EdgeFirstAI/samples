@@ -51,7 +51,7 @@ These examples can be run with an EdgeFirst Platform with the Zenoh, camera, and
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/combined/zenoh/camera_lidar.py --remote 10.10.41.67:7447
+python python/combined/zenoh/camera_lidar.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server.
@@ -76,7 +76,7 @@ python python/combined/zenoh/camera_lidar.py --connect --url rerun+http://<PC IP
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/combined/zenoh/camera_radar.py --remote 10.10.41.67:7447
+python python/combined/zenoh/camera_radar.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -101,7 +101,7 @@ python python/combined/zenoh/camera_radar.py --connect --url rerun+http://<PC IP
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/combined/zenoh/camera_model.py --remote 10.10.41.67:7447
+python python/combined/zenoh/camera_model.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -126,7 +126,7 @@ python python/combined/zenoh/camera_model.py --connect --url rerun+http://<PC IP
 
 1. Connect remotely with an EdgeFirst Platform.
 ```bash
-python python/combined/zenoh/mega_sample.py --remote 10.10.41.67:7447
+python python/combined/zenoh/mega_sample.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server

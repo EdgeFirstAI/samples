@@ -12,141 +12,147 @@ discovery is used.
 """
 
 import asyncio
+from typing import Union
 from argparse import ArgumentParser
 import io
+import os
 import sys
 import threading
 
 import av
 import numpy as np
-import onnxruntime as ort
 import rerun as rr
 import rerun.blueprint as rrb
 import zenoh
 
 import edgefirst_hal as ef
-from edgefirst.schemas.edgefirst_msgs import Detect, Mask
+from edgefirst.schemas.edgefirst_msgs import Detect
+
+from python.model.local.onnx import HALRunner as HALONNXRunner
+from python.model.local.tflite import HALRunner as HALTFLiteRunner
 
 
 class FrameSize:
     def __init__(self):
         self._size = []
         self._event = asyncio.Event()
+        self.raw_data = io.BytesIO()
+        self.tensor_image = None
 
-    def set(self, width, height):
+    def set(self, width: int, height: int):
         self._size = [width, height]
         if not self._event.is_set():
             self._event.set()
 
-    async def get(self):
+        self.tensor_image = ef.TensorImage(
+            width,
+            height,
+            ef.FourCC.RGB
+        )
+
+    async def get(self) -> list[int]:
         await self._event.wait()
         return self._size
 
 
 class MessageDrain:
-    def __init__(self, loop):
+    def __init__(self, loop: asyncio.AbstractEventLoop):
         self._queue = asyncio.Queue(maxsize=100)
         self._loop = loop
 
-    def callback(self, msg):
+    def callback(self, msg: zenoh.Sample):
         if not self._loop.is_closed():
             if self._queue.full():
                 self._queue.get_nowait()
             self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
 
-    async def read(self):
+    async def read(self) -> zenoh.Sample:
         return await self._queue.get()
 
-    async def get_latest(self):
+    async def get_latest(self) -> zenoh.Sample:
         latest = await self._queue.get()
         while not self._queue.empty():
             latest = self._queue.get_nowait()
         return latest
 
 
-def h264_worker(msg, frame_storage, raw_data,
-                container, ort_session, input_name):
+def h264_worker(
+    msg: zenoh.Sample, frame_storage: FrameSize,
+    container: av.container.InputContainer, runner: Union[HALONNXRunner, HALTFLiteRunner]
+):
     try:
-        raw_data.write(msg.payload.to_bytes())
-        raw_data.seek(0)
+        frame_storage.raw_data.write(msg.payload.to_bytes())
+        frame_storage.raw_data.seek(0)
         for packet in container.demux():
             if packet.size == 0:
+                continue
+            # Check if this packet contains a key frame
+            is_keyframe = getattr(packet, "is_keyframe", False)
+            # Drop non-key frames until key frame arrives.
+            # Ensures non-stuttered outputs at the expense of FPS drop.
+            if not is_keyframe:
                 continue
             for frame in packet.decode():
                 frame_array = frame.to_ndarray(format="rgb24")
                 frame_height, frame_width = frame_array.shape[:2]
                 frame_storage.set(frame_width, frame_height)
 
-                ef_im = ef.TensorImage(
-                    frame_array.shape[1],
-                    frame_array.shape[0],
-                    ef.FourCC.RGB)
-                ef_im.copy_from_numpy(frame_array)
-                converter = ef.ImageProcessor()
-                output = ef.TensorImage(640, 640)
-                converter.convert(ef_im, output)
+                frame_storage.tensor_image.copy_from_numpy(frame_array)
+                boxes, scores, classes, masks = runner.infer(
+                    frame_storage.tensor_image)
 
-                out_array = np.zeros((640, 640, 3), dtype=np.uint8)
-                output.normalize_to_numpy(out_array)
-                out_array = np.transpose(
-                    out_array, (2, 0, 1))  # Channels x Height x Width
-                # Prepare input for YOLO
-                input_tensor = out_array.astype(np.float32) / 255.0
-                input_tensor = np.expand_dims(input_tensor, axis=0)
-
-                # Run inference
-                outputs = ort_session.run(None, {input_name: input_tensor})
-
-                predictions = outputs[0]
-                boxes, scores, classes = ef.Decoder.decode_yolo_det(predictions.squeeze(), (0.0040811873, -123),
-                                                                    0.25,
-                                                                    0.7,
-                                                                    max_boxes=50)
-
-                # Log frame and detections to Rerun
-                rr.log("/camera/frame", rr.Image(frame_array))
-
-                # Convert boxes to pixel coordinates and log
-                centers, sizes, labels = [], [], []
-                for box, score, cls_id in zip(boxes, scores, classes):
-                    x1, y1, x2, y2 = box
-                    # Denormalize from 640x640 space to frame size
-                    x1_px = int(x1 / 640.0 * frame_width)
-                    y1_px = int(y1 / 640.0 * frame_height)
-                    x2_px = int(x2 / 640.0 * frame_width)
-                    y2_px = int(y2 / 640.0 * frame_height)
-
-                    center_x = (x1_px + x2_px) / 2
-                    center_y = (y1_px + y2_px) / 2
-                    width = x2_px - x1_px
-                    height = y2_px - y1_px
-
-                    centers.append((center_x, center_y))
-                    sizes.append((width, height))
-                    labels.append(f"class_{int(cls_id)} ({score:.2f})")
-
-                rr.log(
-                    "/camera/boxes",
-                    rr.Boxes2D(centers=centers, sizes=sizes, labels=labels),
+                runner.converter.render_to_image(
+                    runner.dst,
+                    bbox=boxes,
+                    scores=scores,
+                    classes=classes,
+                    seg=masks
                 )
+
+                with runner.dst.map() as m:
+                    n = np.array(m.view()).reshape((
+                        runner.dst.height, runner.dst.width, 4))
+                    n = n[:, :, :3]  # RGB format
+                    n = np.ascontiguousarray(n, dtype=np.uint8)
+
+                    # Log frame and detections to Rerun
+                    rr.log("/camera/frame", rr.Image(n))
+
+                    # Convert boxes to pixel coordinates and log
+                    centers = (boxes[:, [0, 1]] + boxes[:, [2, 3]]) / 2
+                    centers *= [runner.input_shape[1], runner.input_shape[0]]
+                    sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
+                    sizes *= [runner.input_shape[1], runner.input_shape[0]]
+                    labels = [f"{runner.labels[int(cls_id)]
+                                 if runner.labels is not None else
+                                 f'class_{int(cls_id)}'} ({score:.2f})" for
+                              cls_id, score in zip(classes, scores)]
+                    rr.log(
+                        "/camera/boxes",
+                        rr.Boxes2D(
+                            centers=centers, sizes=sizes, labels=labels),
+                    )
+
             # Clear buffer after successful packet processing
-            raw_data.seek(0)
-            raw_data.truncate(0)
+            frame_storage.raw_data.seek(0)
+            frame_storage.raw_data.truncate(0)
     except Exception as e:
         # Clear buffer on any error
-        raw_data.seek(0)
-        raw_data.truncate(0)
+        frame_storage.raw_data.seek(0)
+        frame_storage.raw_data.truncate(0)
 
 
-async def h264_handler(drain, frame_storage, ort_session, input_name):
-    raw_data = io.BytesIO()
-    container = av.open(raw_data, format="h264", mode="r")
+async def h264_handler(
+    drain: MessageDrain,
+    frame_storage: FrameSize,
+    runner: Union[HALONNXRunner, HALTFLiteRunner]
+):
+    container = av.open(frame_storage.raw_data, format="h264", mode="r")
 
     while True:
         msg = await drain.get_latest()
         thread = threading.Thread(
-            target=h264_worker, args=[
-                msg, frame_storage, raw_data, container, ort_session, input_name]
+            target=h264_worker, args=[msg, frame_storage, container, runner]
         )
         thread.start()
 
@@ -155,7 +161,7 @@ async def h264_handler(drain, frame_storage, ort_session, input_name):
         thread.join()
 
 
-def boxes2d_worker(msg, boxes_tracked, frame_size):
+def boxes2d_worker(msg: zenoh.Sample, boxes_tracked: dict, frame_size: tuple):
     detection = Detect.deserialize(msg.payload.to_bytes())
     centers, sizes, labels, colors = [], [], [], []
     for box in detection.boxes:
@@ -182,7 +188,7 @@ def boxes2d_worker(msg, boxes_tracked, frame_size):
     )
 
 
-async def boxes2d_handler(drain, frame_storage):
+async def boxes2d_handler(drain: MessageDrain, frame_storage: FrameSize):
     boxes_tracked = {}
     _ = await frame_storage.get()
     while True:
@@ -198,7 +204,8 @@ async def boxes2d_handler(drain, frame_storage):
         thread.join()
 
 
-async def main_async(session, ort_session, input_name):
+async def main_async(session: zenoh.Session,
+                     runner: Union[HALONNXRunner, HALTFLiteRunner]):
     # Create drains
     loop = asyncio.get_running_loop()
     h264_drain = MessageDrain(loop)
@@ -206,11 +213,11 @@ async def main_async(session, ort_session, input_name):
 
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
     await asyncio.gather(
-        h264_handler(h264_drain, frame_size_storage, ort_session, input_name),
+        h264_handler(h264_drain, frame_size_storage, runner),
     )
 
     while True:
-        asyncio.sleep(0.001)
+        await asyncio.sleep(0.001)
 
 
 def main():
@@ -218,10 +225,10 @@ def main():
         description="EdgeFirst Samples - Camera-Model with YOLO")
     parser.add_argument(
         "-m",
-        "--model-path",
+        "--model",
         type=str,
         required=True,
-        help="Path to YOLO ONNX model file",
+        help="Path to YOLO ONNX or TFLite model file",
     )
     parser.add_argument(
         "-r",
@@ -245,9 +252,14 @@ def main():
     rr.send_blueprint(blueprint)
 
     # Load YOLO model with ONNX Runtime
-    ort_session = ort.InferenceSession(args.model_path)
-    input_name = ort_session.get_inputs()[0].name
-    print(f"Loaded YOLO model from {args.model_path}")
+    if os.path.splitext(os.path.basename(args.model))[-1].lower() == ".onnx":
+        runner = HALONNXRunner(args.model)
+    elif os.path.splitext(os.path.basename(args.model))[-1].lower() == ".tflite":
+        runner = HALTFLiteRunner(args.model)
+    else:
+        raise NotImplementedError(
+            "Only ONNX and TFLite Ultralytics models are supported in this sample.")
+    print(f"Loaded YOLO model from {args.model}")
 
     # Zenoh config
     config = zenoh.Config()
@@ -261,7 +273,7 @@ def main():
     session = zenoh.open(config)
 
     try:
-        asyncio.run(main_async(session, ort_session, input_name))
+        asyncio.run(main_async(session, runner))
     except KeyboardInterrupt:
         session.close()
         sys.exit(0)

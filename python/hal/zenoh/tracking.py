@@ -20,8 +20,10 @@ integrated as needed.
 """
 
 import asyncio
+from typing import Union
 from argparse import ArgumentParser
 import io
+import os
 import sys
 import threading
 
@@ -34,13 +36,13 @@ import zenoh
 
 import edgefirst_hal as ef
 
+from python.model.local.onnx import HALRunner as HALONNXRunner
+from python.model.local.tflite import HALRunner as HALTFLiteRunner
+
 
 # Track state configuration
 MAX_DISTANCE = 0.15  # Maximum normalized distance for track association
 MAX_FRAMES_WITHOUT_UPDATE = 10  # Frames before dropping a track
-CONFIDENCE_THRESHOLD = 0.25
-NMS_THRESHOLD = 0.7
-MAX_DETECTIONS = 50
 
 
 class TrackState:
@@ -155,11 +157,19 @@ class FrameSize:
     def __init__(self):
         self._size = []
         self._event = asyncio.Event()
+        self.raw_data = io.BytesIO()
+        self.tensor_image = None
 
     def set(self, width, height):
         self._size = [width, height]
         if not self._event.is_set():
             self._event.set()
+
+        self.tensor_image = ef.TensorImage(
+            width,
+            height,
+            ef.FourCC.RGB
+        )
 
     async def get(self):
         await self._event.wait()
@@ -189,25 +199,30 @@ class MessageDrain:
         return latest
 
 
-def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name,
-                tracker):
+def h264_worker(
+    msg: zenoh.Sample, frame_storage: FrameSize,
+    container: av.container.InputContainer,
+    runner: Union[HALONNXRunner, HALTFLiteRunner],
+    tracker: SimpleTracker
+):
     """
     Decode H.264 video, run YOLO inference, and perform tracking.
 
     Uses edgefirst_hal for optimized image preprocessing.
     """
     try:
-        raw_data.write(msg.payload.to_bytes())
-        raw_data.seek(0)
-
+        frame_storage.raw_data.write(msg.payload.to_bytes())
+        frame_storage.raw_data.seek(0)
         for packet in container.demux():
             try:
                 if packet.size == 0:
                     continue
-
-                raw_data.seek(0)
-                raw_data.truncate(0)
-
+                # Check if this packet contains a key frame
+                is_keyframe = getattr(packet, "is_keyframe", False)
+                # Drop non-key frames until key frame arrives.
+                # Ensures non-stuttered outputs at the expense of FPS drop.
+                if not is_keyframe:
+                    continue
                 for frame in packet.decode():
                     # Decode frame to RGB24
                     frame_array = frame.to_ndarray(format="rgb24")
@@ -216,61 +231,38 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
 
                     # Use edgefirst_hal for image preprocessing
                     # Create input tensor from frame
-                    ef_input = ef.TensorImage(
-                        frame_width, frame_height, ef.FourCC.RGB)
-                    ef_input.copy_from_numpy(frame_array)
-
-                    # Resize to YOLO input size (640x640) using hardware
-                    # acceleration
-                    ef_output = ef.TensorImage(640, 640)
-                    converter = ef.ImageProcessor()
-                    converter.convert(ef_input, ef_output)
-
-                    # Extract resized image to NumPy
-                    resized_array = np.zeros((640, 640, 3), dtype=np.uint8)
-                    ef_output.normalize_to_numpy(resized_array)
-
-                    # Prepare input for YOLO (normalize to 0-1 range)
-                    resized_array = np.transpose(resized_array, (2, 0, 1))
-                    input_tensor = resized_array.astype(np.float32) / 255.0
-                    input_tensor = np.expand_dims(input_tensor, axis=0)
-
-                    # Run YOLO inference
-                    outputs = ort_session.run(None, {input_name: input_tensor})
-                    predictions = outputs[0]
-
-                    # Use HAL decoder for YOLO output
-                    boxes, scores, class_ids = ef.Decoder.decode_yolo_det(
-                        predictions.squeeze(),
-                        quant_boxes=(0.0040811873, -123),
-                        score_threshold=CONFIDENCE_THRESHOLD,
-                        iou_threshold=NMS_THRESHOLD,
-                        max_boxes=MAX_DETECTIONS,
-                    )
+                    frame_storage.tensor_image.copy_from_numpy(frame_array)
+                    boxes, scores, classes, masks = runner.infer(
+                        frame_storage.tensor_image)
 
                     # tracked_objects = tracker.update(
                     #     boxes, scores, class_ids, time.time())
 
-                    # Convert boxes to normalized coordinates and track
-                    detections = []
-                    for box, score, cls_id in zip(boxes, scores, class_ids):
-                        x1, y1, x2, y2 = box
-                        # Denormalize from 640x640 space
-                        x1, x2 = x1 / 640.0, x2 / 640.0
-                        y1, y2 = y1 / 640.0, y2 / 640.0
-
-                        # Center and size in normalized coordinates
-                        center_x = (x1 + x2) / 2.0
-                        center_y = (y1 + y2) / 2.0
-                        label = f"class_{int(cls_id)}"
-
-                        detections.append((center_x, center_y, label))
+                    # Convert boxes to center coordinates and track
+                    detections = [((box[0] + box[2]) / 2.0,
+                                   (box[1] + box[3]) / 2.0,
+                                   f"class_{int(cls_id)}")
+                                  for box, cls_id in zip(boxes, classes)]
 
                     # Update tracker
                     tracked_objects = tracker.update(detections)
 
-                    # Log frame
-                    rr.log("camera/frame", rr.Image(frame_array))
+                    runner.converter.render_to_image(
+                        runner.dst,
+                        bbox=boxes,
+                        scores=scores,
+                        classes=classes,
+                        seg=masks
+                    )
+
+                    with runner.dst.map() as m:
+                        n = np.array(m.view()).reshape((
+                            runner.dst.height, runner.dst.width, 4))
+                        n = n[:, :, :3]  # RGB format
+                        n = np.ascontiguousarray(n, dtype=np.uint8)
+
+                        # Log frame
+                        rr.log("camera/frame", rr.Image(n))
 
                     # Log tracked objects
                     if tracked_objects:
@@ -281,13 +273,13 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
 
                         for track_id, label, cx, cy, color in tracked_objects:
                             # Convert to pixel coordinates for visualization
-                            px = cx * frame_width
-                            py = cy * frame_height
+                            px = cx * runner.input_shape[1]
+                            py = cy * runner.input_shape[0]
 
                             # Assume ~5% of frame width for box size (adjust as
                             # needed)
-                            box_width = frame_width * 0.05
-                            box_height = frame_height * 0.05
+                            box_width = runner.input_shape[1] * 0.05
+                            box_height = runner.input_shape[0] * 0.05
 
                             centers.append((px, py))
                             sizes.append((box_width, box_height))
@@ -317,6 +309,9 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
                         print(f"Frame: {len(detections)} detections, "
                               f"{len(tracked_objects)} active tracks")
 
+                frame_storage.raw_data.seek(0)
+                frame_storage.raw_data.truncate(0)
+
             except Exception as e:
                 print(f"Error processing packet: {e}")
                 continue
@@ -325,18 +320,20 @@ def h264_worker(msg, frame_storage, raw_data, container, ort_session, input_name
         print(f"Error in h264_worker: {e}")
 
 
-async def h264_handler(drain, frame_storage, ort_session, input_name,
-                       tracker):
+async def h264_handler(
+    drain: MessageDrain,
+    frame_storage: FrameSize,
+    runner: Union[HALONNXRunner, HALTFLiteRunner],
+    tracker: SimpleTracker
+):
     """Main handler for H.264 stream processing."""
-    raw_data = io.BytesIO()
-    container = av.open(raw_data, format="h264", mode="r")
+    container = av.open(frame_storage.raw_data, format="h264", mode="r")
 
     while True:
         msg = await drain.get_latest()
         thread = threading.Thread(
             target=h264_worker,
-            args=[msg, frame_storage, raw_data, container, ort_session,
-                  input_name, tracker],
+            args=[msg, frame_storage, container, runner, tracker],
         )
         thread.start()
 
@@ -345,20 +342,13 @@ async def h264_handler(drain, frame_storage, ort_session, input_name,
         thread.join()
 
 
-async def main_async(session, args):
+async def main_async(session: zenoh.Session,
+                     runner: Union[HALONNXRunner, HALTFLiteRunner]):
     """Main async function."""
-
-    # Load YOLO model
-    print(f"Loading YOLO model from {args.model_path}...")
-    ort_session = ort.InferenceSession(args.model_path)
-    input_name = ort_session.get_inputs()[0].name
-    print(f"Model loaded. Input: {input_name}")
 
     # Initialize tracker
     tracker = SimpleTracker()
     # tracker = ef.ByteTrack()
-
-    print("Zenoh session opened")
 
     # Create async drains
     loop = asyncio.get_running_loop()
@@ -367,13 +357,9 @@ async def main_async(session, args):
 
     # Subscribe to H.264 stream
     session.declare_subscriber("rt/camera/h264", h264_drain.callback)
-    print("Subscribed to rt/camera/h264")
-    print("Waiting for H.264 stream...")
-
     # Start processing
     await asyncio.gather(
-        h264_handler(h264_drain, frame_size_storage, ort_session, input_name,
-                     tracker),
+        h264_handler(h264_drain, frame_size_storage, runner, tracker),
     )
 
     # Keep running
@@ -389,10 +375,10 @@ def main():
     )
     parser.add_argument(
         "-m",
-        "--model-path",
+        "--model",
         type=str,
         required=True,
-        help="Path to YOLO ONNX model file",
+        help="Path to YOLO ONNX or TFLitemodel file",
     )
     parser.add_argument(
         "-r",
@@ -401,10 +387,8 @@ def main():
         default=None,
         help="Connect to the remote endpoint instead of local.",
     )
-
     # Rerun args
     rr.script_add_args(parser)
-
     args = parser.parse_args()
 
     # Setup Rerun visualization
@@ -421,6 +405,16 @@ def main():
     )
     rr.send_blueprint(blueprint)
 
+    # Load YOLO model with ONNX Runtime
+    if os.path.splitext(os.path.basename(args.model))[-1].lower() == ".onnx":
+        runner = HALONNXRunner(args.model)
+    elif os.path.splitext(os.path.basename(args.model))[-1].lower() == ".tflite":
+        runner = HALTFLiteRunner(args.model)
+    else:
+        raise NotImplementedError(
+            "Only ONNX and TFLite Ultralytics models are supported in this sample.")
+    print(f"Loaded YOLO model from {args.model}")
+
     # Zenoh configuration
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
@@ -430,13 +424,11 @@ def main():
             "tcp/") else f"tcp/{args.remote}"
         config.insert_json5("mode", "'client'")
         config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
-
     session = zenoh.open(config)
 
     try:
-        asyncio.run(main_async(session, args))
+        asyncio.run(main_async(session, runner))
     except KeyboardInterrupt:
-        print("\nShutdown requested")
         session.close()
         sys.exit(0)
     session.close()

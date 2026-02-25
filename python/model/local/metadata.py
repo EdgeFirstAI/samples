@@ -45,6 +45,74 @@ class MetaData:
             return self.metadata[key]
         return None
 
+    @staticmethod
+    def build_metadata(outputs: Union[List[dict], list]):
+        # Create metadata if it doesn't exist. Needed to initialize HAL
+        # decoder.
+        metadata = {"outputs": []}
+        for output in outputs:
+            if isinstance(output, dict):
+                shape = output["shape"].tolist()
+                quantization = output.get("quantization", None)
+            else:
+                shape = output.shape
+                quantization = None
+            output_metadata = {
+                "decode": True,
+                "decoder": "ultralytics",
+                "shape": shape,
+                "quantization": quantization,
+            }
+            # [1, 32, 160, 160] or [1, 160, 160, 32]
+            if len(shape) == 4:
+                batch = shape[0]
+                transposed = shape[1] < shape[-1]
+                num_protos = shape[1] if transposed else shape[-1]
+                height = shape[2] if transposed else shape[1]
+                width = shape[-1] if transposed else shape[2]
+                output_metadata["type"] = "protos"
+
+                # dshape must be in the correct order
+                dshape = []
+                keys = []
+                for s in shape:
+                    if s == batch and "batch" not in keys:
+                        dshape.append(("batch", batch))
+                        keys.append("batch")
+                    elif s == num_protos and "num_protos" not in keys:
+                        dshape.append(("num_protos", num_protos))
+                        keys.append("num_protos")
+                    elif s == height and "height" not in keys:
+                        dshape.append(("height", height))
+                        keys.append("height")
+                    elif s == width and "width" not in keys:
+                        dshape.append(("width", width))
+                        keys.append("width")
+                output_metadata["dshape"] = dshape
+            # [1, 37, 8400]
+            else:
+                batch = shape[0]
+                num_features = shape[1] if shape[1] < shape[2] else shape[2]
+                num_boxes = shape[2] if shape[2] > shape[1] else shape[1]
+                output_metadata["type"] = "detection"
+
+                # dshape must be in the correct order
+                dshape = []
+                keys = []
+                for s in shape:
+                    if s == batch and "batch" not in keys:
+                        dshape.append(("batch", batch))
+                        keys.append("batch")
+                    elif s == num_features and "num_features" not in keys:
+                        dshape.append(("num_features", num_features))
+                        keys.append("num_features")
+                    elif s == num_boxes and "num_boxes" not in keys:
+                        dshape.append(("num_boxes", num_boxes))
+                        keys.append("num_boxes")
+                output_metadata["dshape"] = dshape
+            metadata["outputs"].append(output_metadata)
+        return metadata
+
 
 def load_tflite_metadata(
         model_path: str) -> Tuple[Union[dict, None], Union[List[str], None]]:
@@ -139,6 +207,7 @@ def main():
         outputs = metadata_obj.get_quick_metadata('outputs')
         for i, o in enumerate(outputs):
             print(f"Output {i}: {o}\n")
-            
+
+
 if __name__ == "__main__":
     main()

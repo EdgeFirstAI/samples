@@ -28,7 +28,27 @@ python -m python.model.local.tflite --model /path/to/model.tflite --image /path/
 | --method | Specify the method for running model inference <hal, opencv> | hal
 | -- save | Specify the path to the image file with the visualizations of the model outputs | None
 
-### **2. Metadata Extraction**
+### **2. ONNX Model Inference**
+
+**Purpose:** Demonstrate loading an ONNX model, running inference, and decoding outputs (boxes, masks, etc) on a sample image.
+
+**Source Code:** [onnx.py](python/model/local/onnx.py)
+
+**Usage:**
+
+```bash
+python -m python.model.local.onnx --model /path/to/model.onnx --image /path/to/image.jpg
+```
+
+| Parameters | Definition | Default |
+|------------|------------|---------|
+| --score    | Specify the score threshold for NMS | 0.50 |
+| --iou      | Specify the IoU threshold for NMS | 0.50 |
+| --max-boxes | Specify the max boxes for NMS | 300 |
+| --method | Specify the method for running model inference <hal, opencv> | hal
+| -- save | Specify the path to the image file with the visualizations of the model outputs | None
+
+### **3. Metadata Extraction**
 
 **Purpose:** Extract and display model metadata from TFLite, ONNX, or YAML/JSON files.
 
@@ -40,9 +60,9 @@ python -m python.model.local.tflite --model /path/to/model.tflite --image /path/
 python python/model/local/metadata.py --model /path/to/model.tflite
 ```
 
-> Note: The --model-path could be the path to an ONNX model.
+> Note: The --model could be the path to an ONNX model.
 
-### **3. NMS and Transforms**
+### **4. NMS and Transforms**
 
 **Purpose:** Run Non-Maximum Suppression (NMS) and apply box/mask transforms for postprocessing.
 

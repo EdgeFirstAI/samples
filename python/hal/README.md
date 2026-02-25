@@ -85,7 +85,7 @@ python python/hal/zenoh/dma.py
 
 ### **2. Decoder (Zenoh + HAL)**
 
-**Purpose:** Subscribes to Zenoh camera topics, runs YOLO ONNX inference, decodes model outputs, and visualizes results in Rerun.
+**Purpose:** Subscribes to Zenoh camera topics, runs YOLO ONNX or TFLite for inference, decodes model outputs, and visualizes results in Rerun.
 
 **Source Code:** [Python](python/hal/zenoh/decoder.py)
 
@@ -93,7 +93,7 @@ python python/hal/zenoh/dma.py
 
 1. Connect remotely with an EdgeFirst Platform:
 ```bash
-python python/hal/zenoh/decoder.py --model-path /path/to/model.onnx --remote 10.10.41.67:7447
+python -m python.hal.zenoh.decoder --model /path/to/model.onnx --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -105,10 +105,15 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform:
 ```bash
-python python/hal/zenoh/decoder.py --model-path /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
+python -m python.hal.zenoh.decoder --model /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
-### **3. Resize (Zenoh + HAL)**
+**What you'll see**
+- A rerun visualization showing the frame and the decoded model outputs (boxes, masks, labels) drawn on the frame.
+
+![Decoder Sample Output](../../images/decoder.py_output.jpg)
+
+### **3. Resize and Letterbox (Zenoh + HAL)**
 
 **Purpose:** Subscribes to Zenoh camera topics, applies HAL resize/rotation, and visualizes the transformed frames in Rerun.
 
@@ -117,8 +122,15 @@ python python/hal/zenoh/decoder.py --model-path /path/to/model.onnx --connect --
 **Usage:**
 
 1. Connect remotely with an EdgeFirst Platform:
+
+* Resize
 ```bash
-python python/hal/zenoh/resize.py --remote 10.10.41.67:7447
+python python/hal/zenoh/resize.py --remote 192.168.1.100:7447
+```
+
+* Letterbox
+```bash
+python python/hal/zenoh/letterbox.py --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -129,8 +141,15 @@ rerun --bind <PC IP address>
 ```
 
 Run the following command in your EdgeFirst Platform:
+
+* Resize
 ```bash
 python python/hal/zenoh/resize.py --connect --url rerun+http://<PC IP address>:9876/proxy
+```
+
+* Letterbox
+```bash
+python python/hal/zenoh/letterbox.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **4. Tracking (Zenoh + HAL)**
@@ -143,7 +162,7 @@ python python/hal/zenoh/resize.py --connect --url rerun+http://<PC IP address>:9
 
 1. Connect remotely with an EdgeFirst Platform:
 ```bash
-python python/hal/zenoh/tracking.py --model-path /path/to/model.onnx --remote 10.10.41.67:7447
+python -m python.hal.zenoh.tracking --model /path/to/model.onnx --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -155,5 +174,5 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform:
 ```bash
-python python/hal/zenoh/tracking.py --model-path /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
+python -m python.hal.zenoh.tracking --model /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
 ```

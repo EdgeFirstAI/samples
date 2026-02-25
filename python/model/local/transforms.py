@@ -80,3 +80,38 @@ def decode_yolo_masks(masks: np.ndarray, protos: np.ndarray) -> np.ndarray:
         h, w, c = protos[0].shape
         protos = np.transpose(protos, (0, 3, 1, 2))
     return np.matmul(masks, protos.reshape(c, -1)).reshape(-1, h, w)
+
+
+def check_normalized_boxes(
+    boxes: np.ndarray, width: int, height: int
+) -> np.ndarray:
+    # Checks if the boxes are normalized between 0 and 1.
+    # If not, it normalizes them using the provided width and height.
+    boundary = (boxes >= 0) & (boxes <= 1)
+    if boundary.shape[0] > 0:
+        normalized_conf = np.mean(boundary)
+        if normalized_conf < 0.80 and boxes.shape[0] > 0:
+            boxes[:, [0, 2]] /= width
+            boxes[:, [1, 3]] /= height
+    return boxes
+
+
+def get_shape(shape: list[int]) -> Tuple[Tuple[int, int], bool]:
+    transpose = False
+    if shape[-1] in [1, 2, 3, 4]:
+        channels = shape[-1]
+        # This includes batch size. Format (1, height, width, channels).
+        if len(shape) == 4:
+            height, width = shape[1:3]
+        else:
+            height, width = shape[0:2]
+    else:
+        transpose = True
+        # This includes batch size. Format (1, channels, height, width).
+        if len(shape) == 4:
+            height, width = shape[2:4]
+            channels = shape[1]
+        else:
+            height, width = shape[1:3]
+            channels = shape[0]
+    return (height, width, channels), transpose

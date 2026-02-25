@@ -62,10 +62,10 @@ def nms(
     -------
     boxes : np.ndarray
         This contains only the valid bounding boxes post NMS.
-    classes : np.ndarray
-        This contains only the valid classes post NMS.
     scores : np.ndarray
         This contains only the valid scores post NMS.
+    classes : np.ndarray
+        This contains only the valid classes post NMS.
     masks: np.ndarray
         This contains only the valid instance segmentation masks
         post NMS if it exists. Otherwise, None is returned.
@@ -127,7 +127,7 @@ def nms(
             if masks is not None:
                 masks = masks[keep]
 
-        return boxes, classes, scores, masks
+        return boxes, scores, classes, masks
 
 
 def tensorflow_combined_nms(
@@ -174,10 +174,10 @@ def tensorflow_combined_nms(
     -------
     boxes : np.ndarray
         This contains only the valid bounding boxes post NMS.
-    classes : np.ndarray
-        This contains only the valid classes post NMS.
     scores : np.ndarray
         This contains only the valid scores post NMS.
+    classes : np.ndarray
+        This contains only the valid classes post NMS.
     masks: np.ndarray
         This contains only the valid instance segmentation masks
         post NMS if it exists. Otherwise, None is returned.
@@ -250,7 +250,7 @@ def tensorflow_combined_nms(
             top_indices = sorted_indices[:valid_boxes]
             masks = masks[top_indices]
 
-    return boxes, classes, scores, masks
+    return boxes, scores, classes, masks
 
 
 def tensorflow_nms(
@@ -439,7 +439,7 @@ if __name__ == "__main__":
     ], dtype=np.float32)
     scores = np.array([0.95, 0.90, 0.80], dtype=np.float32)
 
-    boxes, classes, scores, _ = nms(
+    boxes, scores, classes, _ = nms(
         boxes=boxes,
         scores=scores,
         iou_threshold=0.70,

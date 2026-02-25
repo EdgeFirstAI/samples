@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-"""EdgeFirst Samples - Resize (Zenoh + HAL).
+"""EdgeFirst Samples - Letterbox (Zenoh + HAL).
 
 Subscribes to Zenoh camera topics (e.g. `rt/camera/h264`), decodes frames,
-applies HAL-based resize/rotation, and logs the transformed frames to Rerun.
+applies HAL-based letterbox resize/rotation, and logs the transformed frames to Rerun.
 
 Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
 discovery is used.
@@ -26,6 +26,20 @@ import edgefirst_hal as ef
 
 
 CONVERTER = ef.ImageProcessor()
+
+
+def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
+                  constant: int = 114):
+    ratio = min(dst.height / image.height, dst.width / image.width)
+    height = image.height * ratio
+    width = image.width * ratio
+    top = round((dst.height - height) / 2)
+    left = round((dst.width - width) / 2)
+    height = round(height)
+    width = round(width)
+    CONVERTER.convert(image, dst,
+                      dst_crop=ef.Rect(left, top, width, height),
+                      dst_color=[constant, constant, constant, 255])
 
 
 class MessageDrain:
@@ -76,8 +90,8 @@ def h264_worker(msg, raw_data, container):
                 ef_im.copy_from_numpy(frame_array)
                 output = ef.TensorImage(new_width, new_height, ef.FourCC.RGB)
 
-                # Resize with 180 degree rotation.
-                CONVERTER.convert(ef_im, output, ef.Rotation.Rotate180)
+                # Letterbox using HAL.
+                hal_letterbox(ef_im, output)
 
                 out_array = np.zeros(
                     (new_height, new_width, 3), dtype=np.uint8)
@@ -115,7 +129,8 @@ async def main_async(session):
 
 
 def main():
-    parser = ArgumentParser(description="EdgeFirst Samples - H264 with Resize")
+    parser = ArgumentParser(
+        description="EdgeFirst Samples - H264 with Letterbox")
     parser.add_argument(
         "-r",
         "--remote",

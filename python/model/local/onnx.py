@@ -2,15 +2,16 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 """
-TFLite model loading, inference, and post-processing utilities for EdgeFirst workflows.
+ONNX model loading, inference, and post-processing utilities for EdgeFirst workflows.
 
-- Loads and runs TFLite models using tflite-runtime or TensorFlow
+- Loads and runs ONNX models using ONNX Runtime
 - Handles model metadata, preprocessing, and output decoding
 - Supports YOLO box/mask decoding, NMS, and image transforms
 """
 
-from argparse import ArgumentParser
+import ctypes
 import os
+from argparse import ArgumentParser
 
 import numpy as np
 
@@ -21,40 +22,56 @@ except ImportError:
     _OPENCV_AVAILABLE = False
 
 try:
-    from tflite_runtime.interpreter import Interpreter, load_delegate  # type: ignore
-    _TFLITE_RUNTIME_AVAILABLE = True
+    import onnxruntime as ort
+    _ONNX_RUNTIME_AVAILABLE = True
 except ImportError:
-    _TFLITE_RUNTIME_AVAILABLE = False
-
-    try:
-        import tensorflow as tf  # type: ignore
-        Interpreter = tf.lite.Interpreter
-        load_delegate = tf.lite.experimental.load_delegate
-        _TENSORFLOW_AVAILABLE = True
-    except ImportError as e:
-        _TENSORFLOW_AVAILABLE = False
+    _ONNX_RUNTIME_AVAILABLE = False
 
 import edgefirst_hal as ef
 
-from python.model.local.metadata import load_tflite_metadata, MetaData
-from python.model.local.transforms import (decode_yolo_boxes,
-                                           decode_yolo_masks,
-                                           dequantize, crop_masks, get_shape)
-from python.hal.local.letterbox import cv2_letterbox, hal_letterbox
+from python.model.local.transforms import (get_shape, check_normalized_boxes,
+                                           dequantize, decode_yolo_boxes,
+                                           decode_yolo_masks, crop_masks)
+from python.model.local.metadata import load_onnx_metadata, MetaData
+from python.hal.local.letterbox import hal_letterbox, cv2_letterbox
 from python.hal.local.resize import cv2_resize
 from python.model.local.nms import nms
 
 
-def select_tflite_delegate():
-    ext_delegate = None
-    if os.path.exists("/usr/lib/libvx_delegate.so"):
-        ext_delegate = load_delegate("/usr/lib/libvx_delegate.so", {})
-    elif os.path.exists("/usr/lib/libneutron_delegate.so"):
-        ext_delegate = load_delegate("/usr/lib/libneutron_delegate.so", {})
-    return ext_delegate
+def check_tensorrt_runtime() -> list:
+    required_libs = ["libnvinfer.so",
+                     "libnvinfer_plugin.so", "libnvonnxparser.so"]
+    missing = []
+    for lib in required_libs:
+        try:
+            ctypes.CDLL(lib)
+        except OSError:
+            missing.append(lib)
+    return missing
 
 
-class TFLiteRunner:
+def select_providers() -> list:
+    selected_providers = ["CPUExecutionProvider"]
+    available_providers = ort.get_available_providers()
+
+    preferred_providers = ["NnapiExecutionProvider",
+                           "VsiNpuExecutionProvider",
+                           "VSINPUExecutionProvider",
+                           "CUDAExecutionProvider",
+                           "CPUExecutionProvider"]
+    selected_providers = []
+    for i, provider in enumerate(preferred_providers):
+        if provider in available_providers:
+            if provider == "TensorrtExecutionProvider":
+                missing_libraries = check_tensorrt_runtime()
+                if missing_libraries:
+                    continue
+            selected_providers.append(provider)
+    print(f"Selected providers: {selected_providers}")
+    return selected_providers
+
+
+class ONNXRunner:
     def __init__(
         self,
         model_path: str,
@@ -62,40 +79,38 @@ class TFLiteRunner:
         iou: float = 0.50,
         max_boxes: int = 300
     ):
-        if not _TFLITE_RUNTIME_AVAILABLE:
-            print("[WARNING] tflite-runtime is not installed in the system.")
-            if not _TENSORFLOW_AVAILABLE:
-                raise ImportError(
-                    "Please install tflite-runtime or tensorflow to run TFLite models.")
+        if not _ONNX_RUNTIME_AVAILABLE:
+            raise ImportError(
+                "ONNX Runtime is required for this example. " +
+                "Please install it with `pip install onnxruntime`."
+            )
 
         self.score = score
         self.iou = iou
         self.max_boxes = max_boxes
 
-        ext_delegate = select_tflite_delegate()
-        if ext_delegate:
-            self.model = Interpreter(
-                model_path=model_path,
-                experimental_delegates=[ext_delegate]
-            )
-        else:
-            self.model = Interpreter(model_path=model_path)
-        self.model.allocate_tensors()
-        self.input_details = self.model.get_input_details()
-        self.output_details = self.model.get_output_details()
-        self.input_quantization = self.input_details[0]["quantization"]
-        self.input_type = self.input_details[0]["dtype"]
-        self.input_tensor = self.model.tensor(self.input_details[0]["index"])
-        self.input_shape, self.transpose = get_shape(
-            self.input_details[0]["shape"])
+        providers = select_providers()
+        self.ort_session = ort.InferenceSession(
+            model_path, providers=providers)
+        self.output_names = [x.name for x in self.ort_session.get_outputs()]
 
-        self.metadata, self.labels = load_tflite_metadata(model_path)
+        self.input_type = (np.float16 if "float16" in self.ort_session.get_inputs()[0].type
+                           else np.float32 if "float" in self.ort_session.get_inputs()[0].type
+                           else np.uint8 if "uint8" in self.ort_session.get_inputs()[0].type
+                           else np.int8 if "int8" in self.ort_session.get_inputs()[0].type
+                           else self.ort_session.get_inputs()[0].type)
+        self.input_shape, self.transpose = get_shape(
+            self.ort_session.get_inputs()[0].shape)
+        self.input_name = self.ort_session.get_inputs()[0].name
+        outputs = self.ort_session.get_outputs()
+
+        self.metadata, self.labels = load_onnx_metadata(model_path)
         self.metadata = None
         if self.metadata is None:
-            self.metadata = MetaData.build_metadata(self.output_details)
+            self.metadata = MetaData.build_metadata(outputs)
 
 
-class HALRunner(TFLiteRunner):
+class HALRunner(ONNXRunner):
     def __init__(
         self,
         model_path: str,
@@ -104,35 +119,50 @@ class HALRunner(TFLiteRunner):
         max_boxes: int = 300
     ):
         super().__init__(model_path, score, iou, max_boxes)
+
         # To use OpenGL assign image FourCC as RGBA.
-        self.dst = ef.TensorImage(
-            self.input_shape[1], self.input_shape[0], ef.FourCC.RGBA)
+        self.dst = ef.TensorImage(self.input_shape[1],
+                                  self.input_shape[0], ef.FourCC.RGBA)
         self.decoder = ef.Decoder(
             self.metadata,
-            score_threshold=self.score,
-            iou_threshold=self.iou
+            score_threshold=score,
+            iou_threshold=iou,
         )
         self.converter = ef.ImageProcessor()
 
     def infer(self, tensor_image: ef.TensorImage):
-        # Input quantization
-        zero_point = None
-        if self.input_quantization is not None:
-            if self.input_type == np.uint8:
-                # For uint8 quantized models, use zero_point=0 (raw pixel data)
-                zero_point = 0
-            elif self.input_type == np.int8:
-                zero_point = abs(self.input_quantization[-1])
-
         hal_letterbox(tensor_image, self.dst)
-        self.dst.normalize_to_numpy(self.input_tensor()[0, :, :, :],
-                                    normalization=ef.Normalization.DEFAULT,
-                                    zero_point=zero_point)
-        self.model.invoke()
-        outputs = [self.model.get_tensor(output["index"])
-                   for output in self.output_details]
 
-        return self.decoder.decode(outputs, max_boxes=self.max_boxes)
+        input_array = np.zeros((self.dst.height,
+                                self.dst.width, 3),
+                               dtype=self.input_type)
+
+        if self.input_type in [np.float32, np.float16]:
+            norm = ef.Normalization.UNSIGNED
+        else:
+            norm = ef.Normalization.DEFAULT
+        self.dst.normalize_to_numpy(input_array, normalization=norm)
+
+        if self.transpose:
+            # Transpose from (height, width, channels) to (channels, height,
+            # width)
+            input_array = np.transpose(input_array, (2, 0, 1))
+        input_array = input_array[None]  # Add batch dimension
+
+        outputs = self.ort_session.run(self.output_names,
+                                       {self.input_name: input_array})
+
+        # Normalize bounding boxes which is needed to decode the outputs.
+        for x in outputs:
+            if len(x.shape) == 3:
+                if x.dtype in [np.float32, np.float16]:
+                    x[:, :4, :] = check_normalized_boxes(
+                        x[:, :4, :], width=self.input_shape[1],
+                        height=self.input_shape[0]
+                    )
+
+        return self.decoder.decode(
+            outputs, max_boxes=self.max_boxes)
 
     def inference(self, image_path: str, save_path: str = None):
         tensor_image = ef.TensorImage.load(image_path)
@@ -151,36 +181,39 @@ class HALRunner(TFLiteRunner):
         return boxes, scores, classes, masks
 
 
-class OpenCVRunner(TFLiteRunner):
+class OpenCVRunner(ONNXRunner):
     def infer(self, input_tensor: np.ndarray):
-        # For quantized models, run input quantization parameters.
-        if self.input_quantization is not None:
-            if self.input_type == np.int8:
-                scale, zero_point = self.input_quantization
-                # Apply proper INT8 quantization: quantized = round(normalized / scale) + zero_point
-                # First normalize to [0, 1] range, then quantize
-                normalized = input_tensor.astype(np.float32) / 255.0
-                quantized = np.round(
-                    normalized / scale).astype(np.int32) + zero_point
-                input_tensor = np.clip(quantized, -128, 127).astype(np.int8)
+        # This method is used by camera_model.py and letterbox is already
+        # performed.
+        if self.input_type in [np.float32, np.float16]:
+            input_array = input_tensor.astype(self.input_type) / 255.0
+        else:
+            input_array = input_tensor.astype(self.input_type)
 
-        input_tensor = input_tensor[None]
-        # Directly copy the input tensor into the model for TFLite.
-        if self.input_tensor is not None:
-            np.copyto(self.input_tensor(), input_tensor)
+        if self.transpose:
+            # Transpose from (height, width, channels) to (channels, height,
+            # width)
+            input_array = np.transpose(input_array, (2, 0, 1))
+        input_array = input_array[None]  # Add batch dimension
 
-        self.model.invoke()
+        outputs = self.ort_session.run(self.output_names,
+                                       {self.input_name: input_array})
 
-        outputs = [self.model.get_tensor(output["index"])
-                   for output in self.output_details]
-
+        # Normalize bounding boxes which is needed to decode the outputs.
+        for x in outputs:
+            if len(x.shape) == 3:
+                if x.dtype in [np.float32, np.float16]:
+                    x[:, :4, :] = check_normalized_boxes(
+                        x[:, :4, :], width=self.input_shape[1],
+                        height=self.input_shape[0]
+                    )
         return self.decode_outputs(outputs)
 
     def inference(self, image_path: str, save_path: str = None):
         if not _OPENCV_AVAILABLE:
             raise ImportError(
-                "OpenCV is required to run this sample. " +
-                "Please install OpenCV and try again."
+                "OpenCV is required for this example. " +
+                "Please install it with `pip install opencv-python`."
             )
 
         input_tensor = cv2.imread(image_path)
@@ -194,7 +227,6 @@ class OpenCVRunner(TFLiteRunner):
         boxes = boxes.astype(np.int32)
 
         if save_path is not None:
-            input_tensor = input_tensor[0]
             alpha = 0.50
             for i in range(boxes.shape[0]):
                 label = (
@@ -268,10 +300,10 @@ class OpenCVRunner(TFLiteRunner):
 
 def main():
     opts = ArgumentParser(
-        description="Run TFLite model on a sample image"
+        description="Run ONNX model on a sample image"
     )
     opts.add_argument("--model", type=str, required=True,
-                      help="Path to TFLite model")
+                      help="Path to ONNX model")
     opts.add_argument("--image", type=str, required=True,
                       help="Path to input image")
     opts.add_argument('-s', '--score', type=float, default=0.50,
@@ -286,9 +318,9 @@ def main():
                       help='Whether to save the output visualization as output.jpg')
     args = opts.parse_args()
 
-    if os.path.splitext(os.path.basename(args.model))[-1] != ".tflite":
+    if os.path.splitext(os.path.basename(args.model))[-1] != ".onnx":
         raise NotImplementedError(
-            "Only quantized Ultralytics TFLite models are supported in this sample.")
+            "Only Ultralytics ONNX models are supported in this sample.")
 
     if args.method == "hal":
         runner = HALRunner(

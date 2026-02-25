@@ -254,16 +254,28 @@ python -m python.hal.local.letterbox -m opencv -s 640x640
 
 **Usage:**
 
-> Note: This example currently only supports quantized Ultralytics TFLite models.
+> Note: This example currently only supports Ultralytics ONNX and TFLite models.
 
 1. Using HAL to load the image and decode model outputs
 
+* ONNX
+```bash
+python -m python.model.local.onnx --model /path/to/model.onnx --image /path/to/image.jpg
+```
+
+* TFLite
 ```bash
 python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg
 ```
 
 2. Using OpenCV to load the image and decode model outputs
 
+* ONNX
+```bash
+python -m python.model.local.onnx --model /path/to/model.onnx --image /path/to/image.jpg --method opencv
+```
+
+* TFLite
 ```bash
 python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg --method opencv
 ```

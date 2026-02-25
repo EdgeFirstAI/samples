@@ -81,18 +81,29 @@ class GStreamerCapture:
 
     def _build_pipeline(self):
         if self.has_display() and not self.use_cairo:
+            # cmd: 
+            # gst-launch-1.0 v4l2src device=/dev/video3 ! \
+            # video/x-raw ! imxvideoconvert_g2d ! \
+            # video/x-raw,format=RGBA ! queue ! waylandsink
             pipeline = Gst.parse_launch("""
                 v4l2src device=%s !
-                video/x-raw !
+                video/x-raw ! 
+                imxvideoconvert_g2d !
+                video/x-raw,format=RGBA !
                 queue !
                 waylandsink
             """ % (self.camera))
         else:
+            # cmd:
+            # gst-launch-1.0 v4l2src device=/dev/video3 ! \
+            # video/x-raw,format=YUY2 ! imxvideoconvert_g2d ! \
+            # video/x-raw,format=RGBA ! queue ! \
+            # appsink sync=true max-buffers=1 drop=true name=sink emit-signals=true
             pipeline = Gst.parse_launch("""
-                v4l2src device=%s !
-                video/x-raw !
-                videoconvert ! video/x-raw,format=RGB !
-                queue !
+                v4l2src device=%s io-mode=dmabuf !
+                video/x-raw,format=YUY2 ! 
+                imxvideoconvert_g2d ! 
+                video/x-raw,format=RGBA ! 
                 appsink sync=true max-buffers=1 drop=true name=sink emit-signals=true
             """ % (self.camera))
 
@@ -120,7 +131,7 @@ class GStreamerCapture:
         structure = caps.get_structure(0)
         pixel_format = structure.get_value("format")
 
-        if pixel_format != "RGB":
+        if pixel_format not in ["RGB", "RGBA"]:
             raise RuntimeError(
                 f"Unsupported format for direct NumPy mapping: {pixel_format}. "
                 "Use videoconvert to RGB in the pipeline."
@@ -131,7 +142,7 @@ class GStreamerCapture:
             raise RuntimeError("Failed to map buffer to CPU memory")
 
         try:
-            channels = 3
+            channels = 4 if pixel_format == "RGBA" else 3
             stride = structure.get_value("stride") if structure.has_field(
                 "stride") else width * channels
             data = np.frombuffer(map_info.data, dtype=np.uint8)

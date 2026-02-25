@@ -101,19 +101,19 @@ class GStreamerInference(LetterboxGStreamerCapture):
             boxes, scores, classes, masks = self.runner.infer(tensor)
             # Render detections on the image using the HAL converter
             self.runner.converter.render_to_image(
-                self.dst,
+                self.runner.dst,
                 bbox=boxes,
                 scores=scores,
                 classes=classes,
                 seg=masks
             )
 
-            channels = 1 if self.dst.format == ef.FourCC.GREY else 4
+            channels = 1 if self.runner.dst.format == ef.FourCC.GREY else 4
             if self.use_cairo and self.cairo_window is not None:
-                with self.dst.map() as m:
+                with self.runner.dst.map() as m:
                     n = np.array(
                         m.view()).reshape(
-                        (self.dst.height, self.dst.width, channels))
+                        (self.runner.dst.height, self.runner.dst.width, channels))
                     if channels == 4:
                         n = n[:, :, :3]
                     n = np.ascontiguousarray(n, dtype=np.uint8)
@@ -189,10 +189,11 @@ class OpenCVInference(LetterboxOpenCVCapture):
                 cv2.rectangle(frame,
                               (boxes[i, 0], boxes[i, 1]),
                               (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
+                
                 if masks is not None:
                     frame[masks[i] > 0] = (
                         frame[masks[i] > 0] * (1 - alpha) +
-                        np.array([0, 255, 0]) * alpha
+                        np.array([0, 255, 0, 255]) * alpha
                     )
                 cv2.putText(
                     frame,

@@ -193,7 +193,7 @@ python3 -m python.combined.local.camera_model --model /path/my/model.tflite --ca
 2. Using OpenCV to stream from the camera and invoke the model for inference
 
 ```bash
-python3 -m python.combined.local.camera_model --model /path/my/model.tflite --camera=0 --method=opencv
+python3 -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=opencv
 ```
 
 **What You'll See:**

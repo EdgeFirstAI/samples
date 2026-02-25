@@ -28,7 +28,7 @@ python -m python.combined.local.camera_model --model /path/my/model.tflite --cam
 2. Alternative pipeline which uses OpenCV and a base method for reading the camera to fetch frames that can be copied into the model for inference. OpenCV is also used to visualize the frame on the monitor.
 
 ```bash
-python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=0 --method=opencv
+python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=opencv
 ```
 
 ## Zenoh Examples

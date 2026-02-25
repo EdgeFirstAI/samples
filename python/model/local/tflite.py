@@ -90,6 +90,7 @@ class TFLiteRunner:
             self.input_details[0]["shape"])
 
         self.metadata, self.labels = load_tflite_metadata(model_path)
+        self.metadata = None
         if self.metadata is None:
             self.metadata = MetaData.build_metadata(self.output_details)
 
@@ -164,6 +165,9 @@ class OpenCVRunner(TFLiteRunner):
                 input_tensor = np.clip(quantized, -128, 127).astype(np.int8)
 
         input_tensor = input_tensor[None]
+        if self.input_shape[-1] == 3 and input_tensor.shape[-1] == 4:
+            # Drop alpha channel if model expects 3 channels but input has 4 channels
+            input_tensor = input_tensor[:, :, :, :3]
         # Directly copy the input tensor into the model for TFLite.
         if self.input_tensor is not None:
             np.copyto(self.input_tensor(), input_tensor)
@@ -194,6 +198,9 @@ class OpenCVRunner(TFLiteRunner):
 
         if save_path is not None:
             input_tensor = input_tensor[0]
+            if input_tensor.shape[-1] == 4:
+                # Drop alpha channel if present
+                input_tensor = input_tensor[:, :, :3]
             alpha = 0.50
             for i in range(boxes.shape[0]):
                 label = (

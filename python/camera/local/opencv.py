@@ -34,7 +34,16 @@ class OpenCVCapture:
                 "OpenCV is not available. Please install OpenCV.")
 
         self.device_index = device_index
-        self.cap = cv2.VideoCapture(self.device_index)
+
+        self.pipeline = (
+            f"v4l2src device={self.device_index} io-mode=dmabuf ! "
+            "video/x-raw,format=YUY2 ! "
+            "imxvideoconvert_g2d ! "
+            "video/x-raw,format=BGRA ! "
+            "appsink drop=true max-buffers=1 sync=false"
+        )
+
+        self.cap = cv2.VideoCapture(self.pipeline, cv2.CAP_GSTREAMER)
         if not self.cap.isOpened():
             raise RuntimeError(f"Cannot open camera {self.device_index}")
         self.window_available = self.has_display()
@@ -113,7 +122,7 @@ class OpenCVCapture:
 def main():
     opts = ArgumentParser(
         description='OpenCV Camera with Python')
-    opts.add_argument('-c', '--camera', type=str, default='0',
+    opts.add_argument('-c', '--camera', type=str, default='/dev/video3',
                       help='Camera device for capture')
     args = opts.parse_args()
 

@@ -44,7 +44,7 @@ python python/camera/local/gstreamer.py --camera=/dev/video3 --use-cairo
 
 **Usage:**
 ```bash
-python python/camera/local/opencv.py --camera=0
+python python/camera/local/opencv.py --camera=/dev/video3
 ```
 
 ## Zenoh Examples

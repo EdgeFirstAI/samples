@@ -133,7 +133,7 @@ class HALRunner(ONNXRunner):
         hal_letterbox(tensor_image, self.dst)
 
         input_array = np.zeros((self.dst.height,
-                                self.dst.width, 3),
+                                self.dst.width, self.input_shape[-1]),
                                dtype=self.input_type)
 
         if self.input_type in [np.float32, np.float16]:

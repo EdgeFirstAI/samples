@@ -1,3 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
+"""
+Functions needed for the GStreamer examples.
+"""
+
 from typing import Tuple
 import os
 

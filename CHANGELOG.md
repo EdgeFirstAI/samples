@@ -29,7 +29,7 @@ Empty releases should be avoided - ensure meaningful changes are listed.
 - Cargo.toml now uses released edgefirst_hal package rather than searching for a local edgefirst directory
 - Applied latest changes to EdgeFirst Schemas which renames `DmaBuf` to `DmaBuffer`
 - Applied latest [migrations from 0.27 to 0.28 in rerun-sdk](https://rerun.io/docs/reference/migration/migration-0-28) which now uses `TransformAxes3D` instead of `Transform3D` for imu.rs
-- Fixed stuttered outputs when using H264 which is due to the loss of key frames. Process only if the keyframe is available, but may result in occasional drop in FPS.
+- Fixed stuttered outputs that occur in decoder.py and tracking.py examples which uses H264 decoding. The issue is potentially due to the loss of key frames. However, processing only if the keyframe is available, results in significant drop in FPS. So instead creating two threads that runs H264 frame fetching and decoding alongside model inference and output rendering which increases throughput and reduces stuttering.
 
 ### Changed
 - Structural changes to the Python examples to have a split "local" and "zenoh" examples

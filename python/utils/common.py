@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
+"""
+Common utilities for EdgeFirst samples.
+"""
 
 from typing import Tuple, Union, List
 import zipfile

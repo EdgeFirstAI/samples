@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
+
+"""
+Utilities needed for HAL samples.
+"""
 
 import edgefirst_hal as ef
 

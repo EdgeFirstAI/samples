@@ -12,8 +12,9 @@ Specify --resolution to output the frame in a different resolution, e.g. 1280x72
 """
 
 from argparse import ArgumentParser
-import os
+from pathlib import Path
 import time
+import sys
 
 import numpy as np
 
@@ -25,6 +26,12 @@ import numpy as np
 #
 
 try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
+
+try:
     import gi
     gi.require_version("Gst", "1.0")
     gi.require_version("GstApp", "1.0")
@@ -34,19 +41,10 @@ try:
 except ImportError:
     _GSTREAMER_AVAILABLE = False
 
-try:
-    gi.require_version("Gtk", "3.0")
-    from gi.repository import Gtk, Gdk, GdkPixbuf
-    import cairo
-    _PYCAIRO_AVAILABLE = True
-except Exception:
-    _PYCAIRO_AVAILABLE = False
-
-try:
-    import psutil
-    _PSUTIL_AVAILABLE = True
-except ImportError:
-    _PSUTIL_AVAILABLE = False
+# Add project root to sys.path
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow, 
+                                   _build_pipeline, has_display)
 
 
 class GStreamerCapture:
@@ -58,10 +56,12 @@ class GStreamerCapture:
         _ = GstApp
         Gst.init(None)
 
+        # Display init
         self.camera = camera
-        self.use_cairo = use_cairo and _PYCAIRO_AVAILABLE and self.has_display()
+        self.use_cairo = use_cairo and _PYCAIRO_AVAILABLE and has_display()
         self.cairo_window = CairoWindow() if self.use_cairo else None
 
+        # Performance measurements
         self.frame_count = 0
         self.window_start = time.perf_counter()
         self.fetch_fps = 0.0
@@ -69,53 +69,18 @@ class GStreamerCapture:
         self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
         if self.process is not None:
             self.process.cpu_percent(interval=None)
+        
+        # Initialize pipeline
         self.loop = GLib.MainLoop()
-        self.pipeline = self._build_pipeline()
+        self.pipeline = _build_pipeline(self.camera, self.use_cairo)
 
-    @staticmethod
-    def has_display() -> bool:
-        return (
-            os.environ.get("DISPLAY") or
-            os.environ.get("WAYLAND_DISPLAY")
-        ) and os.access("/dev/dri", os.R_OK)
-
-    def _build_pipeline(self):
-        if self.has_display() and not self.use_cairo:
-            # cmd:
-            # gst-launch-1.0 v4l2src device=/dev/video3 ! \
-            # video/x-raw ! imxvideoconvert_g2d ! \
-            # video/x-raw,format=RGBA ! queue ! waylandsink
-            pipeline = Gst.parse_launch("""
-                v4l2src device=%s !
-                video/x-raw !
-                imxvideoconvert_g2d !
-                video/x-raw,format=RGBA !
-                queue !
-                waylandsink
-            """ % (self.camera))
-        else:
-            # cmd:
-            # gst-launch-1.0 v4l2src device=/dev/video3 ! \
-            # video/x-raw,format=YUY2 ! imxvideoconvert_g2d ! \
-            # video/x-raw,format=RGBA ! queue ! \
-            # appsink sync=true max-buffers=1 drop=true name=sink
-            # emit-signals=true
-            pipeline = Gst.parse_launch("""
-                v4l2src device=%s io-mode=dmabuf !
-                video/x-raw,format=YUY2 !
-                imxvideoconvert_g2d !
-                video/x-raw,format=RGBA !
-                appsink sync=true max-buffers=1 drop=true name=sink emit-signals=true
-            """ % (self.camera))
-
-        bus = pipeline.get_bus()
+        bus = self.pipeline.get_bus()
         bus.add_signal_watch()
         bus.connect("message::error", self.on_error)
 
-        appsink = pipeline.get_by_name("sink")
+        appsink = self.pipeline.get_by_name("sink")
         if appsink is not None:
             appsink.connect("new-sample", self.on_new_sample)
-        return pipeline
 
     def on_new_sample(self, app_sink):
         sample = app_sink.pull_sample()
@@ -184,79 +149,6 @@ class GStreamerCapture:
         print("Press CTRL-C to stop")
         self.pipeline.set_state(Gst.State.PLAYING)
         self.loop.run()
-
-
-class CairoWindow:
-    def __init__(self, title: str = "Camera"):
-        if not _PYCAIRO_AVAILABLE:
-            raise RuntimeError("pycairo/GTK is not available")
-        ok, _argv = Gtk.init_check()
-        if not ok:
-            raise RuntimeError("Gtk couldn't be initialized")
-        self.title = title
-        self.window = Gtk.Window(title=title)
-        self.area = Gtk.DrawingArea()
-        self.window.add(self.area)
-        self.window.connect("destroy", self._on_destroy)
-        self.area.connect("draw", self._on_draw)
-        self.window.show_all()
-        self.frame = None
-        self.overlay_text = ""
-        self.closed = False
-        self._size_set = False
-
-    def _on_destroy(self, *_args):
-        self.closed = True
-
-    def update_frame(self, frame: np.ndarray, overlay_text: str = ""):
-        if self.closed:
-            return False
-        self.frame = frame
-        self.overlay_text = overlay_text
-        if not self._size_set:
-            h, w = frame.shape[:2]
-            self.window.resize(w, h)
-            self._size_set = True
-        self.area.queue_draw()
-        return False
-
-    def _on_draw(self, _widget, cr):
-        if self.frame is None:
-            return False
-        frame = self.frame
-        h, w = frame.shape[:2]
-        if frame.ndim == 2:
-            frame = np.stack([frame, frame, frame], axis=2)
-        if frame.shape[2] == 4:
-            frame = frame[:, :, :3]
-
-        rowstride = frame.shape[1] * frame.shape[2]
-        data = frame.tobytes()
-        pixbuf = GdkPixbuf.Pixbuf.new_from_data(
-            data,
-            GdkPixbuf.Colorspace.RGB,
-            False,
-            8,
-            w,
-            h,
-            rowstride,
-        )
-        Gdk.cairo_set_source_pixbuf(cr, pixbuf, 0, 0)
-        cr.paint()
-
-        if self.overlay_text:
-            cr.set_source_rgba(0, 0, 0, 0.5)
-            cr.rectangle(5, 5, 500, 28)
-            cr.fill()
-            cr.set_source_rgb(0, 1, 0)
-            cr.select_font_face(
-                "Sans",
-                cairo.FONT_SLANT_NORMAL,
-                cairo.FONT_WEIGHT_BOLD)
-            cr.set_font_size(16)
-            cr.move_to(12, 24)
-            cr.show_text(self.overlay_text)
-        return False
 
 
 def main():

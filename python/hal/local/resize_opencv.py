@@ -1,20 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-"""EdgeFirst Samples - OpenCV Sample (Local - on-device).
+"""EdgeFirst Samples - Resizing Sample using OpenCV (Local - on-device).
 
-Reads from the camera, 0 by default and displays the captured
-frame in a window if available.
+Reads from the camera, /dev/video3 by default and resizes the frame based on
+the specified dimensions and displays the resized frame in a window if available.
+The resize method uses OpenCV VideoCaptures and streaming.
 
 This example is intended to run locally on target.
-Specify `--camera <device>` to select a different camera device, 0.
+Specify `--camera <device>` to select a different camera device.
 """
 
+from typing import Optional
 from argparse import ArgumentParser
-from typing import Union
 from pathlib import Path
 import time
 import sys
+
+from PIL import Image
+import numpy as np
 
 try:
     import psutil
@@ -30,19 +34,39 @@ except ImportError:
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-
 from utils.opencv_utils import (has_display as opencv_has_display, 
                                 _build_pipeline as opencv_build_pipeline)
 
 
-class OpenCVCapture:
-    def __init__(self, device_index: Union[int, str] = 0):
+def cv2_resize(image: np.ndarray, size: Optional[tuple] = None) -> np.ndarray:
+    if not _OPENCV_AVAILABLE:
+        raise ImportError(
+            "OpenCV is not available. Please install OpenCV to use cv2_resize.")
+    if size is None:
+        return image
+    return cv2.resize(image, size, interpolation=cv2.INTER_LINEAR)
+
+
+def pillow_resize(image: np.ndarray,
+                  size: Optional[tuple] = None) -> np.ndarray:
+    if size is None:
+        return image
+    im = Image.fromarray(image.astype(np.uint8))
+    im = im.resize(size)
+    return np.array(im)
+
+
+class ResizedOpenCVCapture:
+    def __init__(self, device_index: int, size: Optional[tuple] = None,
+                 method: str = "opencv"):
         if not _OPENCV_AVAILABLE:
             raise ImportError(
                 "OpenCV is not available. Please install OpenCV.")
 
         # Display init
         self.device_index = device_index
+        self.size = size
+        self.method = method
         self.pipeline = opencv_build_pipeline(self.device_index)
         self.cap = cv2.VideoCapture(self.pipeline, cv2.CAP_GSTREAMER)
         if not self.cap.isOpened():
@@ -67,7 +91,9 @@ class OpenCVCapture:
         if not ret:
             self.clear()
             raise RuntimeError("Failed to read frame from camera")
-        return frame
+        if self.method == "opencv":
+            return cv2_resize(frame, self.size)
+        return pillow_resize(frame, self.size)
 
     def run(self):
         print('capturing from %s at %dx%d' % (
@@ -114,14 +140,21 @@ class OpenCVCapture:
 
 
 def main():
-    opts = ArgumentParser(
-        description='OpenCV Camera with Python')
+    opts = ArgumentParser(description='Camera Resize using OpenCV')
     opts.add_argument('-c', '--camera', type=str, default='/dev/video3',
                       help='Camera device for capture')
+    opts.add_argument('-s', '--size', type=str, default='640x360',
+                      help='Resize dimensions in WIDTHxHEIGHT format, e.g. 640x360')
+    opts.add_argument('-m', '--method', type=str, default='opencv',
+                      choices=["opencv", "pillow"],
+                      help='Resize method to use')
     args = opts.parse_args()
 
-    capture = OpenCVCapture(
-        int(args.camera) if args.camera.isdigit() else args.camera)
+    camera_width, camera_height = map(int, args.size.split('x'))
+    capture = ResizedOpenCVCapture(
+        int(args.camera) if args.camera.isdigit() else args.camera,
+        size=(camera_width, camera_height),
+        method=args.method)
     capture.run()
 
 

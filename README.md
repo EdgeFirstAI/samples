@@ -208,32 +208,32 @@ python3 -m python.combined.local.camera_model --model /path/my/model.tflite --ca
 
 **Purpose:** Demonstrate reading from the camera and perform letterbox or resizing operations on the fetched frames using the [Hardware Abstraction Layer](https://github.com/EdgeFirstAI/hal) (HAL).
 
-**Source Code:** Rust(*coming soon*) • [Python](python/hal/local)
+**Source Code:** Rust(*coming soon*) • [Python - HAL](python/hal/local/)
 
 **Usage:**
 
-1. Stream from the camera using GStreamer and resize the frames using HAL (default)
+1. Stream from the camera using GStreamer and resize the frames using HAL
 
 ```bash
-python -m python.hal.local.resize -s 640x360
+python python/hal/local/resize_hal.py -s 640x360
 ```
 
 2. Stream from the camera using OpenCV and resize the frames using OpenCV
 
 ```bash
-python -m python.hal.local.resize -m opencv -s 640x360
+python python/hal/local/resize_opencv.py -s 640x360
 ```
 
 3. Stream from the camera using GStreamer and letterbox the frames using HAL (default)
 
 ```bash
-python -m python.hal.local.letterbox -s 640x640
+python python/hal/local/letterbox_hal.py -s 640x640
 ```
 
 4. Stream from the camera using OpenCV and letterbox the frames using OpenCV
 
 ```bash
-python -m python.hal.local.letterbox -m opencv -s 640x640
+python python/hal/local/letterbox_opencv.py -s 640x640
 ```
 
 **What You'll See:**
@@ -260,24 +260,24 @@ python -m python.hal.local.letterbox -m opencv -s 640x640
 
 * ONNX
 ```bash
-python -m python.model.local.onnx --model /path/to/model.onnx --image /path/to/image.jpg
+python python/model/local/hal_onnx.py --model /path/to/model.onnx --image /path/to/image.jpg
 ```
 
 * TFLite
 ```bash
-python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg
+python python/model/local/hal_tflite.py --model /path/to/model.tflite --image /path/to/image.jpg
 ```
 
 2. Using OpenCV to load the image and decode model outputs
 
 * ONNX
 ```bash
-python -m python.model.local.onnx --model /path/to/model.onnx --image /path/to/image.jpg --method opencv
+python python/model/local/opencv_onnx.py --model /path/to/model.onnx --image /path/to/image.jpg --method opencv
 ```
 
 * TFLite
 ```bash
-python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg --method opencv
+python python/model/local/opencv_tflite.py --model /path/to/model.tflite --image /path/to/image.jpg --method opencv
 ```
 
 **What You'll See:**
@@ -398,6 +398,10 @@ python python/list-topics.py --remote 192.168.1.100:7447 # Remote mode
 ```
 
 > **Note:** When running remotely, ensure the Zenoh router (`zenohd`) is enabled on the EdgeFirst device with `sudo systemctl enable --now zenohd`.
+> Other services can be enabled:
+> - `sudo systemctl enable --now camera`
+> - `sudo systemctl enable --now gpsd`
+> - `sudo systemctl enable --now imu`
 
 ---
 

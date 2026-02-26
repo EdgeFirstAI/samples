@@ -22,13 +22,13 @@ The following table shows which examples are supported across various platforms.
 1. Optimized (default) pipeline which uses GStreamer to fetch DMA buffers for zero-copy which HAL can read, preprocess, and use for model inference. Furthermore, the frame with the model outputs is displayed on the monitor using PyCairo.
 
 ```bash
-python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=hal
+python python/combined/local/camera_model_hal.py --model /path/my/model.tflite --camera=/dev/video3 
 ```
 
 2. Alternative pipeline which uses OpenCV and a base method for reading the camera to fetch frames that can be copied into the model for inference. OpenCV is also used to visualize the frame on the monitor.
 
 ```bash
-python -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=opencv
+python python/combined/local/camera_model_opencv.py --model /path/my/model.tflite --camera=/dev/video3 --method=opencv
 ```
 
 ## Zenoh Examples

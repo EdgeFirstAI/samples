@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-"""EdgeFirst Samples - Camera Model Sample (Local - on-device).
+"""EdgeFirst Samples - Camera Model Sample using HAL (Local - on-device).
 
 Reads from the camera, /dev/video3 by default and runs the model
 inference on the captured frames and displays the frames in a window if available.
@@ -11,10 +11,18 @@ Specify `--camera <device>` to select a different camera device, 0.
 """
 
 from argparse import ArgumentParser
+from pathlib import Path
 import time
+import sys
 import os
 
 import numpy as np
+
+try:
+    import psutil
+    _PSUTIL_AVAILABLE = True
+except ImportError:
+    _PSUTIL_AVAILABLE = False
 
 try:
     import gi
@@ -26,23 +34,17 @@ try:
 except ImportError:
     _GSTREAMER_AVAILABLE = False
 
-try:
-    import cv2
-    _OPENCV_AVAILABLE = True
-except ImportError:
-    _OPENCV_AVAILABLE = False
-
 import edgefirst_hal as ef
 
-from python.hal.local.letterbox import (LetterboxGStreamerCapture,
-                                        LetterboxOpenCVCapture)
-from python.model.local.tflite import (HALRunner as HALTFLiteRunner,
-                                       OpenCVRunner as OpenCVTFLiteRunner)
-from python.model.local.onnx import (HALRunner as HALONNXRunner,
-                                     OpenCVRunner as OpenCVONNXRunner)
+# Add project root to sys.path
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow, 
+                                   _build_pipeline, has_display, get_format)
+from utils.hal_onnx import HALONNXRunner
+from utils.hal_tflite import HALTFLiteRunner
 
 
-class GStreamerInference(LetterboxGStreamerCapture):
+class GStreamerInference:
     def __init__(
         self,
         camera: str,
@@ -51,6 +53,49 @@ class GStreamerInference(LetterboxGStreamerCapture):
         iou: float = 0.50,
         max_boxes: int = 300
     ):
+        if not _GSTREAMER_AVAILABLE:
+            raise ImportError(
+                "GStreamer is not available. Please install GStreamer and its Python bindings.")
+        # This is needed to expose the app_sink.pull_sample() function.
+        _ = GstApp
+        Gst.init(None)
+
+        # Display init
+        self.camera = camera
+        self.use_cairo = _PYCAIRO_AVAILABLE and has_display()
+        self.cairo_window = CairoWindow() if self.use_cairo else None
+
+        # Performance measurements
+        self.frame_count = 0
+        self.window_start = time.perf_counter()
+        self.fetch_fps = 0.0
+        self.cpu_percent = 0.0
+        self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
+        if self.process is not None:
+            self.process.cpu_percent(interval=None)
+
+        # Performance measurements
+        self.frame_count = 0
+        self.window_start = time.perf_counter()
+        self.fetch_fps = 0.0
+        self.cpu_percent = 0.0
+        self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
+        if self.process is not None:
+            self.process.cpu_percent(interval=None)
+
+        # Initialize pipeline
+        self.loop = GLib.MainLoop()
+        self.pipeline = _build_pipeline(self.camera, self.use_cairo)
+
+        bus = self.pipeline.get_bus()
+        bus.add_signal_watch()
+        bus.connect("message::error", self.on_error)
+
+        appsink = self.pipeline.get_by_name("sink")
+        if appsink is not None:
+            appsink.connect("new-sample", self.on_new_sample)
+
+        # Model init
         if os.path.splitext(os.path.basename(model_path)
                             )[-1].lower() == ".tflite":
             self.runner = HALTFLiteRunner(
@@ -70,9 +115,6 @@ class GStreamerInference(LetterboxGStreamerCapture):
             raise NotImplementedError(
                 "Only ONNX and TFLite Ultralytics models are supported in this sample.")
 
-        super().__init__(camera, size=(self.runner.input_shape[1],
-                                       self.runner.input_shape[0]))
-
     def on_new_sample(self, app_sink):
         start_pipeline = time.perf_counter()
         sample = app_sink.pull_sample()
@@ -90,7 +132,7 @@ class GStreamerInference(LetterboxGStreamerCapture):
         width = caps.get_structure(0).get_value("width")
         height = caps.get_structure(0).get_value("height")
         format = caps.get_structure(0).get_value("format")
-        channels, fourcc = self.get_format(format)
+        channels, fourcc = get_format(format)
 
         try:
             tensor = ef.TensorImage.from_fd(
@@ -136,84 +178,16 @@ class GStreamerInference(LetterboxGStreamerCapture):
         self.frame_count += 1
         return False
 
+    def on_error(self, bus, msg):
+        err, dbg = msg.parse_error()
+        print(err.message)
+        self.loop.quit()
 
-class OpenCVInference(LetterboxOpenCVCapture):
-    def __init__(
-        self,
-        camera: str,
-        model_path: str,
-        method: str = "opencv",
-        score: float = 0.50,
-        iou: float = 0.50,
-        max_boxes: int = 300
-    ):
-
-        if os.path.splitext(os.path.basename(model_path)
-                            )[-1].lower() == ".tflite":
-            self.runner = OpenCVTFLiteRunner(
-                model_path=model_path,
-                score=score,
-                iou=iou,
-                max_boxes=max_boxes
-            )
-        elif os.path.splitext(os.path.basename(model_path))[-1].lower() == ".onnx":
-            self.runner = OpenCVONNXRunner(
-                model_path=model_path,
-                score=score,
-                iou=iou,
-                max_boxes=max_boxes
-            )
-        else:
-            raise NotImplementedError(
-                "Only ONNX and TFLite Ultralytics models are supported in this sample.")
-
-        super().__init__(camera,
-                         size=(self.runner.input_shape[1],
-                               self.runner.input_shape[0]),
-                         method=method)
-
-    def on_new_sample(self):
-        start_pipeline = time.perf_counter()
-        frame = super().on_new_sample()
-        boxes, scores, classes, masks = self.runner.infer(frame)
-        height, width, _ = frame.shape
-
-        # Denormalize box coordinates
-        boxes[:, [0, 2]] *= width
-        boxes[:, [1, 3]] *= height
-        boxes = boxes.astype(np.int32)
-
-        if _OPENCV_AVAILABLE:
-            alpha = 0.50
-            for i in range(boxes.shape[0]):
-                cv2.rectangle(frame,
-                              (boxes[i, 0], boxes[i, 1]),
-                              (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
-
-                if masks is not None:
-                    frame[masks[i] > 0] = (
-                        frame[masks[i] > 0] * (1 - alpha) +
-                        np.array([0, 255, 0, 255]) * alpha
-                    )
-                cv2.putText(
-                    frame,
-                    f"{self.runner.labels[classes[i]] if self.runner.labels is not None else classes[i]}: {scores[i]:.2f}",
-                    (boxes[i, 0], boxes[i, 1] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2
-                )
-
-            end_pipeline = time.perf_counter() - start_pipeline
-            if self.process is not None:
-                self.cpu_percent = self.process.cpu_percent(interval=None)
-            performance = (
-                f"CPU: {self.cpu_percent:.2f}% | "
-                f"End2End Latency: {end_pipeline * 1000:.2f} ms"
-            )
-            cv2.putText(
-                frame, performance, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
-                (0, 255, 0), 2, cv2.LINE_AA,
-            )
-        return frame
+    def run(self):
+        print('capturing from %s' % (self.camera))
+        print("Press CTRL-C to stop")
+        self.pipeline.set_state(Gst.State.PLAYING)
+        self.loop.run()
 
 
 def main():
@@ -223,36 +197,23 @@ def main():
                       help='The path to the TFLite model')
     opts.add_argument('-c', '--camera', type=str, default='/dev/video3',
                       help='Camera device for capture')
-    opts.add_argument('-m', '--method', type=str, default='hal',
-                      choices=["hal", "opencv", "pillow"],
-                      help='Letterbox method to use')
     opts.add_argument('-s', '--score', type=float, default=0.50,
                       help='Specify the score threshold for NMS')
     opts.add_argument('-i', '--iou', type=float, default=0.50,
                       help='Specify the IoU threshold for NMS')
     opts.add_argument('--max-boxes', type=int, default=300,
-                      help='Specify the maximum number of devices')
+                      help='Specify the maximum number of boxes')
     args = opts.parse_args()
 
-    if args.method in ["opencv", "pillow"]:
-        capture = OpenCVInference(
-            int(args.camera) if args.camera.isdigit() else args.camera,
-            model_path=args.model,
-            method=args.method,
-            score=args.score,
-            iou=args.iou,
-            max_boxes=args.max_boxes
-        )
-    else:
-        # GStreamer captures is intended for HAL in this use-case to show
-        # benefits with the HAL optimizations.
-        capture = GStreamerInference(
-            int(args.camera) if args.camera.isdigit() else args.camera,
-            model_path=args.model,
-            score=args.score,
-            iou=args.iou,
-            max_boxes=args.max_boxes
-        )
+    # GStreamer captures is intended for HAL in this use-case to show
+    # benefits with the HAL optimizations.
+    capture = GStreamerInference(
+        int(args.camera) if args.camera.isdigit() else args.camera,
+        model_path=args.model,
+        score=args.score,
+        iou=args.iou,
+        max_boxes=args.max_boxes
+    )
     capture.run()
 
 

@@ -154,7 +154,7 @@ def main():
     session = zenoh.open(config)
 
     try:
-        asyncio.run(main_async(session, args))
+        asyncio.run(main_async(session))
     except KeyboardInterrupt:
         session.close()
         sys.exit(0)

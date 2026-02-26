@@ -20,8 +20,6 @@ import json
 import ast
 import os
 
-import yaml
-
 
 class MetaData:
     def __init__(self, metadata: Union[dict, None]):
@@ -122,6 +120,7 @@ def load_tflite_metadata(
     if zipfile.is_zipfile(model_path):
         with zipfile.ZipFile(model_path) as zip_ref:
             if "edgefirst.yaml" in zip_ref.namelist():
+                import yaml
                 with zip_ref.open("edgefirst.yaml") as f:
                     yaml_text = f.read().decode("utf-8")
                     metadata = yaml.safe_load(yaml_text)
@@ -164,8 +163,8 @@ def load_onnx_metadata(
             labels = ast.literal_eval(custom_metadata["labels"])
     except ImportError as e:
         try:
-            import onnx
-            model = onnx.load(model_path)
+            import python.model.local.hal_onnx as hal_onnx
+            model = hal_onnx.load(model_path)
             for prop in model.metadata_props:
                 if prop.key == 'edgefirst':
                     metadata = json.loads(prop.value)

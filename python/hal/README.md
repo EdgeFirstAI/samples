@@ -16,48 +16,48 @@ The following examples are intended to run locally on an EdgeFirst device.
 
 **Purpose:** Demonstrate resizing with HAL (default), OpenCV, or Pillow for comparison.
 
-**Source Code:** [Python](python/hal/local/resize.py)
+**Source Code:** [Python - HAL](python/hal/local/resize_hal.py) • [Python - OpenCV](python/hal/local/resize_opencv.py)
 
 **Usage:**
 
 The following shows resizing the frame to a 16x9 aspect ratio.
 
-1. HAL resize (default):
+1. HAL resize:
 ```bash
-python -m python.hal.local.resize -s 640x360
+python python/hal/local/resize_hal.py -s 640x360
 ```
 
 2. OpenCV resize:
 ```bash
-python -m python.hal.local.resize -m opencv -s 640x360
+python python/hal/local/resize_opencv.py -s 640x360
 ```
 
 3. Pillow resize:
 ```bash
-python -m python.hal.local.resize -m pillow -s 640x360
+python python/hal/local/resize_opencv.py -m pillow -s 640x360
 ```
 
 ### **2. Letterbox (HAL)**
 
 **Purpose:** Demonstrate letterbox preprocessing using HAL.
 
-**Source Code:** [Python](python/hal/local/letterbox.py)
+**Source Code:** [Python - HAL](python/hal/local/letterbox_hal.py) • [Python - OpenCV](python/hal/local/letterbox_opencv.py)
 
 **Usage:**
 
-1. HAL letterbox (default):
+1. HAL letterbox:
 ```bash
-python -m python.hal.local.letterbox -s 640x640
+python python/hal/local/letterbox_hal.py -s 640x640
 ```
 
 2. OpenCV letterbox:
 ```bash
-python -m python.hal.local.letterbox -m opencv -s 640x640
+python python/hal/local/letterbox_opencv.py -s 640x640
 ```
 
 3. Pillow letterbox:
 ```bash
-python -m python.hal.local.letterbox -m pillow -s 640x640
+python python/hal/local/letterbox_opencv.py -m pillow -s 640x640
 ```
 
 ## Zenoh Examples
@@ -93,7 +93,7 @@ python python/hal/zenoh/dma.py
 
 1. Connect remotely with an EdgeFirst Platform:
 ```bash
-python -m python.hal.zenoh.decoder --model /path/to/model.onnx --remote 192.168.1.100:7447
+python -m python/hal/zenoh/decoder.py --model /path/to/model.onnx --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server

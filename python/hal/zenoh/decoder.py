@@ -14,6 +14,7 @@ discovery is used.
 import asyncio
 from typing import Union
 from argparse import ArgumentParser
+from pathlib import Path
 import io
 import os
 import sys
@@ -28,15 +29,15 @@ import zenoh
 import edgefirst_hal as ef
 from edgefirst.schemas.edgefirst_msgs import Detect
 
-from python.model.local.onnx import HALRunner as HALONNXRunner
-from python.model.local.tflite import HALRunner as HALTFLiteRunner
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from utils.hal_onnx import HALONNXRunner
+from utils.hal_tflite import HALTFLiteRunner
 
 
 # Shared storage for latest decoded frame
 latest_frame_lock = threading.Lock()
 latest_frame = None
 frame_available_event = threading.Event()
-
 
 class FrameSize:
     def __init__(self):

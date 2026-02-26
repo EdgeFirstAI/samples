@@ -2,16 +2,17 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 """
-ONNX model loading, inference, and post-processing utilities for EdgeFirst workflows.
+ONNX model loading, inference, and post-processing utilities using OpenCV.
 
 - Loads and runs ONNX models using ONNX Runtime
 - Handles model metadata, preprocessing, and output decoding
 - Supports YOLO box/mask decoding, NMS, and image transforms
 """
 
-import ctypes
-import os
 from argparse import ArgumentParser
+from pathlib import Path
+import sys
+import os
 
 import numpy as np
 
@@ -27,51 +28,18 @@ try:
 except ImportError:
     _ONNX_RUNTIME_AVAILABLE = False
 
-import edgefirst_hal as ef
 
-from python.model.local.transforms import (get_shape, check_normalized_boxes,
-                                           dequantize, decode_yolo_boxes,
-                                           decode_yolo_masks, crop_masks)
-from python.model.local.metadata import load_onnx_metadata, MetaData
-from python.hal.local.letterbox import hal_letterbox, cv2_letterbox
-from python.hal.local.resize import cv2_resize
-from python.model.local.nms import nms
-
-
-def check_tensorrt_runtime() -> list:
-    required_libs = ["libnvinfer.so",
-                     "libnvinfer_plugin.so", "libnvonnxparser.so"]
-    missing = []
-    for lib in required_libs:
-        try:
-            ctypes.CDLL(lib)
-        except OSError:
-            missing.append(lib)
-    return missing
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from utils.common import (get_shape, check_normalized_boxes, 
+                          load_onnx_metadata, select_onnx_providers, 
+                          build_metadata)
+from utils.opencv_utils import (dequantize, decode_yolo_boxes, 
+                                decode_yolo_masks, crop_masks, cv2_letterbox, 
+                                cv2_resize)
+from utils.nms import nms
 
 
-def select_providers() -> list:
-    selected_providers = ["CPUExecutionProvider"]
-    available_providers = ort.get_available_providers()
-
-    preferred_providers = ["NnapiExecutionProvider",
-                           "VsiNpuExecutionProvider",
-                           "VSINPUExecutionProvider",
-                           "CUDAExecutionProvider",
-                           "CPUExecutionProvider"]
-    selected_providers = []
-    for i, provider in enumerate(preferred_providers):
-        if provider in available_providers:
-            if provider == "TensorrtExecutionProvider":
-                missing_libraries = check_tensorrt_runtime()
-                if missing_libraries:
-                    continue
-            selected_providers.append(provider)
-    print(f"Selected providers: {selected_providers}")
-    return selected_providers
-
-
-class ONNXRunner:
+class OpenCVONNXRunner:
     def __init__(
         self,
         model_path: str,
@@ -89,7 +57,7 @@ class ONNXRunner:
         self.iou = iou
         self.max_boxes = max_boxes
 
-        providers = select_providers()
+        providers = select_onnx_providers()
         self.ort_session = ort.InferenceSession(
             model_path, providers=providers)
         self.output_names = [x.name for x in self.ort_session.get_outputs()]
@@ -107,116 +75,8 @@ class ONNXRunner:
         self.metadata, self.labels = load_onnx_metadata(model_path)
         self.metadata = None
         if self.metadata is None:
-            self.metadata = MetaData.build_metadata(outputs)
+            self.metadata = build_metadata(outputs)
 
-
-class HALRunner(ONNXRunner):
-    def __init__(
-        self,
-        model_path: str,
-        score: float = 0.50,
-        iou: float = 0.50,
-        max_boxes: int = 300
-    ):
-        super().__init__(model_path, score, iou, max_boxes)
-
-        # To use OpenGL assign image FourCC as RGBA.
-        self.dst = ef.TensorImage(self.input_shape[1],
-                                  self.input_shape[0], ef.FourCC.RGBA)
-        self.decoder = ef.Decoder(
-            self.metadata,
-            score_threshold=score,
-            iou_threshold=iou,
-        )
-        self.converter = ef.ImageProcessor()
-
-    def base_infer(self, tensor_image: ef.TensorImage):
-        hal_letterbox(tensor_image, self.dst)
-
-        input_array = np.zeros((self.dst.height,
-                                self.dst.width, self.input_shape[-1]),
-                               dtype=self.input_type)
-
-        if self.input_type in [np.float32, np.float16]:
-            norm = ef.Normalization.UNSIGNED
-        else:
-            norm = ef.Normalization.DEFAULT
-        self.dst.normalize_to_numpy(input_array, normalization=norm)
-
-        if self.transpose:
-            # Transpose from (height, width, channels) to (channels, height,
-            # width)
-            input_array = np.transpose(input_array, (2, 0, 1))
-        input_array = input_array[None]  # Add batch dimension
-
-        return self.ort_session.run(self.output_names,
-                                    {self.input_name: input_array})
-
-    def infer(self, tensor_image: ef.TensorImage):
-        outputs = self.base_infer(tensor_image)
-        # Normalize bounding boxes which is needed to decode the outputs.
-        for x in outputs:
-            if len(x.shape) == 3:
-                if x.dtype in [np.float32, np.float16]:
-                    x[:, :4, :] = check_normalized_boxes(
-                        x[:, :4, :], width=self.input_shape[1],
-                        height=self.input_shape[0]
-                    )
-        return self.decoder.decode(outputs, max_boxes=self.max_boxes)
-
-    def static_infer(self, tensor_image: ef.TensorImage):
-        outputs = self.base_infer(tensor_image)
-
-        detection_output, segmentation_output = None, None
-        for x in outputs:
-            if len(x.shape) == 3:
-                if x.dtype in [np.float32, np.float16]:
-                    # Normalize bounding boxes which is needed to decode the
-                    # outputs.
-                    x[:, :4, :] = check_normalized_boxes(
-                        x[:, :4, :], width=self.input_shape[1],
-                        height=self.input_shape[0]
-                    )
-                detection_output = x[0]
-            elif len(x.shape) == 4:
-                segmentation_output = x[0]
-                # Tranpose (32, 160, 160) to (160, 160, 32)
-                segmentation_output = segmentation_output.transpose(
-                    1, 2, 0)  # (H, W, C)
-
-        if segmentation_output is not None and detection_output is not None:
-            return ef.Decoder.decode_yolo_segdet(
-                boxes=detection_output,
-                protos=segmentation_output,
-                score_threshold=self.score,
-                iou_threshold=self.iou,
-                max_boxes=self.max_boxes
-            )
-        return ef.Decoder.decode_yolo_det(
-            boxes=detection_output,
-            score_threshold=self.score,
-            iou_threshold=self.iou,
-            max_boxes=self.max_boxes
-        )
-
-    def inference(self, image_path: str, save_path: str = None):
-        tensor_image = ef.TensorImage.load(image_path)
-        boxes, scores, classes, masks = self.infer(tensor_image)
-
-        if save_path is not None:
-            # Render detections on the image using the HAL converter
-            self.converter.render_to_image(
-                self.dst,
-                bbox=boxes,
-                scores=scores,
-                classes=classes,
-                seg=masks
-            )
-            self.dst.save_jpeg(save_path)
-        return boxes, scores, classes, masks
-
-
-class OpenCVRunner(ONNXRunner):
     def infer(self, input_tensor: np.ndarray):
         # This method is used by camera_model.py and letterbox is already
         # performed.
@@ -347,8 +207,6 @@ def main():
                       help='Specify the IoU threshold for NMS')
     opts.add_argument('--max-boxes', type=int, default=300,
                       help='Specify the maximum number of devices')
-    opts.add_argument('-m', '--method', type=str, default='hal', choices=["hal", "opencv"],
-                      help='Specify the method for running model inference and visualization')
     opts.add_argument('--save', type=str,
                       help='Whether to save the output visualization as output.jpg')
     args = opts.parse_args()
@@ -357,20 +215,12 @@ def main():
         raise NotImplementedError(
             "Only Ultralytics ONNX models are supported in this sample.")
 
-    if args.method == "hal":
-        runner = HALRunner(
-            model_path=args.model,
-            score=args.score,
-            iou=args.iou,
-            max_boxes=args.max_boxes
-        )
-    else:
-        runner = OpenCVRunner(
-            model_path=args.model,
-            score=args.score,
-            iou=args.iou,
-            max_boxes=args.max_boxes
-        )
+    runner = OpenCVONNXRunner(
+        model_path=args.model,
+        score=args.score,
+        iou=args.iou,
+        max_boxes=args.max_boxes
+    )
 
     # Visualize outputs
     save_path = None

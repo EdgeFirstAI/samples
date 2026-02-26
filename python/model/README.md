@@ -17,7 +17,7 @@ The following examples are intended to run locally on an EdgeFirst device.
 **Usage:**
 
 ```bash
-python -m python.model.local.tflite --model /path/to/model.tflite --image /path/to/image.jpg
+python python/model/local/hal_tflite.py --model /path/to/model.tflite --image /path/to/image.jpg
 ```
 
 | Parameters | Definition | Default |
@@ -37,7 +37,7 @@ python -m python.model.local.tflite --model /path/to/model.tflite --image /path/
 **Usage:**
 
 ```bash
-python -m python.model.local.onnx --model /path/to/model.onnx --image /path/to/image.jpg
+python python/model/local/hal_onnx.py --model /path/to/model.onnx --image /path/to/image.jpg
 ```
 
 | Parameters | Definition | Default |

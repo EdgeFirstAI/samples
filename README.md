@@ -187,13 +187,13 @@ python3 python/camera/local/opencv.py --camera=/dev/video3
 1. Using GStreamer pipelines to stream from the camera and HAL to invoke the model for inference (default)
 
 ```bash
-python3 -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 
+python3 python/combined/local/camera_model_hal.py --model /path/my/model.tflite --camera=/dev/video3 
 ```
 
 2. Using OpenCV to stream from the camera and invoke the model for inference
 
 ```bash
-python3 -m python.combined.local.camera_model --model /path/my/model.tflite --camera=/dev/video3 --method=opencv
+python3 python/combined/local/camera_model_opencv.py --model /path/my/model.tflite --camera=/dev/video3
 ```
 
 **What You'll See:**

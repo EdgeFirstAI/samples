@@ -93,7 +93,7 @@ python python/hal/zenoh/dma.py
 
 1. Connect remotely with an EdgeFirst Platform:
 ```bash
-python -m python/hal/zenoh/decoder.py --model /path/to/model.onnx --remote 192.168.1.100:7447
+python python/hal/zenoh/decoder.py --model /path/to/model.onnx --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -105,7 +105,7 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform:
 ```bash
-python -m python.hal.zenoh.decoder --model /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/hal/zenoh/decoder.py --model /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 **What you'll see**
@@ -162,7 +162,7 @@ python python/hal/zenoh/letterbox.py --connect --url rerun+http://<PC IP address
 
 1. Connect remotely with an EdgeFirst Platform:
 ```bash
-python -m python.hal.zenoh.tracking --model /path/to/model.onnx --remote 192.168.1.100:7447
+python python/hal/zenoh/tracking.py --model /path/to/model.onnx --remote 192.168.1.100:7447
 ```
 
 2. Connect via proxy server
@@ -174,5 +174,5 @@ rerun --bind <PC IP address>
 
 Run the following command in your EdgeFirst Platform:
 ```bash
-python -m python.hal.zenoh.tracking --model /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
+python python/hal/zenoh/tracking.py --model /path/to/model.onnx --connect --url rerun+http://<PC IP address>:9876/proxy
 ```

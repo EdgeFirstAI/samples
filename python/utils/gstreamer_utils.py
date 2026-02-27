@@ -109,7 +109,7 @@ class CairoWindow:
             cr.move_to(12, 24)
             cr.show_text(self.overlay_text)
         return False
-    
+
 
 def has_display() -> bool:
     return (

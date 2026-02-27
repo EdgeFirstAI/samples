@@ -2,7 +2,7 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 """
-TFLite model loading, inference, and post-processing utilities for 
+TFLite model loading, inference, and post-processing utilities for
 EdgeFirst workflows using HAL.
 
 - Loads and runs TFLite models using tflite-runtime or TensorFlow
@@ -27,8 +27,8 @@ except ImportError:
 
 import edgefirst_hal as ef
 
-from .common import (select_tflite_delegate, load_tflite_metadata, 
-                    build_metadata, get_shape)
+from .common import (select_tflite_delegate, load_tflite_metadata,
+                     build_metadata, get_shape)
 from .hal_utils import hal_letterbox
 
 

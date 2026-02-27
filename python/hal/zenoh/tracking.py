@@ -19,6 +19,8 @@ tracking algorithms (Kalman filtering, Hungarian algorithm) can be
 integrated as needed.
 """
 
+from utils.hal_tflite import HALTFLiteRunner
+from utils.hal_onnx import HALONNXRunner
 import asyncio
 from typing import Union
 from argparse import ArgumentParser
@@ -37,8 +39,6 @@ import zenoh
 import edgefirst_hal as ef
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.hal_onnx import HALONNXRunner
-from utils.hal_tflite import HALTFLiteRunner
 
 
 # Shared storage for latest decoded frame

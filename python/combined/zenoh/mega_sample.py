@@ -11,6 +11,7 @@ Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
 discovery is used.
 """
 
+from utils.opencv_utils import pillow_resize
 from argparse import ArgumentParser
 from pathlib import Path
 import threading
@@ -33,7 +34,6 @@ from edgefirst.schemas.sensor_msgs import PointCloud2
 import edgefirst_hal as ef
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.opencv_utils import pillow_resize
 
 CONVERTER = ef.ImageProcessor()
 
@@ -191,7 +191,7 @@ def dma_worker(msg, frame_storage):
     mm.close()
     os.close(fd)
     os.close(pidfd)
-    
+
 
 async def dma_handler(drain, frame_storage):
     while True:
@@ -480,8 +480,8 @@ async def main_async(args, session):
     frame_size_storage = FrameSize()
 
     cam_topic = None
-    if (args.remote is None and 
-        "rt/camera/dma" in camera_topics and check_dma_permissions(session)):
+    if (args.remote is None and
+            "rt/camera/dma" in camera_topics and check_dma_permissions(session)):
         cam_topic = "rt/camera/dma"
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(dma_handler(cam_drain, frame_size_storage))

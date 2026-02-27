@@ -5,13 +5,15 @@
 
 Reads from the camera, /dev/video3 by default and resizes the frame based on
 the specified dimensions and displays the resized frame in a window if available.
-The resize method uses a GStreamer pipeline with zero-copy DMA buffers 
+The resize method uses a GStreamer pipeline with zero-copy DMA buffers
 and OpenGL optimizations in HAL.
 
 This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
+from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
+                                   _build_pipeline, has_display, get_format)
 from typing import Optional
 from argparse import ArgumentParser
 from pathlib import Path
@@ -42,8 +44,6 @@ import edgefirst_hal as ef
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow, 
-                                   _build_pipeline, has_display, get_format)
 
 CONVERTER = ef.ImageProcessor()
 
@@ -83,7 +83,7 @@ class ResizedGStreamerCapture:
         self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
         if self.process is not None:
             self.process.cpu_percent(interval=None)
-        
+
         # Initialize pipeline
         self.loop = GLib.MainLoop()
         self.pipeline = _build_pipeline(self.camera, self.use_cairo)

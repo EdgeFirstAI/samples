@@ -2,7 +2,7 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 """
-ONNX model loading, inference, and post-processing utilities 
+ONNX model loading, inference, and post-processing utilities
 using OpenCV.
 
 - Loads and runs ONNX models using ONNX Runtime
@@ -24,10 +24,10 @@ try:
 except ImportError:
     _ONNX_RUNTIME_AVAILABLE = False
 
-from .common import (get_shape, check_normalized_boxes, select_onnx_providers, 
-                    load_onnx_metadata, build_metadata)
-from .opencv_utils import (dequantize, decode_yolo_boxes, decode_yolo_masks, 
-                          crop_masks, cv2_letterbox, cv2_resize)
+from .common import (get_shape, check_normalized_boxes, select_onnx_providers,
+                     load_onnx_metadata, build_metadata)
+from .opencv_utils import (dequantize, decode_yolo_boxes, decode_yolo_masks,
+                           crop_masks, cv2_letterbox, cv2_resize)
 from .nms import nms
 
 

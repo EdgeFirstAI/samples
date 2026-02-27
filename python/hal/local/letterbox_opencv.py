@@ -3,7 +3,7 @@
 
 """EdgeFirst Samples - Letterbox Sample using OpenCV (Local - on-device).
 
-Reads from the camera, /dev/video3 by default and transforms the frame with 
+Reads from the camera, /dev/video3 by default and transforms the frame with
 letterbox and displays the letterboxed frame in a window if available.
 The letterbox method uses OpenCV library functions for resizing and padding.
 
@@ -11,6 +11,9 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
+from utils.opencv_utils import (has_display as opencv_has_display,
+                                _build_pipeline as opencv_build_pipeline)
+from resize_opencv import cv2_resize, pillow_resize
 from typing import Optional
 from argparse import ArgumentParser
 from pathlib import Path
@@ -33,10 +36,6 @@ except ImportError:
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-
-from resize_opencv import cv2_resize, pillow_resize
-from utils.opencv_utils import (has_display as opencv_has_display, 
-                                _build_pipeline as opencv_build_pipeline)
 
 
 def cv2_letterbox(

@@ -9,6 +9,9 @@ TFLite model loading, inference, and post-processing utilities for EdgeFirst wor
 - Supports YOLO box/mask decoding, NMS, and image transforms
 """
 
+from utils.common import (select_tflite_delegate, get_shape,
+                          load_tflite_metadata, build_metadata)
+from utils.hal_utils import hal_letterbox
 from argparse import ArgumentParser
 from pathlib import Path
 import sys
@@ -32,9 +35,6 @@ except ImportError:
 import edgefirst_hal as ef
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.common import (select_tflite_delegate, get_shape, 
-                          load_tflite_metadata, build_metadata)
-from utils.hal_utils import hal_letterbox
 
 
 class HALTFLiteRunner:
@@ -172,7 +172,7 @@ def main():
     if os.path.splitext(os.path.basename(args.model))[-1] != ".tflite":
         raise NotImplementedError(
             "Only quantized Ultralytics TFLite models are supported in this sample.")
-    
+
     runner = HALTFLiteRunner(
         model_path=args.model,
         score=args.score,

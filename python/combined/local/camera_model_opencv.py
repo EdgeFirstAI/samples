@@ -10,6 +10,11 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
+from utils.opencv_utils import (has_display as opencv_has_display,
+                                _build_pipeline as opencv_build_pipeline,
+                                cv2_letterbox)
+from utils.opencv_tflite import OpenCVTFLiteRunner
+from utils.opencv_onnx import OpenCVONNXRunner
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -31,11 +36,6 @@ except ImportError:
     _OPENCV_AVAILABLE = False
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.opencv_onnx import OpenCVONNXRunner
-from utils.opencv_tflite import OpenCVTFLiteRunner
-from utils.opencv_utils import (has_display as opencv_has_display, 
-                                _build_pipeline as opencv_build_pipeline,
-                                cv2_letterbox)
 
 
 class OpenCVInference:
@@ -48,7 +48,7 @@ class OpenCVInference:
         iou: float = 0.50,
         max_boxes: int = 300
     ):
-        
+
         if not _OPENCV_AVAILABLE:
             raise ImportError(
                 "OpenCV is not available. Please install OpenCV.")
@@ -73,7 +73,7 @@ class OpenCVInference:
         self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
         if self.process is not None:
             self.process.cpu_percent(interval=None)
-    
+
         # Model init
         if os.path.splitext(os.path.basename(model_path)
                             )[-1].lower() == ".tflite":
@@ -93,20 +93,20 @@ class OpenCVInference:
         else:
             raise NotImplementedError(
                 "Only ONNX and TFLite Ultralytics models are supported in this sample.")
-        
-        self.size = size=(self.runner.input_shape[1], 
-                          self.runner.input_shape[0])
+
+        self.size = size = (self.runner.input_shape[1],
+                            self.runner.input_shape[0])
 
     def on_new_sample(self):
         start_pipeline = time.perf_counter()
-        
+
         ret, frame = self.cap.read()
         # if frame is read correctly ret is True
         if not ret:
             self.clear()
             raise RuntimeError("Failed to read frame from camera")
         frame = cv2_letterbox(frame, size=self.size, method=self.method)
-        
+
         boxes, scores, classes, masks = self.runner.infer(frame)
         height, width, _ = frame.shape
 

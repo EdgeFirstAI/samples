@@ -30,10 +30,10 @@ except ImportError:
     except ImportError as e:
         _TENSORFLOW_AVAILABLE = False
 
-from .common import (select_tflite_delegate, load_tflite_metadata, 
-                    build_metadata, get_shape)
-from .opencv_utils import (decode_yolo_boxes, decode_yolo_masks, dequantize, 
-                          crop_masks, cv2_letterbox, cv2_resize)
+from .common import (select_tflite_delegate, load_tflite_metadata,
+                     build_metadata, get_shape)
+from .opencv_utils import (decode_yolo_boxes, decode_yolo_masks, dequantize,
+                           crop_masks, cv2_letterbox, cv2_resize)
 from .nms import nms
 
 

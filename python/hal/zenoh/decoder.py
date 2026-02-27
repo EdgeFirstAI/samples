@@ -11,6 +11,8 @@ Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
 discovery is used.
 """
 
+from utils.hal_tflite import HALTFLiteRunner
+from utils.hal_onnx import HALONNXRunner
 import asyncio
 from typing import Union
 from argparse import ArgumentParser
@@ -30,14 +32,13 @@ import edgefirst_hal as ef
 from edgefirst.schemas.edgefirst_msgs import Detect
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.hal_onnx import HALONNXRunner
-from utils.hal_tflite import HALTFLiteRunner
 
 
 # Shared storage for latest decoded frame
 latest_frame_lock = threading.Lock()
 latest_frame = None
 frame_available_event = threading.Event()
+
 
 class FrameSize:
     def __init__(self):
@@ -152,7 +153,7 @@ def inference_handler_sync(
             centers *= [runner.input_shape[1], runner.input_shape[0]]
             sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
             sizes *= [runner.input_shape[1], runner.input_shape[0]]
-            
+
             labels = []
             for cls_id, score in zip(classes, scores):
                 cls_id = int(cls_id)
@@ -163,7 +164,7 @@ def inference_handler_sync(
                     name = f"class_{cls_id}"
 
                 labels.append(f"{name} ({score:.2f})")
-                
+
             rr.log(
                 "/camera/boxes",
                 rr.Boxes2D(
@@ -214,7 +215,7 @@ def h264_worker(
                     centers *= [runner.input_shape[1], runner.input_shape[0]]
                     sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
                     sizes *= [runner.input_shape[1], runner.input_shape[0]]
-                    
+
                     labels = []
                     for cls_id, score in zip(classes, scores):
                         cls_id = int(cls_id)

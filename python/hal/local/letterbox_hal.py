@@ -3,7 +3,7 @@
 
 """EdgeFirst Samples - Letterbox Sample using HAL (Local - on-device).
 
-Reads from the camera, /dev/video3 by default and transforms the frame with 
+Reads from the camera, /dev/video3 by default and transforms the frame with
 letterbox and displays the letterboxed frame in a window if available.
 The letterbox method uses HAL (Hardware Abstraction Layer) for efficient
 image processing with zero-copy DMA buffers and OpenGL optimizations.
@@ -12,6 +12,8 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
+from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
+                                   _build_pipeline, has_display, get_format)
 from typing import Optional
 from argparse import ArgumentParser
 from pathlib import Path
@@ -41,8 +43,6 @@ import edgefirst_hal as ef
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
-from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow, 
-                                   _build_pipeline, has_display, get_format)
 
 CONVERTER = ef.ImageProcessor()
 
@@ -89,7 +89,7 @@ class LetterboxGStreamerCapture:
         self.process = psutil.Process() if _PSUTIL_AVAILABLE else None
         if self.process is not None:
             self.process.cpu_percent(interval=None)
-        
+
         # Initialize pipeline
         self.loop = GLib.MainLoop()
         self.pipeline = _build_pipeline(self.camera, self.use_cairo)

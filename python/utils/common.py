@@ -49,7 +49,7 @@ def check_tensorrt_runtime() -> list:
 def select_onnx_providers() -> list:
     if not _ONNX_RUNTIME_AVAILABLE:
         return []
-    
+
     selected_providers = ["CPUExecutionProvider"]
     available_providers = ort.get_available_providers()
 

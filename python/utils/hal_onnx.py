@@ -2,7 +2,7 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 """
-ONNX model loading, inference, and post-processing 
+ONNX model loading, inference, and post-processing
 utilities for EdgeFirst workflows using HAL.
 
 - Loads and runs ONNX models using ONNX Runtime
@@ -20,8 +20,8 @@ except ImportError:
 
 import edgefirst_hal as ef
 
-from .common import (get_shape, check_normalized_boxes, select_onnx_providers, 
-                    load_onnx_metadata, build_metadata)
+from .common import (get_shape, check_normalized_boxes, select_onnx_providers,
+                     load_onnx_metadata, build_metadata)
 from .hal_utils import hal_letterbox
 
 

@@ -25,7 +25,7 @@ except ImportError:
 def has_display() -> bool:
     if not _OPENCV_AVAILABLE:
         return False
-    
+
     try:
         cv2.namedWindow("Camera", cv2.WINDOW_AUTOSIZE)
         visible = cv2.getWindowProperty("Camera", cv2.WND_PROP_VISIBLE)
@@ -70,7 +70,7 @@ def cv2_letterbox(
 ) -> np.ndarray:
     if not _OPENCV_AVAILABLE:
         raise ImportError("OpenCV is not available. " +
-        "Please install OpenCV to use cv2_letterbox.")
+                          "Please install OpenCV to use cv2_letterbox.")
     height, width = image.shape[:2]
     scale = min(size[0] / width, size[1] / height)
     new_width = int(round(width * scale))

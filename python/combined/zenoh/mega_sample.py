@@ -142,7 +142,8 @@ def h264_worker(msg, frame_storage, raw_data, container):
                 frame_array = frame.to_ndarray(format="rgb24")
                 frame_storage.set(frame_array.shape[1], frame_array.shape[0])
                 rr.log("/camera", rr.Image(frame_array))
-        except Exception:
+        except Exception as e:
+            print(f"Error in h264_worker: {e}")
             continue
 
 
@@ -209,10 +210,11 @@ def jpeg_worker(msg, frame_storage):
     image = CompressedImage.deserialize(msg.payload.to_bytes())
     image = np.frombuffer(bytearray(image.data), np.uint8)
     tensor = ef.TensorImage.load_from_bytes(image.tobytes())
-    frame_storage.set(tensor.height, tensor.width)
+    frame_storage.set(tensor.width, tensor.height)
     with tensor.map() as m:
         n = np.array(m.view()).reshape((tensor.height, tensor.width, 4))
         rr.log("/camera", rr.Image(n))
+
 
 async def jpeg_handler(drain, frame_storage):
     while True:
@@ -295,7 +297,7 @@ def mask_worker(msg, frame_size, remote):
         np_arr = np.asarray(mask.mask, dtype=np.uint8)
         np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
 
-    np_arr = pillow_resize(np_arr, (frame_size[1], frame_size[0]))
+    np_arr = pillow_resize(np_arr, (frame_size[0], frame_size[1]))
     np_arr = np.argmax(np_arr, axis=2).astype(np.uint8)
 
     rr.log(

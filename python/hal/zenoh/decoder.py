@@ -152,11 +152,18 @@ def inference_handler_sync(
             centers *= [runner.input_shape[1], runner.input_shape[0]]
             sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
             sizes *= [runner.input_shape[1], runner.input_shape[0]]
-            labels = [
-                f"{runner.labels[int(cls_id)] if runner.labels is not None else f'class_{int(cls_id)}'} ({
-                    score:.2f})"
-                for cls_id, score in zip(classes, scores)
-            ]
+            
+            labels = []
+            for cls_id, score in zip(classes, scores):
+                cls_id = int(cls_id)
+
+                if runner.labels is not None:
+                    name = runner.labels[cls_id]
+                else:
+                    name = f"class_{cls_id}"
+
+                labels.append(f"{name} ({score:.2f})")
+                
             rr.log(
                 "/camera/boxes",
                 rr.Boxes2D(
@@ -207,10 +214,17 @@ def h264_worker(
                     centers *= [runner.input_shape[1], runner.input_shape[0]]
                     sizes = (boxes[:, [2, 3]] - boxes[:, [0, 1]])
                     sizes *= [runner.input_shape[1], runner.input_shape[0]]
-                    labels = [f"{runner.labels[int(cls_id)]
-                                 if runner.labels is not None else
-                                 f'class_{int(cls_id)}'} ({score:.2f})" for
-                              cls_id, score in zip(classes, scores)]
+                    
+                    labels = []
+                    for cls_id, score in zip(classes, scores):
+                        cls_id = int(cls_id)
+
+                        if runner.labels is not None:
+                            name = runner.labels[cls_id]
+                        else:
+                            name = f"class_{cls_id}"
+                        labels.append(f"{name} ({score:.2f})")
+
                     rr.log(
                         "/camera/boxes",
                         rr.Boxes2D(

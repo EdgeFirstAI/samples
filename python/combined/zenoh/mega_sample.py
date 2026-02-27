@@ -11,14 +11,15 @@ Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
 discovery is used.
 """
 
-import asyncio
 from argparse import ArgumentParser
+from pathlib import Path
+import threading
+import asyncio
 import ctypes
+import time
+import sys
 import io
 import os
-import sys
-import threading
-import time
 
 import av
 import numpy as np
@@ -28,6 +29,13 @@ import zenoh
 
 from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
 from edgefirst.schemas.sensor_msgs import PointCloud2
+
+import edgefirst_hal as ef
+
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from utils.opencv_utils import pillow_resize
+
+CONVERTER = ef.ImageProcessor()
 
 # Constants for syscall
 SYS_pidfd_open = 434  # From syscall.h
@@ -45,6 +53,29 @@ def pidfd_open(pid: int, flags: int = 0) -> int:
 
 def pidfd_getfd(pidfd: int, target_fd: int, flags: int = GETFD_FLAGS) -> int:
     return libc.syscall(SYS_pidfd_getfd, pidfd, target_fd, flags)
+
+
+def dma_heap_permissions():
+    return os.access("/dev/dma_heap/system", os.R_OK | os.W_OK)
+
+
+def check_dma_permissions(session: zenoh.Session):
+    from edgefirst.schemas.edgefirst_msgs import DmaBuffer
+    sub = session.declare_subscriber("rt/camera/dma")
+    msg = sub.recv()  # blocks until first DMA sample arrives
+    dma_buf = DmaBuffer.deserialize(msg.payload.to_bytes())
+    pidfd = pidfd_open(dma_buf.pid)
+    sub.undeclare()
+    if pidfd < 0:
+        print(f"WARNING - got pidfd {pidfd} verify DMA permissions. "
+              "Falling back to H264.")
+        return False
+    fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
+    if fd < 0:
+        print(f"WARNING - got fd {fd} verify DMA permissions. "
+              "Falling back to H264.")
+        return False
+    return True
 
 
 class FrameSize:
@@ -68,10 +99,25 @@ class MessageDrain:
         self._loop = loop
 
     def callback(self, msg):
-        if not self._loop.is_closed():
-            if self._queue.full():
-                self._queue.get_nowait()
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
+        if self._loop.is_closed():
+            return
+
+        # Ensure all queue operations happen on the event-loop thread to
+        # avoid race conditions and QueueFull errors under bursty input.
+        def _enqueue() -> None:
+            q = self._queue
+            if q.full():
+                try:
+                    q.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+            try:
+                q.put_nowait(msg)
+            except asyncio.QueueFull:
+                # If still full, drop this message.
+                pass
+
+        self._loop.call_soon_threadsafe(_enqueue)
 
     async def read(self):
         return await self._queue.get()
@@ -144,7 +190,7 @@ def dma_worker(msg, frame_storage):
     mm.close()
     os.close(fd)
     os.close(pidfd)
-
+    
 
 async def dma_handler(drain, frame_storage):
     while True:
@@ -158,17 +204,15 @@ async def dma_handler(drain, frame_storage):
 
 
 def jpeg_worker(msg, frame_storage):
-    import numpy as np
-    import cv2
     from edgefirst.schemas.sensor_msgs import CompressedImage
 
     image = CompressedImage.deserialize(msg.payload.to_bytes())
-    np_arr = np.frombuffer(bytearray(image.data), np.uint8)
-    im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-    frame_storage.set(im.shape[0], im.shape[1])
-    rr.log("/camera", rr.Image(im))
-
+    image = np.frombuffer(bytearray(image.data), np.uint8)
+    tensor = ef.TensorImage.load_from_bytes(image.tobytes())
+    frame_storage.set(tensor.height, tensor.width)
+    with tensor.map() as m:
+        n = np.array(m.view()).reshape((tensor.height, tensor.width, 4))
+        rr.log("/camera", rr.Image(n))
 
 async def jpeg_handler(drain, frame_storage):
     while True:
@@ -240,8 +284,6 @@ async def boxes2d_handler(drain, frame_storage):
 def mask_worker(msg, frame_size, remote):
     from edgefirst.schemas.edgefirst_msgs import Mask
     import zstd
-    import numpy as np
-    import cv2
 
     mask = Mask.deserialize(msg.payload.to_bytes())
     if remote:
@@ -252,8 +294,10 @@ def mask_worker(msg, frame_size, remote):
     else:
         np_arr = np.asarray(mask.mask, dtype=np.uint8)
         np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
-    np_arr = cv2.resize(np_arr, frame_size)
-    np_arr = np.argmax(np_arr, axis=2)
+
+    np_arr = pillow_resize(np_arr, (frame_size[1], frame_size[0]))
+    np_arr = np.argmax(np_arr, axis=2).astype(np.uint8)
+
     rr.log(
         "/",
         rr.AnnotationContext(
@@ -434,7 +478,8 @@ async def main_async(args, session):
     frame_size_storage = FrameSize()
 
     cam_topic = None
-    if args.remote is None and "rt/camera/dma" in camera_topics:
+    if (args.remote is None and 
+        "rt/camera/dma" in camera_topics and check_dma_permissions(session)):
         cam_topic = "rt/camera/dma"
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(dma_handler(cam_drain, frame_size_storage))

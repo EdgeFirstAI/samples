@@ -78,9 +78,23 @@ These examples can be run with an EdgeFirst Platform with the Zenoh, camera, and
 
 **Usage:**
 
+> Note: this sample can only run in EdgeFirst Platforms either locally or via a proxy server as shown below.
+
 1. Run locally on an EdgeFirst Platform (DMA is local-only):
 ```bash
 python python/hal/zenoh/dma.py
+```
+
+2. Connect via proxy server
+
+Run the following command in your PC. You should get the following URL link in the form: `rerun+http://<PC IP address>:9876/proxy`
+```bash
+rerun --bind <PC IP address>
+```
+
+Run the following command in your EdgeFirst Platform:
+```bash
+python python/hal/zenoh/dma.py --connect --url rerun+http://<PC IP address>:9876/proxy
 ```
 
 ### **2. Decoder (Zenoh + HAL)**

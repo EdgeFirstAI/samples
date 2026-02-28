@@ -65,7 +65,6 @@ class OpenCVONNXRunner:
         outputs = self.ort_session.get_outputs()
 
         self.metadata, self.labels = load_onnx_metadata(model_path)
-        self.metadata = None
         if self.metadata is None:
             self.metadata = build_metadata(outputs)
 

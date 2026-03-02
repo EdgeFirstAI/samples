@@ -3008,7 +3008,6 @@ name = "edgefirst-samples"
 version = "0.2.0"
 dependencies = [
  "async-pidfd",
- "cdr",
  "clap",
  "colorous",
  "edgefirst-hal",

@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::edgefirst_msgs::Mask;
+use edgefirst_schemas::{edgefirst_msgs::Mask, serde_cdr::deserialize};
 use rerun::{
     AnnotationContext, SegmentationImage, datatypes::ClassDescriptionMapElem, external::ndarray,
 };
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     while let Ok(msg) = subscriber.recv() {
         let bytes = &msg.payload().to_bytes();
-        let mask: Mask = cdr::deserialize(bytes)?;
+        let mask: Mask = deserialize(bytes)?;
 
         let mask_classes = mask.mask.len() / mask.width as usize / mask.height as usize;
         let mask_argmax: Vec<u8> = mask

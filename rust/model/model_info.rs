@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::edgefirst_msgs::ModelInfo;
+use edgefirst_schemas::{edgefirst_msgs::ModelInfo, serde_cdr::deserialize};
 use std::error::Error;
 
 #[tokio::main]
@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("model-info")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let info: ModelInfo = cdr::deserialize(&msg.payload().to_bytes())?;
+        let info: ModelInfo = deserialize(&msg.payload().to_bytes())?;
 
         let m_type = info.model_type;
         let m_name = info.model_name;

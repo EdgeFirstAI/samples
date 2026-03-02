@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
+use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2, serde_cdr::deserialize};
 use rerun::{Points3D, Position3D};
 use std::error::Error;
 
@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("lidar-points")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let pcd: PointCloud2 = cdr::deserialize(&msg.payload().to_bytes())?;
+        let pcd: PointCloud2 = deserialize(&msg.payload().to_bytes())?;
         let points = decode_pcd(&pcd);
         let points = Points3D::new(
             points

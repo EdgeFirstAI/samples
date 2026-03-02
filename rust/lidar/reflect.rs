@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::sensor_msgs::Image;
+use edgefirst_schemas::{sensor_msgs::Image, serde_cdr::deserialize};
 use std::error::Error;
 
 #[tokio::main]
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("lidar-depth")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let reflect: Image = cdr::deserialize(&msg.payload().to_bytes())?;
+        let reflect: Image = deserialize(&msg.payload().to_bytes())?;
 
         // Reflectivity image must be mono8
         assert_eq!(reflect.encoding, "mono8");

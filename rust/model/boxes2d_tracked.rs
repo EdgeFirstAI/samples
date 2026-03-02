@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::edgefirst_msgs::Detect;
+use edgefirst_schemas::{edgefirst_msgs::Detect, serde_cdr::deserialize};
 use rand::{Rng, rng};
 use rerun::Boxes2D;
 use std::collections::HashMap;
@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut boxes_tracked: HashMap<String, (String, [u8; 3])> = HashMap::new();
 
     while let Ok(msg) = subscriber.recv() {
-        let detection: Detect = cdr::deserialize(&msg.payload().to_bytes())?;
+        let detection: Detect = deserialize(&msg.payload().to_bytes())?;
         let mut centers = Vec::new();
         let mut sizes = Vec::new();
         let mut labels = Vec::new();

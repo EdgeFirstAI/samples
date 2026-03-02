@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::edgefirst_msgs::Detect;
+use edgefirst_schemas::{edgefirst_msgs::Detect, serde_cdr::deserialize};
 use std::error::Error;
 
 #[tokio::main]
@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("model-boxes")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let detection: Detect = cdr::deserialize(&msg.payload().to_bytes())?;
+        let detection: Detect = deserialize(&msg.payload().to_bytes())?;
 
         let mut centers = Vec::new();
         let mut sizes = Vec::new();

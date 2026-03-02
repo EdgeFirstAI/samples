@@ -12,7 +12,7 @@ IMPORTANT: Before creating a release, document all user-visible changes here.
 Empty releases should be avoided - ensure meaningful changes are listed.
 -->
 
-## [0.2.0] - 2026-02-27
+## [0.2.0] - 2026-03-02
 
 ### Added
 - Local camera examples for reading from the video4linux camera using either GStreamer or OpenCV

@@ -1,6 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+"""EdgeFirst Samples - Radar (Zenoh).
+
+Subscribes to Zenoh topics that publish radar data (e.g.
+`rt/fusion/radar`) and visualizes the results in Rerun.
+
+Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
+discovery is used.
+"""
+
 import zenoh
 from edgefirst.schemas.sensor_msgs import PointCloud2
 from edgefirst.schemas import decode_pcd, colormap, turbo_colormap

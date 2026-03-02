@@ -9,13 +9,6 @@ ONNX model loading, inference, and post-processing utilities using OpenCV.
 - Supports YOLO box/mask decoding, NMS, and image transforms
 """
 
-from utils.opencv_utils import (dequantize, decode_yolo_boxes,
-                                decode_yolo_masks, crop_masks, cv2_letterbox,
-                                cv2_resize)
-from utils.common import (get_shape, check_normalized_boxes,
-                          load_onnx_metadata, select_onnx_providers,
-                          build_metadata)
-from utils.nms import nms
 from argparse import ArgumentParser
 from pathlib import Path
 import sys
@@ -37,6 +30,14 @@ except ImportError:
 
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.opencv_utils import (dequantize, decode_yolo_boxes,
+                                decode_yolo_masks, crop_masks, cv2_letterbox,
+                                cv2_resize)
+from utils.common import (get_shape, check_normalized_boxes,
+                          load_onnx_metadata, select_onnx_providers,
+                          build_metadata)
+from utils.nms import nms
 
 
 class OpenCVONNXRunner:

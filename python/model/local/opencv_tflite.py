@@ -9,12 +9,6 @@ TFLite model loading, inference, and post-processing utilities for EdgeFirst wor
 - Supports YOLO box/mask decoding, NMS, and image transforms
 """
 
-from utils.opencv_utils import (decode_yolo_boxes, decode_yolo_masks,
-                                dequantize, crop_masks, cv2_letterbox,
-                                cv2_resize)
-from utils.common import (select_tflite_delegate, load_tflite_metadata,
-                          build_metadata, get_shape)
-from utils.nms import nms
 from argparse import ArgumentParser
 from pathlib import Path
 import sys
@@ -42,6 +36,13 @@ except ImportError:
         _TENSORFLOW_AVAILABLE = False
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.opencv_utils import (decode_yolo_boxes, decode_yolo_masks,
+                                dequantize, crop_masks, cv2_letterbox,
+                                cv2_resize)
+from utils.common import (select_tflite_delegate, load_tflite_metadata,
+                          build_metadata, get_shape)
+from utils.nms import nms
 
 
 class OpenCVTFLiteRunner:

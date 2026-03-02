@@ -12,8 +12,6 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
-from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
-                                   _build_pipeline, has_display, get_format)
 from typing import Optional
 from argparse import ArgumentParser
 from pathlib import Path
@@ -21,7 +19,6 @@ import time
 import sys
 import os
 
-from PIL import Image
 import numpy as np
 
 try:
@@ -44,6 +41,9 @@ import edgefirst_hal as ef
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
+                                   _build_pipeline, has_display, get_format)
 
 CONVERTER = ef.ImageProcessor()
 

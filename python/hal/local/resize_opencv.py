@@ -11,8 +11,6 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
-from utils.opencv_utils import (has_display as opencv_has_display,
-                                _build_pipeline as opencv_build_pipeline)
 from typing import Optional
 from argparse import ArgumentParser
 from pathlib import Path
@@ -37,6 +35,9 @@ except ImportError:
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from utils.opencv_utils import (has_display as opencv_has_display,
+                                _build_pipeline as opencv_build_pipeline)
+                                
 
 def cv2_resize(image: np.ndarray, size: Optional[tuple] = None) -> np.ndarray:
     if not _OPENCV_AVAILABLE:

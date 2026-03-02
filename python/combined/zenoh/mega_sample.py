@@ -11,7 +11,6 @@ Use `--remote <IP:PORT>` to connect to a remote Zenoh endpoint, otherwise local
 discovery is used.
 """
 
-from utils.opencv_utils import pillow_resize
 from argparse import ArgumentParser
 from pathlib import Path
 import threading
@@ -34,6 +33,8 @@ from edgefirst.schemas.sensor_msgs import PointCloud2
 import edgefirst_hal as ef
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.opencv_utils import pillow_resize
 
 CONVERTER = ef.ImageProcessor()
 

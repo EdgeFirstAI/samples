@@ -11,8 +11,6 @@ Specify `--camera <device>` to select a different camera device, e.g. /dev/video
 Specify --resolution to output the frame in a different resolution, e.g. 1280x720.
 """
 
-from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
-                                   _build_pipeline, has_display)
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -45,6 +43,9 @@ except ImportError:
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
+                                   _build_pipeline, has_display)
 
 
 class GStreamerCapture:

@@ -10,11 +10,6 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device.
 """
 
-from utils.opencv_utils import (has_display as opencv_has_display,
-                                _build_pipeline as opencv_build_pipeline,
-                                cv2_letterbox)
-from utils.opencv_tflite import OpenCVTFLiteRunner
-from utils.opencv_onnx import OpenCVONNXRunner
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -36,6 +31,12 @@ except ImportError:
     _OPENCV_AVAILABLE = False
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.opencv_utils import (has_display as opencv_has_display,
+                                _build_pipeline as opencv_build_pipeline,
+                                cv2_letterbox)
+from utils.opencv_tflite import OpenCVTFLiteRunner
+from utils.opencv_onnx import OpenCVONNXRunner
 
 
 class OpenCVInference:

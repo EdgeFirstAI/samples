@@ -10,8 +10,6 @@ This example is intended to run locally on target.
 Specify `--camera <device>` to select a different camera device, 0.
 """
 
-from utils.opencv_utils import (has_display as opencv_has_display,
-                                _build_pipeline as opencv_build_pipeline)
 from argparse import ArgumentParser
 from typing import Union
 from pathlib import Path
@@ -32,6 +30,9 @@ except ImportError:
 
 # Add project root to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from utils.opencv_utils import (has_display as opencv_has_display,
+                                _build_pipeline as opencv_build_pipeline)
 
 
 class OpenCVCapture:

@@ -5,7 +5,6 @@ import rerun as rr
 import zenoh
 import sys
 import asyncio
-import time
 from argparse import ArgumentParser
 from edgefirst.schemas.sensor_msgs import Imu
 from rerun.datatypes import Quaternion

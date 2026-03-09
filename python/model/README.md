@@ -26,7 +26,7 @@ python python/model/local/hal_tflite.py --model /path/to/model.tflite --image /p
 | --iou      | Specify the IoU threshold for NMS | 0.50 |
 | --max-boxes | Specify the max boxes for NMS | 300 |
 | --method | Specify the method for running model inference <hal, opencv> | hal
-| -- save | Specify the path to the image file with the visualizations of the model outputs | None
+| --save | Specify the path to the image file with the visualizations of the model outputs | None
 
 ### **2. ONNX Model Inference**
 
@@ -46,7 +46,7 @@ python python/model/local/hal_onnx.py --model /path/to/model.onnx --image /path/
 | --iou      | Specify the IoU threshold for NMS | 0.50 |
 | --max-boxes | Specify the max boxes for NMS | 300 |
 | --method | Specify the method for running model inference <hal, opencv> | hal
-| -- save | Specify the path to the image file with the visualizations of the model outputs | None
+| --save | Specify the path to the image file with the visualizations of the model outputs | None
 
 ### **3. Metadata Extraction**
 

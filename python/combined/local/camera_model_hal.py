@@ -143,8 +143,8 @@ class GStreamerInference:
             )
             boxes, scores, classes, masks = self.runner.infer(tensor)
             # Render detections on the image using the HAL converter
-            self.runner.converter.render_to_image(
-                self.runner.dst,
+            self.runner.converter.draw_masks(
+                dst=self.runner.dst,
                 bbox=boxes,
                 scores=scores,
                 classes=classes,

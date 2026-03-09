@@ -74,7 +74,6 @@ class HALTFLiteRunner:
             self.input_details[0]["shape"])
 
         self.metadata, self.labels = load_tflite_metadata(model_path)
-        self.metadata = None
         if self.metadata is None:
             self.metadata = build_metadata(self.output_details)
 
@@ -141,8 +140,8 @@ class HALTFLiteRunner:
 
         if save_path is not None:
             # Render detections on the image using the HAL converter
-            self.converter.render_to_image(
-                self.dst,
+            self.converter.draw_masks(
+                dst=self.dst,
                 bbox=boxes,
                 scores=scores,
                 classes=classes,

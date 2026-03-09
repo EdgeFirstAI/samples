@@ -265,8 +265,8 @@ def inference_handler_sync(
         # Update tracker
         tracked_objects = tracker.update(detections)
 
-        runner.converter.render_to_image(
-            runner.dst,
+        runner.converter.draw_masks(
+            dst=runner.dst,
             bbox=boxes,
             scores=scores,
             classes=classes,
@@ -370,8 +370,8 @@ def h264_worker(
                     # Update tracker
                     tracked_objects = tracker.update(detections)
 
-                    runner.converter.render_to_image(
-                        runner.dst,
+                    runner.converter.draw_masks(
+                        dst=runner.dst,
                         bbox=boxes,
                         scores=scores,
                         classes=classes,

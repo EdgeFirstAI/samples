@@ -147,8 +147,8 @@ class HALONNXRunner:
 
         if save_path is not None:
             # Render detections on the image using the HAL converter
-            self.converter.render_to_image(
-                self.dst,
+            self.converter.draw_masks(
+                dst=self.dst,
                 bbox=boxes,
                 scores=scores,
                 classes=classes,

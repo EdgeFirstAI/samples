@@ -95,8 +95,7 @@ class OpenCVInference:
             raise NotImplementedError(
                 "Only ONNX and TFLite Ultralytics models are supported in this sample.")
 
-        self.size = size = (self.runner.input_shape[1],
-                            self.runner.input_shape[0])
+        self.size = (self.runner.input_shape[1], self.runner.input_shape[0])
 
     def on_new_sample(self):
         start_pipeline = time.perf_counter()
@@ -124,9 +123,13 @@ class OpenCVInference:
                               (boxes[i, 2], boxes[i, 3]), (0, 255, 0), 2)
 
                 if masks is not None:
+                    if frame.shape[-1] == 3:
+                        color = np.array([0, 255, 0])
+                    else:
+                        color = np.array([0, 255, 0, 255])
+
                     frame[masks[i] > 0] = (
-                        frame[masks[i] > 0] * (1 - alpha) +
-                        np.array([0, 255, 0, 255]) * alpha
+                        frame[masks[i] > 0] * (1 - alpha) + color * alpha
                     )
                 cv2.putText(
                     frame,

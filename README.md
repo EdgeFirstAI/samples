@@ -118,9 +118,7 @@ RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" cargo build --release --target aarch
 cargo build --release --target aarch64-apple-darwin
 
 # Windows
-sudo apt install mingw-w64
-rustup target add x86_64-pc-windows-gnu
-cargo build --release --target x86_64-pc-windows-gnu
+cargo build --release --target x86_64-pc-windows-msvc
 ```
 
 ---
@@ -517,6 +515,8 @@ This example shows the **power of running vision models at the edge**—low-late
 **Message:** [DmaBuf](https://doc.edgefirst.ai/latest/perception/api/edgefirst_msgs/#dmabuffer)
 
 **Linux-only** example showing high-performance zero-copy camera access using DMA buffers. This is the **fastest** way to access camera frames with minimal CPU overhead—ideal for real-time processing.
+
+>Note: `sudo` permissions are required to access DMA buffers.
 
 1. Rust CLI
 

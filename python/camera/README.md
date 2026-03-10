@@ -91,6 +91,8 @@ python python/camera/zenoh/info.py --connect --url rerun+http://<PC IP address>:
 
 **Source Code:** [Python](python/camera/zenoh/dma.py)
 
+>Note: `sudo` permissions are required to access DMA buffers.
+
 **Usage:**
 
 1. Connect remotely with an EdgeFirst Platform.

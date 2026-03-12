@@ -16,7 +16,7 @@ try:
     import onnxruntime as ort
     _ONNX_RUNTIME_AVAILABLE = True
 except ImportError:
-    LABLE = False
+    _ONNX_RUNTIME_AVAILABLE = False
 
 import edgefirst_hal as ef
 

@@ -53,7 +53,7 @@ These "zenoh" samples demonstrate how to subscribe to EdgeFirst Perception topic
 
 ## Building from Source
 
-> Note: the following build instructions were tested using WSL2 with Ubuntu 5.15.
+> Note: we recommend using WSL2 with Ubuntu 22.04 when building the Rust applications with cross-compilation since EdgeFirst Platforms requires GLIBC v2.35 (`$ ldd --version`). Newer versions such as Ubuntu 24.04 has GLIBC v2.39 which will cause compatibility issues. 
 
 ### Prerequisites
 
@@ -77,6 +77,7 @@ pip install -r requirements.txt
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+. "$HOME/.cargo/env"
 ```
 
 2. If you have Rust already installed, update to the latest version
@@ -88,6 +89,8 @@ rustup update
 
 ### Clone and Build
 
+> Note: if you plan to run the executable in a specific target, build the executable in that target. Otherwise proceed to the cross compilation instructions in the next section.
+
 ```bash
 git clone https://github.com/EdgeFirstAI/samples.git
 cd samples
@@ -97,6 +100,8 @@ cargo build --release --all-targets
 
 # Build with Rerun visualization support
 cargo build --release --all-targets --features rerun
+# Install the Rerun viewer when visualization support is enabled
+cargo install rerun-cli
 
 # Run any example
 cargo run --bin list-topics --release

@@ -1,7 +1,8 @@
-edgefirst-schemas
-edgefirst_hal
+av
+rerun-sdk
 eclipse-zenoh
 numpy
-rerun-sdk
+opencv-python
 zstd
-av
+edgefirst-schemas
+edgefirst_hal

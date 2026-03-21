@@ -871,7 +871,7 @@ All contributions must:
 - Be your original work or properly attributed
 - Not contain code from GPL/AGPL licensed projects
 - Include appropriate SPDX license headers
-- Comply with the project's [license policy](AGENTS.md#license-policy)
+- Comply with the project's [license policy](.github/copilot-instructions.md#license-policy)
 
 ### Allowed Dependency Licenses
 
@@ -888,7 +888,7 @@ When adding new dependencies, ensure they use compatible licenses:
 - CC-BY-NC, CC-BY-ND (non-commercial, no-derivatives)
 - SSPL, BSL
 
-See [AGENTS.md](AGENTS.md#license-policy) for complete license policy.
+See [AI Assistant Guidelines](.github/copilot-instructions.md#license-policy) for complete license policy.
 
 ### Adding New Dependencies
 

@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::RadarInfo, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::RadarInfo;
 use std::error::Error;
 
 #[tokio::main]
@@ -15,9 +15,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let subscriber = session.declare_subscriber("rt/radar/info").await.unwrap();
 
     let msg = subscriber.recv().unwrap();
-    let info: RadarInfo = deserialize(&msg.payload().to_bytes())?;
+    let bytes = msg.payload().to_bytes();
+    let _info = RadarInfo::from_cdr(&bytes)?;
 
-    println!("{:?}", info);
+    // Note: RadarInfo doesn't implement Debug in 2.0.1
+    // println!("{:?}", _info);
+    println!("Received RadarInfo message");
 
     Ok(())
 }

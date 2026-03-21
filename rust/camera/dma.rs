@@ -5,7 +5,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::DmaBuffer, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::DmaBuffer;
 use std::{error::Error, ffi::c_void, ptr::null_mut, slice::from_raw_parts_mut};
 
 #[cfg(target_os = "linux")]
@@ -32,9 +32,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let subscriber = session.declare_subscriber("rt/camera/dma").await.unwrap();
 
     while let Ok(msg) = subscriber.recv() {
-        let dma_buf: DmaBuffer = deserialize(&msg.payload().to_bytes()).unwrap();
+        let bytes = msg.payload().to_bytes();
+        let dma_buf = DmaBuffer::from_cdr(&bytes).unwrap();
 
-        let pidfd: PidFd = match PidFd::from_pid(dma_buf.pid as i32) {
+        let pidfd: PidFd = match PidFd::from_pid(dma_buf.pid() as i32) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!(
@@ -45,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         };
 
-        let fd = match get_file_from_pidfd(pidfd.as_raw_fd(), dma_buf.fd, GetFdFlags::empty()) {
+        let fd = match get_file_from_pidfd(pidfd.as_raw_fd(), dma_buf.fd(), GetFdFlags::empty()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!(
@@ -57,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
 
         // YUYV has 2 bytes per pixel.
-        let image_size = (dma_buf.width * dma_buf.height * 2) as usize;
+        let image_size = (dma_buf.width() * dma_buf.height() * 2) as usize;
         let mmap = unsafe {
             from_raw_parts_mut(
                 mmap(
@@ -72,7 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             )
         };
         let rr_image = rerun::Image::from_pixel_format(
-            [dma_buf.width, dma_buf.height],
+            [dma_buf.width(), dma_buf.height()],
             rerun::PixelFormat::YUY2,
             mmap.to_vec(),
         );

@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{foxglove_msgs::FoxgloveCompressedVideo, serde_cdr::deserialize};
+use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
 use openh264::decoder::Decoder;
 use openh264::formats::YUVSource;
 use openh264::nal_units;
@@ -24,8 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut decoder = Decoder::new()?;
 
     while let Ok(msg) = subscriber.recv() {
-        let video: FoxgloveCompressedVideo = deserialize(&msg.payload().to_bytes())?;
-        for packet in nal_units(&video.data) {
+        let bytes = msg.payload().to_bytes();
+        let video = FoxgloveCompressedVideo::from_cdr(&bytes).unwrap();
+        for packet in nal_units(&(video.data())) {
             let Ok(Some(yuv)) = decoder.decode(packet) else {
                 continue;
             };

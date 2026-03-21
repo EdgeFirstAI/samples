@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Detect, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Detect;
 use rerun::Boxes3D;
 use std::error::Error;
 #[tokio::main]
@@ -21,8 +21,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     while let Ok(msg) = subscriber.recv() {
-        let det: Detect = deserialize(&msg.payload().to_bytes())?;
-        let boxes = det.boxes;
+        let bytes = msg.payload().to_bytes();
+        let det = Detect::from_cdr(&bytes)?;
+        let boxes = det.boxes();
         println!("Recieved {} 3D boxes.", boxes.len());
 
         // The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward

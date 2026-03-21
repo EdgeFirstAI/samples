@@ -39,7 +39,6 @@ use edgefirst_schemas::{
     edgefirst_msgs::Detect,
     foxglove_msgs::FoxgloveCompressedVideo,
     sensor_msgs::{NavSatFix, PointCloud2},
-    serde_cdr::deserialize,
 };
 
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
@@ -55,7 +54,8 @@ async fn camera_h264_handler(
     let mut decoder = Decoder::new().expect("Failed to create decoder");
 
     while let Ok(msg) = sub.recv_async().await {
-        let video = match deserialize::<FoxgloveCompressedVideo>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let video = match FoxgloveCompressedVideo::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize video: {:?}", e);
@@ -63,7 +63,7 @@ async fn camera_h264_handler(
             }
         };
 
-        for packet in nal_units(&video.data) {
+        for packet in nal_units(&video.data()) {
             let Ok(Some(yuv)) = decoder.decode(packet) else {
                 continue;
             };
@@ -87,7 +87,8 @@ async fn model_boxes2d_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let detection = match deserialize::<Detect>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let detection = match Detect::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize detect message: {:?}", e);
@@ -98,7 +99,7 @@ async fn model_boxes2d_handler(
         let mut sizes = Vec::new();
         let mut labels = Vec::new();
 
-        for b in detection.boxes {
+        for b in detection.boxes() {
             centers.push([b.center_x * 960.0, b.center_y * 540.0]);
             sizes.push([b.width * 960.0, b.height * 540.0]);
             labels.push(b.label);
@@ -115,8 +116,8 @@ async fn model_boxes2d_handler(
                 continue; // skip this message and continue
             }
         };
-        let model_time_sec = detection.model_time.sec as f64;
-        let model_time_nsec = detection.model_time.nanosec as f64;
+        let model_time_sec = detection.model_time().sec as f64;
+        let model_time_nsec = detection.model_time().nanosec as f64;
         let total_time = model_time_sec + (model_time_nsec / 1e9);
         match rr_guard.log(
             "/metrics/detection_inference",
@@ -137,7 +138,7 @@ async fn model_boxes2d_handler(
 //     compressed: Bool
 // ) {
 //     while let Ok(msg) = sub.recv_async().await {
-//         let mask = match deserialize::<Mask>(&msg.payload().to_bytes()) {
+//         let mask = match cdr::deserialize::<Mask>(&msg.payload().to_bytes()) {
 //             Ok(v) => v,
 //             Err(e) => {
 //                 eprintln!("Failed to deserialize detect message: {:?}", e);
@@ -180,7 +181,8 @@ async fn radar_clusters_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let pcd = match deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let pcd = match PointCloud2::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
@@ -223,7 +225,8 @@ async fn lidar_clusters_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let pcd = match deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let pcd = match PointCloud2::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
@@ -266,7 +269,8 @@ async fn gps_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let gps = match deserialize::<NavSatFix>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let gps = match NavSatFix::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
@@ -276,7 +280,7 @@ async fn gps_handler(
         let rr_guard = rr.lock().await;
         match rr_guard.log(
             "/gps",
-            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)]),
+            &rerun::GeoPoints::from_lat_lon([(gps.latitude(), gps.longitude())]),
         ) {
             Ok(v) => v,
             Err(e) => {
@@ -292,14 +296,15 @@ async fn fusion_boxes3d_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let det = match deserialize::<Detect>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let det = match Detect::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize fusion_boxes3d: {:?}", e);
                 continue; // skip this message and continue
             }
         };
-        let boxes = det.boxes;
+        let boxes = det.boxes();
         // The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
         // We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
         let rr_boxes = Boxes3D::from_centers_and_sizes(

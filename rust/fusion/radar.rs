@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2, serde_cdr::deserialize};
+use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
 use rerun::{Color, Points3D, Position3D};
 use std::error::Error;
 
@@ -19,7 +19,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let subscriber = session.declare_subscriber("rt/fusion/radar").await.unwrap();
 
     while let Ok(msg) = subscriber.recv() {
-        let pcd: PointCloud2 = deserialize(&msg.payload().to_bytes())?;
+        let bytes = msg.payload().to_bytes();
+        let pcd = PointCloud2::from_cdr(&bytes)?;
         let points = decode_pcd(&pcd);
         let max_class = points
             .iter()

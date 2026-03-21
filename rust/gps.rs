@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{sensor_msgs::NavSatFix, serde_cdr::deserialize};
+use edgefirst_schemas::sensor_msgs::NavSatFix;
 use std::error::Error;
 
 #[tokio::main]
@@ -18,10 +18,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("gps")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let gps: NavSatFix = deserialize(&msg.payload().to_bytes())?;
+        let bytes = msg.payload().to_bytes();
+        let gps = NavSatFix::from_cdr(&bytes)?;
         rr.log(
             "CurrentLoc",
-            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)]),
+            &rerun::GeoPoints::from_lat_lon([(gps.latitude(), gps.longitude())]),
         )?;
     }
 

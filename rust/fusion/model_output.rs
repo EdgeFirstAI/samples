@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Mask, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Mask;
 use rerun::{
     AnnotationContext, SegmentationImage, datatypes::ClassDescriptionMapElem, external::ndarray,
 };
@@ -32,20 +32,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     while let Ok(msg) = subscriber.recv() {
         let bytes = &msg.payload().to_bytes();
-        let mask: Mask = deserialize(bytes)?;
+        let mask = Mask::from_cdr(&bytes)?;
 
-        let mask_classes = mask.mask.len() / mask.width as usize / mask.height as usize;
+        let mask_classes = mask.mask_data().len() / mask.width() as usize / mask.height() as usize;
         let mask_argmax: Vec<u8> = mask
-            .mask
+            .mask_data()
             .chunks_exact(mask_classes)
             .map(argmax_slice)
             .collect();
-        let mask = ndarray::Array2::from_shape_vec(
-            [mask.width as usize, mask.height as usize],
+        let mask_array = ndarray::Array2::from_shape_vec(
+            [mask.width() as usize, mask.height() as usize],
             mask_argmax,
         )
         .unwrap();
-        let rr_seg_image = SegmentationImage::try_from(mask).unwrap();
+        let rr_seg_image = SegmentationImage::try_from(mask_array).unwrap();
         let _ = rec.log("fusion/model_output", &rr_seg_image);
     }
 

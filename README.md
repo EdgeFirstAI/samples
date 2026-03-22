@@ -91,7 +91,7 @@ These samples demonstrate how to subscribe to EdgeFirst Perception topics, deser
 
 **Purpose:** Discover and display all available topics on an EdgeFirst device.
 
-**Source Code:** [Rust](rust/list-topics.rs) • [Python](python/list_topics.py)
+**Source Code:** [Rust](rust/list-topics.rs) • [Python](python/list-topics.py)
 
 This is the simplest starting point—it connects to the Zenoh network and lists all published topics under the `rt/` namespace. Use this to verify connectivity and see what data sources are available.
 
@@ -121,8 +121,7 @@ This is the simplest starting point—it connects to the Zenoh network and lists
 
 This is the **most comprehensive example**, showcasing EdgeFirst's edge vision capabilities. It subscribes to multiple topics simultaneously:
 - **Camera H.264 stream** (`rt/camera/h264`) - Decodes and displays live video
-- **Detection boxes** (`rt/model/boxes2d`) - Overlays bounding boxes on detected objects
-- **Segmentation masks** (`rt/model/mask`) - Shows pixel-level classification
+- **Model output** (`rt/model/output`) - Detections and segmentation
 - **3D fusion output** (`rt/fusion/boxes3d`) - Multi-sensor 3D object tracking (optional)
 - **GPS location** (`rt/gps`) - Device location on map (optional)
 
@@ -194,9 +193,9 @@ Retrieves camera calibration and configuration (resolution, distortion parameter
 These examples focus solely on **processing ML inference results** without the camera feed, making it easier to understand model output handling.
 
 #### 2D Bounding Boxes
-**Source:** [Rust](rust/model/boxes2d.rs) • [Python](python/model/boxes2d.py)  
-**Topic:** `rt/model/boxes2d`  
-**Message:** [BoundingBox2DArray](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#boundingbox2darray)
+**Source:** [Rust](rust/model/boxes2d.rs) • [Python](python/model/boxes2d.py)
+**Topic:** `rt/model/output`
+**Message:** [Model](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#model)
 
 Displays detected objects with class labels, confidence scores, and bounding box coordinates.
 
@@ -205,9 +204,9 @@ Displays detected objects with class labels, confidence scores, and bounding box
 ```
 
 #### Tracked Objects
-**Source:** [Rust](rust/model/boxes2d_tracked.rs) • [Python](python/model/boxes2d_tracked.py)  
-**Topic:** `rt/model/boxes2d_tracked`  
-**Message:** [BoundingBox2DArray](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#boundingbox2darray)
+**Source:** [Rust](rust/model/boxes2d_tracked.rs) • [Python](python/model/boxes2d_tracked.py)
+**Topic:** `rt/model/output`
+**Message:** [Model](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#model)
 
 Shows object tracking with persistent IDs across frames.
 
@@ -216,25 +215,14 @@ Shows object tracking with persistent IDs across frames.
 ```
 
 #### Segmentation Masks
-**Source:** [Rust](rust/model/mask.rs) • [Python](python/model/mask.py)  
-**Topic:** `rt/model/mask`  
-**Message:** [Mask](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#mask)
+**Source:** [Rust](rust/model/mask.rs) • [Python](python/model/mask.py)
+**Topic:** `rt/model/output`
+**Message:** [Model](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#model)
 
 Processes pixel-level semantic segmentation results.
 
 ```bash
 ./model-mask
-```
-
-#### Compressed Masks
-**Source:** [Rust](rust/model/compressed_mask.rs) • [Python](python/model/compressed_mask.py)  
-**Topic:** `rt/model/compressed_mask`  
-**Message:** [CompressedMask](https://doc.edgefirst.ai/develop/perception/api/edgefirst_msgs/#compressedmask)
-
-Handles ZSTD-compressed segmentation masks for reduced bandwidth.
-
-```bash
-./model-compressed_mask
 ```
 
 #### Model Info
@@ -302,7 +290,7 @@ Retrieves radar configuration (range resolution, field of view, update rate).
 
 ### 🔍 **6. LiDAR Examples** - Point Cloud Processing
 
-**Purpose:** Handle LiDAR point clouds, depth images, and clustering.
+**Purpose:** Handle LiDAR point clouds and clustering.
 
 #### Point Clouds
 **Source:** [Rust](rust/lidar/points.rs) • [Python](python/lidar/points.py)  
@@ -315,17 +303,6 @@ Visualizes 3D LiDAR point clouds.
 ./lidar-points
 ```
 
-#### Depth Images
-**Source:** [Rust](rust/lidar/depth.rs) • [Python](python/lidar/depth.py)  
-**Topic:** `rt/lidar/depth`  
-**Message:** [Image](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#image)
-
-Converts LiDAR data to 2D depth map representation.
-
-```bash
-./lidar-depth
-```
-
 #### LiDAR Clusters
 **Source:** [Rust](rust/lidar/clusters.rs) • [Python](python/lidar/clusters.py)  
 **Topic:** `rt/lidar/clusters`  
@@ -335,17 +312,6 @@ Shows segmented point cloud clusters (e.g., individual objects or ground plane).
 
 ```bash
 ./lidar-clusters
-```
-
-#### Reflectivity
-**Source:** [Rust](rust/lidar/reflect.rs) • [Python](python/lidar/reflect.py)  
-**Topic:** `rt/lidar/reflect`  
-**Message:** [Image](https://doc.edgefirst.ai/develop/perception/api/sensor_msgs/#image)
-
-Displays LiDAR intensity/reflectivity data as a 2D image.
-
-```bash
-./lidar-reflect
 ```
 
 ---
@@ -488,7 +454,7 @@ cargo build --release --all-targets --features rerun
 cargo run --bin list-topics --release
 
 # Python examples (no build required)
-python python/list_topics.py
+python python/list-topics.py
 ```
 
 ### Building for Specific Targets
@@ -517,13 +483,13 @@ cargo build --release --target x86_64-pc-windows-msvc
 
 | Category | Rust Examples | Python Examples | Description |
 |----------|---------------|-----------------|-------------|
-| **Discovery** | `list-topics` | `list_topics.py` | Topic discovery |
+| **Discovery** | `list-topics` | `list-topics.py` | Topic discovery |
 | **Combined** | `mega-sample` | `combined/mega_sample.py` | Complete vision pipeline demo |
 | **Camera** | `camera-dma`, `camera-h264`, `camera-info` | `camera/dma.py`, `camera/h264.py`, `camera/camera_info.py` | Camera streams and calibration |
-| **ML Models** | `model-boxes`, `model-mask`, `model-boxes_tracked`, `model-info` | `model/boxes2d.py`, `model/mask.py`, `model/boxes2d_tracked.py` | Object detection, segmentation, tracking |
+| **ML Models** | `model-boxes`, `model-mask`, `model-boxes_tracked`, `model-info` | `model/boxes2d.py`, `model/mask.py`, `model/boxes2d_tracked.py`, `model/model_info.py` | Object detection, segmentation, tracking |
 | **Radar** | `radar-targets`, `radar-clusters`, `radar-cube`, `radar-info` | `radar/targets.py`, `radar/clusters.py`, `radar/cube.py` | Radar detections and processing |
-| **LiDAR** | `lidar-points`, `lidar-depth`, `lidar-clusters`, `lidar-reflect` | `lidar/points.py`, `lidar/depth.py`, `lidar/clusters.py` | Point clouds and depth imaging |
-| **Fusion** | `fusion-boxes3d`, `fusion-occupancy`, `fusion-lidar`, `fusion-radar`, `fusion-model-output` | `fusion/boxes3d.py`, `fusion/occupancy.py`, `fusion/lidar.py` | Multi-sensor integration |
+| **LiDAR** | `lidar-points`, `lidar-clusters` | `lidar/points.py`, `lidar/clusters.py` | Point clouds and clustering |
+| **Fusion** | `fusion-boxes3d`, `fusion-occupancy`, `fusion-lidar`, `fusion-radar`, `fusion-model-output`, `fusion-model-output-tracked` | `fusion/boxes3d.py`, `fusion/occupancy.py`, `fusion/lidar.py`, `fusion/model_output.py`, `fusion/model_output_tracked.py` | Multi-sensor integration |
 | **Navigation** | `imu`, `gps` | `imu.py`, `gps.py` | Inertial and positioning data |
 
 ## Support

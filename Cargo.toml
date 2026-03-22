@@ -13,108 +13,117 @@ name = "edgefirst_samples"
 path = "rust/lib.rs"
 
 [[bin]]
-name = "camera-dma"
-path = "rust/camera/dma.rs"
-
-[[bin]]
 name = "list-topics"
 path = "rust/list-topics.rs"
-
-[[bin]]
-name = "camera-info"
-path = "rust/camera/camera_info.rs"
-
-[[bin]]
-name = "camera-h264"
-path = "rust/camera/h264.rs"
-
-[[bin]]
-name = "mega-sample"
-path = "rust/combined/mega_sample.rs"
-
-[[bin]]
-name = "lidar-clusters"
-path = "rust/lidar/clusters.rs"
-
-[[bin]]
-name = "lidar-points"
-path = "rust/lidar/points.rs"
-
-[[bin]]
-name = "lidar-depth"
-path = "rust/lidar/depth.rs"
-
-[[bin]]
-name = "lidar-reflect"
-path = "rust/lidar/reflect.rs"
-
-[[bin]]
-name = "model-boxes"
-path = "rust/model/boxes2d.rs"
-
-[[bin]]
-name = "model-boxes_tracked"
-path = "rust/model/boxes2d_tracked.rs"
-
-[[bin]]
-name = "model-info"
-path = "rust/model/model_info.rs"
-
-[[bin]]
-name = "model-compressed_mask"
-path = "rust/model/compressed_mask.rs"
-
-[[bin]]
-name = "model-mask"
-path = "rust/model/mask.rs"
-
-[[bin]]
-name = "radar-targets"
-path = "rust/radar/targets.rs"
-
-[[bin]]
-name = "radar-clusters"
-path = "rust/radar/clusters.rs"
 
 [[bin]]
 name = "radar-info"
 path = "rust/radar/info.rs"
 
 [[bin]]
+name = "camera-dma"
+path = "rust/camera/dma.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "camera-info"
+path = "rust/camera/camera_info.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "camera-h264"
+path = "rust/camera/h264.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "mega-sample"
+path = "rust/combined/mega_sample.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "lidar-clusters"
+path = "rust/lidar/clusters.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "lidar-points"
+path = "rust/lidar/points.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "model-boxes"
+path = "rust/model/boxes2d.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "model-boxes_tracked"
+path = "rust/model/boxes2d_tracked.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "model-info"
+path = "rust/model/model_info.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "model-mask"
+path = "rust/model/mask.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "radar-targets"
+path = "rust/radar/targets.rs"
+required-features = ["rerun"]
+
+[[bin]]
+name = "radar-clusters"
+path = "rust/radar/clusters.rs"
+required-features = ["rerun"]
+
+[[bin]]
 name = "radar-cube"
 path = "rust/radar/cube.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "fusion-radar"
 path = "rust/fusion/radar.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "fusion-lidar"
 path = "rust/fusion/lidar.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "fusion-boxes3d"
 path = "rust/fusion/boxes3d.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "fusion-occupancy"
 path = "rust/fusion/occupancy.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "fusion-model-output"
 path = "rust/fusion/model_output.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "fusion-model-output-tracked"
 path = "rust/fusion/model_output_tracked.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "imu"
 path = "rust/imu.rs"
+required-features = ["rerun"]
 
 [[bin]]
 name = "gps"
 path = "rust/gps.rs"
+required-features = ["rerun"]
 
 [features]
 default = ["rerun"]
@@ -123,16 +132,20 @@ rerun = ["dep:rerun"]
 [dependencies]
 clap = { version = "4.5.52", features = ["derive"] }
 colorous = "1.0.16"
-edgefirst-schemas = "1.5.1"
+edgefirst-schemas = "2.2.0"
 ndarray = "0.16.1"
 rerun = { version = "0.27.2", optional = true, features = ["clap"] }
 serde_json = "1.0.140"
 tokio = { version = "1.45.0", default-features = false, features = ["rt"] }
 zenoh = "1.3.4"
 itertools = "0.14.0"
-zstd = "0.13.3"
 openh264 = "0.9.0"
 rand = "0.9.2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 async-pidfd = "0.1.4"

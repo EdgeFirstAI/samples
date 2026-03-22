@@ -14,13 +14,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a subscriber for "rt/radar/info"
     let subscriber = session.declare_subscriber("rt/radar/info").await.unwrap();
 
-    let msg = subscriber.recv().unwrap();
+    let msg = subscriber.recv_async().await.unwrap();
     let bytes = msg.payload().to_bytes();
-    let _info = RadarInfo::from_cdr(&bytes)?;
-
-    // Note: RadarInfo doesn't implement Debug in 2.0.1
-    // println!("{:?}", _info);
-    println!("Received RadarInfo message");
+    let info = RadarInfo::from_cdr(&bytes)?;
+    println!(
+        "RadarInfo: center_frequency={} frequency_sweep={} cube={}",
+        info.center_frequency(),
+        info.frequency_sweep(),
+        info.cube()
+    );
 
     Ok(())
 }

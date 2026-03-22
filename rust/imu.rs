@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     rr.log("box", &rr_box)?;
     rr.log("box", &rerun::Transform3D::default().with_axis_length(2.0))?;
 
-    while let Ok(msg) = subscriber.recv() {
+    while let Ok(msg) = subscriber.recv_async().await {
         let bytes = msg.payload().to_bytes();
         let imu = Imu::from_cdr(&bytes)?;
         let x = imu.orientation().x as f32;

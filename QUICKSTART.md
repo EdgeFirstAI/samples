@@ -8,15 +8,15 @@ This package contains pre-built sample applications demonstrating how to subscri
 
 ## What's Included
 
-All 26 compiled examples for your platform:
+All 23 compiled examples for your platform:
 
 - **Discovery:** `list-topics` - Discover available topics
 - **Combined:** `mega-sample` - Complete vision pipeline demo
 - **Camera:** `camera-dma`, `camera-h264`, `camera-info` - Image acquisition
-- **ML Models:** `model-boxes`, `model-mask`, `model-boxes_tracked`, `model-info` - Object detection/segmentation
+- **ML Models:** `model-boxes`, `model-mask`, `model-boxes_tracked`, `model-info` - Object detection/segmentation (unified `rt/model/output` topic)
 - **Radar:** `radar-targets`, `radar-clusters`, `radar-cube`, `radar-info` - Radar processing
-- **LiDAR:** `lidar-points`, `lidar-depth`, `lidar-clusters`, `lidar-reflect` - Point clouds
-- **Fusion:** `fusion-boxes3d`, `fusion-occupancy`, `fusion-lidar`, `fusion-radar` - Multi-sensor integration
+- **LiDAR:** `lidar-points`, `lidar-clusters` - Point clouds
+- **Fusion:** `fusion-boxes3d`, `fusion-occupancy`, `fusion-lidar`, `fusion-radar`, `fusion-model-output`, `fusion-model-output-tracked` - Multi-sensor integration
 - **Navigation:** `imu`, `gps` - Inertial and positioning data
 
 Plus: `README.md`, `LICENSE`, `NOTICE`
@@ -123,9 +123,6 @@ All examples support:
 
 # Connect to remote device
 ./camera-h264 --remote 192.168.1.100:7447
-
-# Specify custom topic (when applicable)
-./camera-h264 --topic rt/camera/h264
 ```
 
 ---

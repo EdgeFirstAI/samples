@@ -7,10 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-<!-- 
+<!--
 IMPORTANT: Before creating a release, document all user-visible changes here.
 Empty releases should be avoided - ensure meaningful changes are listed.
 -->
+
+### Added
+- Unified `Model` message type support (`rt/model/output`) combining detection boxes and segmentation masks in a single message
+- `required-features` gating on `[[bin]]` entries — `cargo build --no-default-features` builds only non-visualization binaries
+- Release profile optimizations: `lto = true`, `codegen-units = 1`, `strip = true`
+
+### Changed
+- Updated to edgefirst-schemas 2.2.0 zero-copy CDR API with native type-coercing point cloud field access (`Type::from_cdr(&bytes)?`)
+- Model samples (`boxes2d`, `boxes2d_tracked`, `mask`) rewritten for unified `rt/model/output` topic
+- Mega sample updated to subscribe to `rt/model/output` instead of legacy `rt/model/boxes2d`
+- Point cloud samples migrated from `decode_pcd()` to `DynPointCloud::from_pointcloud2()`
+- All single-topic samples switched from blocking `recv()` to async `recv_async().await`
+- `Arc<Mutex<RecordingStream>>` replaced with `Arc<RecordingStream>` in mega_sample (RecordingStream is Send+Sync)
+- Vec allocations hoisted above hot loops for improved embedded performance
+- Rerun variable naming standardized to `rr` across all samples
+- AGENTS.md replaced by `.github/copilot-instructions.md`
+- ARCHITECTURE.md completely rewritten for current API and patterns
+
+### Removed
+- `model-compressed_mask` sample (compressed mask topic obsoleted by on-the-wire compression)
+- `lidar-depth` sample (depth image topic removed for multi-lidar sensor support)
+- `lidar-reflect` sample (reflectivity image topic removed for multi-lidar sensor support)
+- `zstd` dependency (only used by removed compressed_mask sample)
+- `rust/hal/decoder.rs` work-in-progress file (unregistered, with undeclared dependencies)
+
+### Fixed
+- Array shape `[width, height]` corrected to `[height, width]` in fusion model_output samples
+- `.unwrap()` calls replaced with `?` operator in fusion model_output samples
+- `let _ = rr.log(...)` replaced with `rr.log(...)?` for proper error propagation across 9 files
+- Unnecessary `.to_vec()` and `.clone()` copies removed in zero-copy context
 
 ## [0.1.2] - 2025-11-19
 

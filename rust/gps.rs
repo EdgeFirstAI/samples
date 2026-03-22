@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("gps")?;
 
-    while let Ok(msg) = subscriber.recv() {
+    while let Ok(msg) = subscriber.recv_async().await {
         let bytes = msg.payload().to_bytes();
         let gps = NavSatFix::from_cdr(&bytes)?;
         rr.log(

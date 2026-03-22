@@ -9,6 +9,7 @@ use zenoh::config::{Config, WhatAmI};
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Rerun parameters
+    #[cfg(feature = "rerun")]
     #[command(flatten)]
     pub rerun: rerun::clap::RerunArgs,
 

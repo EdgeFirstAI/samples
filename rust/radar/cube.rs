@@ -18,11 +18,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("radar-cube")?;
 
-    while let Ok(msg) = subscriber.recv() {
+    while let Ok(msg) = subscriber.recv_async().await {
         let bytes = msg.payload().to_bytes();
         let radar = RadarCube::from_cdr(&bytes)?;
         let data = Array::<u16, _>::from_shape_vec(
-            radar.shape().iter().map(|&x| x as usize).collect::<Vec<_>>(),
+            radar
+                .shape()
+                .iter()
+                .map(|&x| x as usize)
+                .collect::<Vec<_>>(),
             radar
                 .cube()
                 .iter()

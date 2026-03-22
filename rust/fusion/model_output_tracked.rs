@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-use clap::Parser;
+use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::edgefirst_msgs::Mask;
 use rerun::{
@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let session = zenoh::open(args.clone()).await.unwrap();
 
     // Create Rerun logger using the provided parameters
-    let (rec, _serve_guard) = args.rerun.init("fusion-model_output-tracked")?;
+    let (rr, _serve_guard) = args.rerun.init("fusion-model_output-tracked")?;
 
     // Create a subscriber for "rt/fusion/model_output"
     let subscriber = session
@@ -23,15 +23,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .unwrap();
 
-    let _ = rec.log_static(
+    rr.log_static(
         "/",
         &AnnotationContext::new([
             ClassDescriptionMapElem::from((0, "Background")),
             ClassDescriptionMapElem::from((1, "Person", rerun::Rgba32::from_rgb(255, 0, 0))),
         ]),
-    );
-    while let Ok(msg) = subscriber.recv() {
-        let bytes = &msg.payload().to_bytes();
+    )?;
+    while let Ok(msg) = subscriber.recv_async().await {
+        let bytes = msg.payload().to_bytes();
         let mask = Mask::from_cdr(&bytes)?;
 
         let mask_classes = mask.mask_data().len() / mask.width() as usize / mask.height() as usize;
@@ -41,12 +41,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .map(argmax_slice)
             .collect();
         let mask_array = ndarray::Array2::from_shape_vec(
-            [mask.width() as usize, mask.height() as usize],
+            [mask.height() as usize, mask.width() as usize],
             mask_argmax,
-        )
-        .unwrap();
-        let rr_seg_image = SegmentationImage::try_from(mask_array).unwrap();
-        let _ = rec.log("fusion/model_output/tracked", &rr_seg_image);
+        )?;
+        let rr_seg_image = SegmentationImage::try_from(mask_array)?;
+        rr.log("fusion/model_output/tracked", &rr_seg_image)?;
     }
 
     Ok(())

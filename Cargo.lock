@@ -1359,16 +1359,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cdr"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9617422bf43fde9280707a7e90f8f7494389c182f5c70b0f67592d0f06d41dfa"
-dependencies = [
- "byteorder",
- "serde",
-]
-
-[[package]]
 name = "cdr-encoding"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2725,20 +2715,17 @@ dependencies = [
  "serde_json",
  "tokio",
  "zenoh",
- "zstd",
 ]
 
 [[package]]
 name = "edgefirst-schemas"
-version = "1.5.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cba26d1e495319d2d30807b16db2c35540d1614a20347c080df95d7e91feca32"
+checksum = "845e46d37d8fa493903819655d8ed5758f61ef47828bdfa540d65105168afe9d"
 dependencies = [
  "cbindgen",
- "cdr",
+ "errno",
  "libc",
- "serde",
- "serde_derive",
 ]
 
 [[package]]

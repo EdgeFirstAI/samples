@@ -45,10 +45,10 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
                                    _build_pipeline, has_display, get_format)
 
-CONVERTER = ef.ImageProcessor()
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 
-def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
+def hal_letterbox(image: ef.Tensor, dst: ef.Tensor,
                   constant: int = 114):
     ratio = min(dst.height / image.height, dst.width / image.width)
     height = image.height * ratio
@@ -57,7 +57,7 @@ def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
     left = round((dst.width - width) / 2)
     height = round(height)
     width = round(width)
-    CONVERTER.convert(image, dst,
+    IMAGE_PROCESSOR.convert(image, dst,
                       dst_crop=ef.Rect(left, top, width, height),
                       dst_color=[constant, constant, constant, 255])
 
@@ -78,9 +78,9 @@ class LetterboxGStreamerCapture:
         self.cairo_window = CairoWindow() if self.use_cairo else None
         self.dst = None
         if self.size is not None:
-            # To use OpenGL assign image FourCC as RGBA.
-            self.dst = ef.TensorImage(
-                self.size[0], self.size[1], ef.FourCC.RGBA)
+            # To use OpenGL assign image format as RGBA.
+            self.dst = IMAGE_PROCESSOR.create_image(
+                self.size[0], self.size[1], ef.PixelFormat.Rgba)
 
         # Performance measurements
         self.frame_count = 0
@@ -119,15 +119,15 @@ class LetterboxGStreamerCapture:
         width = caps.get_structure(0).get_value("width")
         height = caps.get_structure(0).get_value("height")
         format = caps.get_structure(0).get_value("format")
-        channels, fourcc = get_format(format)
+        channels, format = get_format(format)
 
         try:
-            tensor = ef.TensorImage.from_fd(
+            tensor = ef.Tensor.from_fd(
                 fd=dmabuf_dup,
                 shape=[height, width, channels],
-                fourcc=fourcc
+                dtype="uint8"
             )
-
+            tensor.set_format(format)
             hal_letterbox(tensor, self.dst)
 
             self.frame_count += 1
@@ -144,7 +144,7 @@ class LetterboxGStreamerCapture:
             )
             print(performance, end="\r")
 
-            channels = 1 if self.dst.format == ef.FourCC.GREY else 4
+            channels = 1 if self.dst.format == ef.PixelFormat.Grey else 4
             if self.use_cairo and self.cairo_window is not None:
                 with self.dst.map() as m:
                     n = np.array(

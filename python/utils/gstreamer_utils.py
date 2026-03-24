@@ -118,26 +118,26 @@ def has_display() -> bool:
     ) and os.access("/dev/dri", os.R_OK)
 
 
-def get_format(format: str) -> Tuple[int, ef.FourCC]:
+def get_format(format: str) -> Tuple[int, ef.PixelFormat]:
     if format == "NV12":
         # planar YUV 4:2:0, usually 1.5 bytes per pixel
         channels = 1  # single channel for Y plane; need special handling
-        fourcc = ef.FourCC("NV12")
+        format = ef.PixelFormat.Nv12
     elif format in ["YUY2", "YUYV"]:
         channels = 2
-        fourcc = ef.FourCC("YUYV")
+        format = ef.PixelFormat.Yuyv
     elif format == "RGB":
         channels = 3
-        fourcc = ef.FourCC("RGB")
+        format = ef.PixelFormat.Rgb
     elif format == "RGBA":
         channels = 4
-        fourcc = ef.FourCC("RGBA")
+        format = ef.PixelFormat.Rgba
     elif format == "ARGB":
         channels = 4
-        fourcc = ef.FourCC("PLANAR_RGBA")
+        format = ef.PixelFormat.PlanarRgba
     else:
         raise RuntimeError(f"Unsupported pixel format: {format}")
-    return channels, fourcc
+    return channels, format
 
 
 def _build_pipeline(camera: str, use_cairo: bool = False):

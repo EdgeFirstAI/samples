@@ -36,7 +36,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from utils.opencv_utils import pillow_resize
 
-CONVERTER = ef.ImageProcessor()
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 # Constants for syscall
 SYS_pidfd_open = 434  # From syscall.h
@@ -210,7 +210,7 @@ def jpeg_worker(msg, frame_storage):
 
     image = CompressedImage.deserialize(msg.payload.to_bytes())
     image = np.frombuffer(bytearray(image.data), np.uint8)
-    tensor = ef.TensorImage.load_from_bytes(image.tobytes())
+    tensor = ef.Tensor.load_from_bytes(image.tobytes())
     frame_storage.set(tensor.width, tensor.height)
     with tensor.map() as m:
         n = np.array(m.view()).reshape((tensor.height, tensor.width, 4))

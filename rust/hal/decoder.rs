@@ -4,7 +4,7 @@
 use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
-use edgefirst_hal::image::{TensorImage, ImageProcessor, RGB};
+use edgefirst_hal::image::{Tensor, ImageProcessor, RGB};
 use edgefirst_hal::image::ImageProcessorTrait;
 use edgefirst_hal::tensor::{Tensor, TensorMemory, TensorTrait};
 use edgefirst_hal::image::{Rotation, Flip, Crop};
@@ -50,14 +50,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             map.copy_from_slice(&rgb_raw);
             
             drop(map); // Unmap the tensor memory
-            let tensor_image = TensorImage::from_tensor(tensor, RGB)
-                .map_err(|e| format!("Failed to create TensorImage: {:?}", e))?;
-            // println!("Created TensorImage of size {}x{}", tensor_image.width(), tensor_image.height());
-            let mut converter = ImageProcessor::new()
+            let tensor_image = Tensor::from_tensor(tensor, RGB)
+                .map_err(|e| format!("Failed to create Tensor: {:?}", e))?;
+            // println!("Created Tensor of size {}x{}", tensor_image.width(), tensor_image.height());
+            let mut image_processor = ImageProcessor::new()
                 .map_err(|e| format!("Failed to create ImageProcessor: {:?}", e))?;
-            let mut dst = TensorImage::new(1920, 1080, RGB, None)
-                .map_err(|e| format!("Failed to create destination TensorImage: {:?}", e))?;
-            converter.convert(&tensor_image, &mut dst, Rotation::Rotate180, Flip::None, Crop::default())
+            let mut dst = Tensor::new(1920, 1080, RGB, None)
+                .map_err(|e| format!("Failed to create destination Tensor: {:?}", e))?;
+            image_processor.convert(&tensor_image, &mut dst, Rotation::Rotate180, Flip::None, Crop::default())
                 .map_err(|e| format!("Failed to convert image: {:?}", e))?;
 
             // // let _ = dst.save_jpeg("test.jpeg", 90);

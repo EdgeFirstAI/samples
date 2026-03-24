@@ -133,17 +133,18 @@ class GStreamerInference:
         width = caps.get_structure(0).get_value("width")
         height = caps.get_structure(0).get_value("height")
         format = caps.get_structure(0).get_value("format")
-        channels, fourcc = get_format(format)
+        channels, format = get_format(format)
 
         try:
-            tensor = ef.TensorImage.from_fd(
+            tensor = ef.Tensor.from_fd(
                 fd=dmabuf_dup,
                 shape=[height, width, channels],
-                fourcc=fourcc
+                dtype="uint8"
             )
+            tensor.set_format(format)
             boxes, scores, classes, masks = self.runner.infer(tensor)
-            # Render detections on the image using the HAL converter
-            self.runner.converter.draw_masks(
+            # Render detections on the image using the HAL Image Processor
+            self.runner.image_processor.draw_masks(
                 dst=self.runner.dst,
                 bbox=boxes,
                 scores=scores,
@@ -151,7 +152,7 @@ class GStreamerInference:
                 seg=masks
             )
 
-            channels = 1 if self.runner.dst.format == ef.FourCC.GREY else 4
+            channels = 1 if self.runner.dst.format == ef.PixelFormat.Grey else 4
             if self.use_cairo and self.cairo_window is not None:
                 with self.runner.dst.map() as m:
                     n = np.array(

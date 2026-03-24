@@ -25,10 +25,10 @@ import zenoh
 import edgefirst_hal as ef
 
 
-CONVERTER = ef.ImageProcessor()
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 
-def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
+def hal_letterbox(image: ef.Tensor, dst: ef.Tensor,
                   constant: int = 114):
     ratio = min(dst.height / image.height, dst.width / image.width)
     height = image.height * ratio
@@ -37,7 +37,7 @@ def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
     left = round((dst.width - width) / 2)
     height = round(height)
     width = round(width)
-    CONVERTER.convert(image, dst,
+    IMAGE_PROCESSOR.convert(image, dst,
                       dst_crop=ef.Rect(left, top, width, height),
                       dst_color=[constant, constant, constant, 255])
 
@@ -76,13 +76,15 @@ def h264_worker(msg, raw_data, container):
             raw_data.truncate(0)
             for frame in packet.decode():
                 frame_array = frame.to_ndarray(format="rgb24")
-                ef_im = ef.TensorImage(
+                ef_im = IMAGE_PROCESSOR.create_image(
                     frame_array.shape[1],
                     frame_array.shape[0],
-                    ef.FourCC.RGB
+                    ef.PixelFormat.Rgb
                 )
                 ef_im.copy_from_numpy(frame_array)
-                output = ef.TensorImage(new_width, new_height, ef.FourCC.RGB)
+                output = IMAGE_PROCESSOR.create_image(new_width, 
+                                                      new_height, 
+                                                      ef.PixelFormat.Rgb)
 
                 # Letterbox using HAL.
                 hal_letterbox(ef_im, output)

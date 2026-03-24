@@ -62,17 +62,17 @@ class HALONNXRunner:
         if self.metadata is None:
             self.metadata = build_metadata(outputs)
 
-        # To use OpenGL assign image FourCC as RGBA.
-        self.dst = ef.TensorImage(self.input_shape[1],
-                                  self.input_shape[0], ef.FourCC.RGBA)
+        self.image_processor = ef.ImageProcessor()
+        # To use OpenGL assign image format as RGBA.
+        self.dst = self.image_processor.create_image(
+            self.input_shape[1], self.input_shape[0], ef.PixelFormat.Rgba)
         self.decoder = ef.Decoder(
             self.metadata,
             score_threshold=score,
             iou_threshold=iou,
         )
-        self.converter = ef.ImageProcessor()
 
-    def base_infer(self, tensor_image: ef.TensorImage):
+    def base_infer(self, tensor_image: ef.Tensor):
         hal_letterbox(tensor_image, self.dst)
 
         input_array = np.zeros((self.dst.height,
@@ -94,7 +94,7 @@ class HALONNXRunner:
         return self.ort_session.run(self.output_names,
                                     {self.input_name: input_array})
 
-    def infer(self, tensor_image: ef.TensorImage):
+    def infer(self, tensor_image: ef.Tensor):
         outputs = self.base_infer(tensor_image)
         # Normalize bounding boxes which is needed to decode the outputs.
         for x in outputs:
@@ -106,7 +106,7 @@ class HALONNXRunner:
                     )
         return self.decoder.decode(outputs, max_boxes=self.max_boxes)
 
-    def static_infer(self, tensor_image: ef.TensorImage):
+    def static_infer(self, tensor_image: ef.Tensor):
         outputs = self.base_infer(tensor_image)
 
         detection_output, segmentation_output = None, None
@@ -142,12 +142,12 @@ class HALONNXRunner:
         )
 
     def inference(self, image_path: str, save_path: str = None):
-        tensor_image = ef.TensorImage.load(image_path)
+        tensor_image = ef.Tensor.load(image_path)
         boxes, scores, classes, masks = self.infer(tensor_image)
 
         if save_path is not None:
-            # Render detections on the image using the HAL converter
-            self.converter.draw_masks(
+            # Render detections on the image using the HAL ImageProcessor
+            self.image_processor.draw_masks(
                 dst=self.dst,
                 bbox=boxes,
                 scores=scores,

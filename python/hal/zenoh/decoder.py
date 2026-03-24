@@ -39,6 +39,7 @@ latest_frame_lock = threading.Lock()
 latest_frame = None
 frame_available_event = threading.Event()
 
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 class FrameSize:
     def __init__(self):
@@ -52,10 +53,10 @@ class FrameSize:
         if not self._event.is_set():
             self._event.set()
 
-        self.tensor_image = ef.TensorImage(
+        self.tensor_image = IMAGE_PROCESSOR.create_image(
             width,
             height,
-            ef.FourCC.RGB
+            ef.PixelFormat.Rgb
         )
 
     async def get(self) -> list[int]:
@@ -132,7 +133,7 @@ def inference_handler_sync(
         boxes, scores, classes, masks = runner.static_infer(
             frame_storage.tensor_image)
 
-        runner.converter.render_to_image(
+        runner.image_processor.render_to_image(
             runner.dst,
             bbox=boxes,
             scores=scores,
@@ -193,7 +194,7 @@ def h264_worker(
                 boxes, scores, classes, masks = runner.static_infer(
                     frame_storage.tensor_image)
 
-                runner.converter.render_to_image(
+                runner.image_processor.render_to_image(
                     runner.dst,
                     bbox=boxes,
                     scores=scores,

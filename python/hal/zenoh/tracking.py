@@ -50,6 +50,7 @@ frame_available_event = threading.Event()
 MAX_DISTANCE = 0.15  # Maximum normalized distance for track association
 MAX_FRAMES_WITHOUT_UPDATE = 10  # Frames before dropping a track
 
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 class TrackState:
     """Maintains state for a single tracked object."""
@@ -171,10 +172,10 @@ class FrameSize:
         if not self._event.is_set():
             self._event.set()
 
-        self.tensor_image = ef.TensorImage(
+        self.tensor_image = IMAGE_PROCESSOR.create_image(
             width,
             height,
-            ef.FourCC.RGB
+            ef.PixelFormat.Rgb
         )
 
     async def get(self):
@@ -265,7 +266,7 @@ def inference_handler_sync(
         # Update tracker
         tracked_objects = tracker.update(detections)
 
-        runner.converter.draw_masks(
+        runner.image_processor.draw_masks(
             dst=runner.dst,
             bbox=boxes,
             scores=scores,
@@ -370,7 +371,7 @@ def h264_worker(
                     # Update tracker
                     tracked_objects = tracker.update(detections)
 
-                    runner.converter.draw_masks(
+                    runner.image_processor.draw_masks(
                         dst=runner.dst,
                         bbox=boxes,
                         scores=scores,

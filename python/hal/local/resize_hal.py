@@ -45,18 +45,18 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from utils.gstreamer_utils import (_PYCAIRO_AVAILABLE, CairoWindow,
                                    _build_pipeline, has_display, get_format)
 
-CONVERTER = ef.ImageProcessor()
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 
-def hal_resize(image: ef.TensorImage,
-               size: Optional[tuple] = None) -> ef.TensorImage:
+def hal_resize(image: ef.Tensor,
+               size: Optional[tuple] = None) -> ef.Tensor:
     if size is None:
         return image
-    # To use OpenGL assign image FourCC as RGBA.
-    fourcc = (ef.FourCC.RGBA if image.format ==
-              ef.FourCC.RGB else image.format)
-    dst = ef.TensorImage(size[0], size[1], fourcc=fourcc)
-    CONVERTER.convert(image, dst)
+    # To use OpenGL assign image format as RGBA.
+    format = (ef.PixelFormat.Rgba if image.format ==
+              ef.PixelFormat.Rgb else image.format)
+    dst = IMAGE_PROCESSOR.create_image(size[0], size[1], format=format)
+    IMAGE_PROCESSOR.convert(image, dst)
     return dst
 
 
@@ -112,15 +112,15 @@ class ResizedGStreamerCapture:
         width = caps.get_structure(0).get_value("width")
         height = caps.get_structure(0).get_value("height")
         format = caps.get_structure(0).get_value("format")
-        channels, fourcc = get_format(format)
+        channels, format = get_format(format)
 
         try:
-            tensor = ef.TensorImage.from_fd(
+            tensor = ef.Tensor.from_fd(
                 fd=dmabuf_dup,
                 shape=[height, width, channels],
-                fourcc=fourcc
+                dtype="uint8"
             )
-
+            tensor.set_format(format)
             dst_tensor = hal_resize(tensor, size=self.size)
 
             self.frame_count += 1
@@ -137,7 +137,7 @@ class ResizedGStreamerCapture:
             )
             print(performance, end="\r")
 
-            channels = 1 if dst_tensor.format == ef.FourCC.GREY else 4
+            channels = 1 if dst_tensor.format == ef.PixelFormat.Grey else 4
             if self.use_cairo and self.cairo_window is not None:
                 with dst_tensor.map() as m:
                     n = np.array(m.view()).reshape((dst_tensor.height,

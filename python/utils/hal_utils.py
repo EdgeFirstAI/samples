@@ -8,10 +8,10 @@ Utilities needed for HAL samples.
 import edgefirst_hal as ef
 
 
-CONVERTER = ef.ImageProcessor()
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 
-def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
+def hal_letterbox(image: ef.Tensor, dst: ef.Tensor,
                   constant: int = 114):
     ratio = min(dst.height / image.height, dst.width / image.width)
     height = image.height * ratio
@@ -20,6 +20,6 @@ def hal_letterbox(image: ef.TensorImage, dst: ef.TensorImage,
     left = round((dst.width - width) / 2)
     height = round(height)
     width = round(width)
-    CONVERTER.convert(image, dst,
+    IMAGE_PROCESSOR.convert(image, dst,
                       dst_crop=ef.Rect(left, top, width, height),
                       dst_color=[constant, constant, constant, 255])

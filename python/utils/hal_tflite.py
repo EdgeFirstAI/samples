@@ -71,17 +71,43 @@ class HALTFLiteRunner:
         if self.metadata is None:
             self.metadata = build_metadata(self.output_details)
 
-        # To use OpenGL assign image FourCC as RGBA.
-        self.dst = ef.TensorImage(
-            self.input_shape[1], self.input_shape[0], ef.FourCC.RGBA)
+        self.image_processor = ef.ImageProcessor()
+        # To use OpenGL assign image format as RGBA.
+        self.dst = self.image_processor.create_image(
+            self.input_shape[1], self.input_shape[0], ef.PixelFormat.Rgba)
+        
+
+        # Normalize metadata for HAL compatibility.
+        hal_metadata = self.metadata
+        if hal_metadata:
+            outputs_list = hal_metadata.get("outputs", [])
+            for output in outputs_list:
+                # Convert dict quantization (e.g.
+                # {"scale": 0.5, "zero_point": 0}) to the
+                # [scale, zero_point] list HAL expects.
+                q = output.get("quantization")
+                if isinstance(q, dict):
+                    scale = q.get("scale", q.get("qn", 0.0))
+                    zp = q.get("zero_point", q.get("offset", 0))
+                    output["quantization"] = [scale, zp]
+
+            # HAL interprets root-level decoder_version as
+            # end-to-end (single combined output).  For split-
+            # decoder models (multiple outputs) move it to each
+            # output so HAL applies version-specific decoding
+            # without the end-to-end constraint.
+            dv = hal_metadata.pop("decoder_version", None)
+            if dv and len(outputs_list) > 1:
+                for output in outputs_list:
+                    output.setdefault("decoder_version", dv)
+
         self.decoder = ef.Decoder(
-            self.metadata,
+            hal_metadata,
             score_threshold=self.score,
             iou_threshold=self.iou
         )
-        self.converter = ef.ImageProcessor()
 
-    def base_infer(self, tensor_image: ef.TensorImage):
+    def base_infer(self, tensor_image: ef.Tensor):
         # Input quantization
         zero_point = None
         if self.input_quantization is not None:
@@ -99,11 +125,11 @@ class HALTFLiteRunner:
         return [self.model.get_tensor(output["index"])
                 for output in self.output_details]
 
-    def infer(self, tensor_image: ef.TensorImage):
+    def infer(self, tensor_image: ef.Tensor):
         outputs = self.base_infer(tensor_image)
         return self.decoder.decode(outputs, max_boxes=self.max_boxes)
 
-    def static_infer(self, tensor_image: ef.TensorImage):
+    def static_infer(self, tensor_image: ef.Tensor):
         outputs = self.base_infer(tensor_image)
 
         detection_output, segmentation_output = None, None
@@ -129,12 +155,12 @@ class HALTFLiteRunner:
         )
 
     def inference(self, image_path: str, save_path: str = None):
-        tensor_image = ef.TensorImage.load(image_path)
+        tensor_image = ef.Tensor.load(image_path)
         boxes, scores, classes, masks = self.infer(tensor_image)
 
         if save_path is not None:
-            # Render detections on the image using the HAL converter
-            self.converter.draw_masks(
+            # Render detections on the image using the HAL ImageProcessor
+            self.image_processor.draw_masks(
                 dst=self.dst,
                 bbox=boxes,
                 scores=scores,

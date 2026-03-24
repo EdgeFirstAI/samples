@@ -25,7 +25,7 @@ import zenoh
 import edgefirst_hal as ef
 
 
-CONVERTER = ef.ImageProcessor()
+IMAGE_PROCESSOR = ef.ImageProcessor()
 
 
 class MessageDrain:
@@ -62,16 +62,18 @@ def h264_worker(msg, raw_data, container):
             raw_data.truncate(0)
             for frame in packet.decode():
                 frame_array = frame.to_ndarray(format="rgb24")
-                ef_im = ef.TensorImage(
+                ef_im = IMAGE_PROCESSOR.create_image(
                     frame_array.shape[1],
                     frame_array.shape[0],
-                    ef.FourCC.RGB
+                    ef.PixelFormat.Rgb
                 )
                 ef_im.copy_from_numpy(frame_array)
-                output = ef.TensorImage(new_width, new_height, ef.FourCC.RGB)
+                output = IMAGE_PROCESSOR.create_image(new_width, 
+                                                      new_height, 
+                                                      ef.PixelFormat.Rgb)
 
                 # Resize with 180 degree rotation.
-                CONVERTER.convert(ef_im, output, ef.Rotation.Rotate180)
+                IMAGE_PROCESSOR.convert(ef_im, output, ef.Rotation.Rotate180)
 
                 out_array = np.zeros(
                     (new_height, new_width, 3), dtype=np.uint8)

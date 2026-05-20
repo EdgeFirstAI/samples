@@ -2,71 +2,81 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 import zenoh
-from edgefirst.schemas.edgefirst_msgs import Detect
+from edgefirst.schemas.edgefirst_msgs import Model
 from argparse import ArgumentParser
 import sys
 import rerun as rr
 import asyncio
-import time
 import numpy as np
-import threading
+
+def format_remote_endpoint(remote):
+    if not remote:
+        return None
+    
+    # Already in full format (tcp/IP:PORT)
+    if remote.startswith("tcp/") and ":" in remote.split("/", 1)[1]:
+        return remote
+    
+    # Just IP address (e.g., "10.10.41.100")
+    if "/" not in remote and ":" not in remote:
+        return f"tcp/{remote}:7447"
+    
+    # IP:PORT format (e.g., "10.10.41.100:7447")
+    if ":" in remote and not remote.startswith("tcp/"):
+        return f"tcp/{remote}"
+    
+    # tcp/IP format (e.g., "tcp/10.10.41.100")
+    if remote.startswith("tcp/") and ":" not in remote.split("/", 1)[1]:
+        return f"{remote}:7447"
+    
+    # Fallback: return as-is
+    return remote
+
+boxes2d_msg = None
+boxes_tracked = {}
 
 
-class MessageDrain:
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(maxsize=100)
-        self._loop = loop
-
-    def callback(self, msg):
-        if not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
-
-    async def read(self):
-        return await self._queue.get()
-
-    async def get_latest(self):
-        latest = await self._queue.get()
-        while not self._queue.empty():
-            latest = self._queue.get_nowait()
-        return latest
+def boxes2d_handler(msg):
+    global boxes2d_msg
+    boxes2d_msg = msg
 
 
-def boxes2d_worker(msg, boxes_tracked):
-    detection = Detect.deserialize(msg.payload.to_bytes())
-    centers = []
-    sizes = []
-    labels = []
-    colors = []
-    for box in detection.boxes:
-        if box.track.id and box.track.id not in boxes_tracked:
-            boxes_tracked[box.track.id] = [
-                box.label + ": " + box.track.id[:6],
-                list(np.random.choice(range(256), size=3)),
-            ]
-        if box.track.id:
-            colors.append(boxes_tracked[box.track.id][1])
-            labels.append(boxes_tracked[box.track.id][0])
-        else:
-            colors.append([0, 255, 0])
-            labels.append(box.label)
-        centers.append((box.center_x, box.center_y))
-        sizes.append((box.width, box.height))
-    rr.log(
-        "boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors)
-    )
-
-
-async def boxes2d_handler(drain):
-    boxes_tracked = {}
+async def boxes2d_worker():
+    global boxes2d_msg, boxes_tracked
     while True:
-        msg = await drain.get_latest()
-
-        thread = threading.Thread(target=boxes2d_worker, args=[msg, boxes_tracked])
-        thread.start()
-
-        while thread.is_alive():
+        if boxes2d_msg is None:
             await asyncio.sleep(0.001)
-        thread.join()
+            continue
+
+        try:
+            detection = Model.from_cdr(boxes2d_msg.payload.to_bytes())
+        except Exception as e:
+            boxes2d_msg = None
+            print(f"Error processing boxes2d: {e}", file=sys.stderr)
+            continue
+
+        boxes2d_msg = None
+        centers = []
+        sizes = []
+        labels = []
+        colors = []
+        for box in detection.boxes:
+            if box.track_id and box.track_id not in boxes_tracked:
+                boxes_tracked[box.track_id] = [
+                    box.label + ": " + box.track_id[:6],
+                    list(np.random.choice(range(256), size=3)),
+                ]
+            if box.track_id:
+                colors.append(boxes_tracked[box.track_id][1])
+                labels.append(boxes_tracked[box.track_id][0])
+            else:
+                colors.append([0, 255, 0])
+                labels.append(box.label)
+            centers.append((box.center_x, box.center_y))
+            sizes.append((box.width, box.height))
+        rr.log(
+            "boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels, colors=colors)
+        )
 
 
 async def main_async(args):
@@ -78,19 +88,19 @@ async def main_async(args):
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
+        remote_endpoint = format_remote_endpoint(args.remote)
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+        config.insert_json5("connect", f'{{"endpoints": ["{remote_endpoint}"]}}')
     session = zenoh.open(config)
 
-    # Create drains
-    loop = asyncio.get_running_loop()
-    drain = MessageDrain(loop)
+    session.declare_subscriber("rt/model/boxes2d", boxes2d_handler)
+    boxes2d_task = asyncio.create_task(boxes2d_worker())
 
-    session.declare_subscriber("rt/model/boxes2d", drain.callback)
-    await asyncio.gather((boxes2d_handler(drain)))
-
-    while True:
-        asyncio.sleep(0.001)
+    try:
+        await asyncio.gather(boxes2d_task)
+    finally:
+        boxes2d_task.cancel()
+        await asyncio.gather(boxes2d_task, return_exceptions=True)
 
 
 def main():
@@ -100,7 +110,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Connect to remote endpoint (e.g., '10.10.41.100' or 'tcp/10.10.41.100:7447').",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{sensor_msgs::CameraInfo, serde_cdr::deserialize};
+use edgefirst_schemas::sensor_msgs::CameraInfo;
 use std::error::Error;
 
 #[tokio::main]
@@ -17,16 +17,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("camera-info")?;
 
-    while let Ok(msg) = subscriber.recv() {
-        let info: CameraInfo = deserialize(&msg.payload().to_bytes())?;
+    while let Ok(msg) = subscriber.recv_async().await {
+        let bytes = msg.payload().to_bytes();
+        let info = CameraInfo::from_cdr(&bytes)?;
 
-        let width = info.width;
-        let height = info.height;
+        let width = info.width();
+        let height = info.height();
         let text = "Camera Width: ".to_owned()
             + &width.to_string()
             + " Camera Height: "
             + &height.to_string();
-        let _ = rr.log("CameraInfo", &rerun::TextLog::new(text));
+        rr.log("CameraInfo", &rerun::TextLog::new(text))?;
     }
 
     Ok(())

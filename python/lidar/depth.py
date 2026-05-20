@@ -8,56 +8,65 @@ import rerun as rr
 import struct
 import zenoh
 import asyncio
-import time
 import sys
-import threading
+
+def format_remote_endpoint(remote):
+    if not remote:
+        return None
+    
+    # Already in full format (tcp/IP:PORT)
+    if remote.startswith("tcp/") and ":" in remote.split("/", 1)[1]:
+        return remote
+    
+    # Just IP address (e.g., "10.10.41.100")
+    if "/" not in remote and ":" not in remote:
+        return f"tcp/{remote}:7447"
+    
+    # IP:PORT format (e.g., "10.10.41.100:7447")
+    if ":" in remote and not remote.startswith("tcp/"):
+        return f"tcp/{remote}"
+    
+    # tcp/IP format (e.g., "tcp/10.10.41.100")
+    if remote.startswith("tcp/") and ":" not in remote.split("/", 1)[1]:
+        return f"{remote}:7447"
+    
+    # Fallback: return as-is
+    return remote
+
+# Global variable for message storage
+depth_msg = None
 
 
-class MessageDrain:
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(maxsize=100)
-        self._loop = loop
-
-    def callback(self, msg):
-        if not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
-
-    async def read(self):
-        return await self._queue.get()
-
-    async def get_latest(self):
-        latest = await self._queue.get()
-        while not self._queue.empty():
-            latest = self._queue.get_nowait()
-        return latest
+def depth_handler(msg):
+    """Simple sync handler that stores message in global."""
+    global depth_msg
+    depth_msg = msg
 
 
-def depth_worker(msg):
-    depth = Image.deserialize(msg.payload.to_bytes())
-
-    # Process depth image
-    if depth.encoding != "mono16":
-        print("Depth encoding is not mono16")
-        return
-    endian_format = ">" if depth.is_bigendian else "<"
-    depth_vals = list(
-        struct.unpack(f"{endian_format}{depth.width*depth.height}H", bytes(depth.data))
-    )
-    data = (np.array(depth_vals).reshape((depth.height, depth.width)) / 255).astype(
-        np.uint8
-    )
-    rr.log("lidar/depth", rr.Image(data))
-
-
-async def depth_handler(drain):
+async def depth_worker():
+    """Async worker that processes messages from global."""
+    global depth_msg
     while True:
-        msg = await drain.get_latest()
-        thread = threading.Thread(target=depth_worker, args=[msg])
-        thread.start()
+        if depth_msg is not None:
+            try:
+                msg = depth_msg
+                depth = Image.from_cdr(msg.payload.to_bytes())
 
-        while thread.is_alive():
-            await asyncio.sleep(0.001)
-        thread.join()
+                # Process depth image
+                if depth.encoding != "mono16":
+                    print("Depth encoding is not mono16")
+                else:
+                    endian_format = ">" if depth.is_bigendian else "<"
+                    depth_vals = list(
+                        struct.unpack(f"{endian_format}{depth.width*depth.height}H", bytes(depth.data))
+                    )
+                    data = (np.array(depth_vals).reshape((depth.height, depth.width)) / 255).astype(
+                        np.uint8
+                    )
+                    rr.log("lidar/depth", rr.Image(data))
+            except Exception as e:
+                print(f"Error processing depth message: {e}", file=sys.stderr)
+        await asyncio.sleep(0.01)
 
 
 async def main_async(args):
@@ -68,20 +77,21 @@ async def main_async(args):
     # Zenoh config
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
+    remote = format_remote_endpoint(args.remote)
+    if remote:
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)
 
-    # Create drains
-    loop = asyncio.get_running_loop()
-    drain = MessageDrain(loop)
+    # Declare subscriber with simple handler
+    session.declare_subscriber("rt/lidar/depth", depth_handler)
+    depth_task = asyncio.create_task(depth_worker())
 
-    session.declare_subscriber("rt/lidar/depth", drain.callback)
-    await asyncio.gather((depth_handler(drain)))
-
-    while True:
-        asyncio.sleep(0.001)
+    try:
+        await asyncio.gather(depth_task)
+    finally:
+        depth_task.cancel()
+        await asyncio.gather(depth_task, return_exceptions=True)
 
 
 def main():
@@ -91,7 +101,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Remote endpoint (IP:PORT or just IP, defaults to port 7447)",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

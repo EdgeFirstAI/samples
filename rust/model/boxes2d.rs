@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Detect, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Model;
 use std::error::Error;
 
 #[tokio::main]
@@ -11,31 +11,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for "rt/model/boxes2d"
-    let subscriber = session
-        .declare_subscriber("rt/model/boxes2d")
-        .await
-        .unwrap();
+    // Create a subscriber for "rt/model/output"
+    let subscriber = session.declare_subscriber("rt/model/output").await.unwrap();
 
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("model-boxes")?;
 
-    while let Ok(msg) = subscriber.recv() {
-        let detection: Detect = deserialize(&msg.payload().to_bytes())?;
+    let mut centers: Vec<[f32; 2]> = Vec::new();
+    let mut sizes: Vec<[f32; 2]> = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
 
-        let mut centers = Vec::new();
-        let mut sizes = Vec::new();
-        let mut labels = Vec::new();
+    while let Ok(msg) = subscriber.recv_async().await {
+        let bytes = msg.payload().to_bytes();
+        let model = Model::from_cdr(&bytes)?;
 
-        for b in detection.boxes {
+        centers.clear();
+        sizes.clear();
+        labels.clear();
+
+        for b in model.boxes() {
             centers.push([b.center_x, b.center_y]);
             sizes.push([b.width, b.height]);
-            labels.push(b.label);
+            labels.push(b.label.to_string());
         }
 
         rr.log(
             "boxes",
-            &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels),
+            &rerun::Boxes2D::from_centers_and_sizes(&centers, &sizes)
+                .with_labels(labels.iter().map(|s| s.as_str())),
         )?;
     }
 

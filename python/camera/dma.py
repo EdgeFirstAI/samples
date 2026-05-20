@@ -26,6 +26,9 @@ else:
     print("DMA only works on EdgeFirst Platforms")
     sys.exit(0)
 
+# Global variable for message storage
+dma_msg = None
+
 
 def pidfd_open(pid: int, flags: int = 0) -> int:
     return libc.syscall(SYS_pidfd_open, pid, flags)
@@ -35,62 +38,47 @@ def pidfd_getfd(pidfd: int, target_fd: int, flags: int = GETFD_FLAGS) -> int:
     return libc.syscall(SYS_pidfd_getfd, pidfd, target_fd, flags)
 
 
-class MessageDrain:
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(maxsize=100)
-        self._loop = loop
-
-    def callback(self, msg):
-        if not self._loop.is_closed():
-            if self._queue.full():
-                self._queue.get_nowait()
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
-
-    async def read(self):
-        return await self._queue.get()
-
-    async def get_latest(self):
-        latest = await self._queue.get()
-        while not self._queue.empty():
-            latest = self._queue.get_nowait()
-        return latest
+def dma_handler(msg):
+    """Simple sync handler that stores message in global."""
+    global dma_msg
+    dma_msg = msg
 
 
-def dma_worker(msg):
-    dma_buf = DmaBuffer.deserialize(msg.payload.to_bytes())
-    pidfd = pidfd_open(dma_buf.pid)
-    if pidfd < 0:
-        return
-
-    fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
-    if fd < 0:
-        return
-
-    # Now fd can be used as a file descriptor
-    mm = mmap.mmap(fd, dma_buf.length)
-    rr.log(
-        "/camera",
-        rr.Image(
-            bytes=mm[:],
-            width=dma_buf.width,
-            height=dma_buf.height,
-            pixel_format=rr.PixelFormat.YUY2,
-        ),
-    )
-    mm.close()
-    os.close(fd)
-    os.close(pidfd)
-
-
-async def dma_handler(drain):
+async def dma_worker():
+    """Async worker that processes messages from global."""
+    global dma_msg
     while True:
-        msg = await drain.get_latest()
-        thread = threading.Thread(target=dma_worker, args=[msg])
-        thread.start()
+        if dma_msg is not None:
+            try:
+                msg = dma_msg
+                dma_buf = DmaBuffer.from_cdr(msg.payload.to_bytes())
+                pidfd = pidfd_open(dma_buf.pid)
+                if pidfd < 0:
+                    await asyncio.sleep(0.01)
+                    continue
 
-        while thread.is_alive():
-            await asyncio.sleep(0.001)
-        thread.join()
+                fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
+                if fd < 0:
+                    await asyncio.sleep(0.01)
+                    continue
+
+                # Now fd can be used as a file descriptor
+                mm = mmap.mmap(fd, dma_buf.length)
+                rr.log(
+                    "/camera",
+                    rr.Image(
+                        bytes=mm[:],
+                        width=dma_buf.width,
+                        height=dma_buf.height,
+                        pixel_format=rr.PixelFormat.YUY2,
+                    ),
+                )
+                mm.close()
+                os.close(fd)
+                os.close(pidfd)
+            except Exception as e:
+                print(f"Error processing DMA message: {e}", file=sys.stderr)
+        await asyncio.sleep(0.01)
 
 
 async def main_async(args):
@@ -109,20 +97,18 @@ async def main_async(args):
     # Zenoh config
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
-        config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
     session = zenoh.open(config)
 
-    # Create drains
-    loop = asyncio.get_running_loop()
-    drain = MessageDrain(loop)
-
-    session.declare_subscriber("rt/camera/dma", drain.callback)
-    await asyncio.gather((dma_handler(drain)))
-
-    while True:
-        asyncio.sleep(0.001)
+    # Declare subscriber with simple handler
+    session.declare_subscriber("rt/camera/dma", dma_handler)
+    dma_task = asyncio.create_task(dma_worker())
+    
+    # Start worker task
+    try:
+        await asyncio.gather(dma_task)
+    finally:
+        dma_task.cancel()
+        await asyncio.gather(dma_task, return_exceptions=True)
 
 
 def main():
@@ -132,7 +118,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Remote endpoint (IP:PORT or just IP, defaults to port 7447)",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

@@ -3,8 +3,30 @@
 
 from argparse import ArgumentParser
 from time import time
-
 import zenoh
+
+def format_remote_endpoint(remote):
+    if not remote:
+        return None
+    
+    # Already in full format (tcp/IP:PORT)
+    if remote.startswith("tcp/") and ":" in remote.split("/", 1)[1]:
+        return remote
+    
+    # Just IP address (e.g., "10.10.41.100")
+    if "/" not in remote and ":" not in remote:
+        return f"tcp/{remote}:7447"
+    
+    # IP:PORT format (e.g., "10.10.41.100:7447")
+    if ":" in remote and not remote.startswith("tcp/"):
+        return f"tcp/{remote}"
+    
+    # tcp/IP format (e.g., "tcp/10.10.41.100")
+    if remote.startswith("tcp/") and ":" not in remote.split("/", 1)[1]:
+        return f"{remote}:7447"
+    
+    # Fallback: return as-is
+    return remote
 
 if __name__ == "__main__":
     args = ArgumentParser(description="EdgeFirst Samples - List Topics")
@@ -29,8 +51,9 @@ if __name__ == "__main__":
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote is not None:
+        remote_endpoint = format_remote_endpoint(args.remote)
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
+        config.insert_json5("connect", f'{{"endpoints": ["{remote_endpoint}"]}}')
     session = zenoh.open(config)
 
     # Create a subscriber for all topics matching the pattern "rt/**"

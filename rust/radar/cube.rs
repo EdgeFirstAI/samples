@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::RadarCube, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::RadarCube;
 use rerun::{Tensor, external::ndarray::Array};
 use std::error::Error;
 
@@ -18,14 +18,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("radar-cube")?;
 
-    while let Ok(msg) = subscriber.recv() {
-        let radar: RadarCube = deserialize(&msg.payload().to_bytes())?;
+    while let Ok(msg) = subscriber.recv_async().await {
+        let bytes = msg.payload().to_bytes();
+        let radar = RadarCube::from_cdr(&bytes)?;
         let data = Array::<u16, _>::from_shape_vec(
-            radar.shape.iter().map(|&x| x as usize).collect::<Vec<_>>(),
             radar
-                .cube
+                .shape()
                 .iter()
-                .map(|x| x.unsigned_abs())
+                .map(|&x| x as usize)
+                .collect::<Vec<_>>(),
+            radar
+                .cube()
+                .iter()
+                .map(|x: &i16| x.unsigned_abs())
                 .collect::<Vec<_>>(),
         )?;
         let tensor = Tensor::try_from(data)?.with_dim_names(["SEQ", "RANGE", "RX", "DOPPLER"]);

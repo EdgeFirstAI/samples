@@ -5,45 +5,55 @@ import rerun as rr
 import zenoh
 import sys
 import asyncio
-import time
 from argparse import ArgumentParser
 from edgefirst.schemas.sensor_msgs import NavSatFix
-import threading
+
+def format_remote_endpoint(remote):
+    if not remote:
+        return None
+    
+    # Already in full format (tcp/IP:PORT)
+    if remote.startswith("tcp/") and ":" in remote.split("/", 1)[1]:
+        return remote
+    
+    # Just IP address (e.g., "10.10.41.100")
+    if "/" not in remote and ":" not in remote:
+        return f"tcp/{remote}:7447"
+    
+    # IP:PORT format (e.g., "10.10.41.100:7447")
+    if ":" in remote and not remote.startswith("tcp/"):
+        return f"tcp/{remote}"
+    
+    # tcp/IP format (e.g., "tcp/10.10.41.100")
+    if remote.startswith("tcp/") and ":" not in remote.split("/", 1)[1]:
+        return f"{remote}:7447"
+    
+    # Fallback: return as-is
+    return remote
+
+gps_msg = None
+
+def gps_handler(msg):
+    global gps_msg
+    gps_msg = msg
 
 
-class MessageDrain:
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(maxsize=100)
-        self._loop = loop
-
-    def callback(self, msg):
-        if not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
-
-    async def read(self):
-        return await self._queue.get()
-
-    async def get_latest(self):
-        latest = await self._queue.get()
-        while not self._queue.empty():
-            latest = self._queue.get_nowait()
-        return latest
-
-
-def gps_worker(msg):
-    gps = NavSatFix.deserialize(msg.payload.to_bytes())
-    rr.log("CurrentLoc", rr.GeoPoints(lat_lon=[gps.latitude, gps.longitude]))
-
-
-async def gps_handler(drain):
+async def gps_worker():
+    global gps_msg
     while True:
-        msg = await drain.get_latest()
-        thread = threading.Thread(target=gps_worker, args=[msg])
-        thread.start()
-
-        while thread.is_alive():
+        if gps_msg is None:
             await asyncio.sleep(0.001)
-        thread.join()
+            continue
+
+        try:
+            gps = NavSatFix.from_cdr(gps_msg.payload.to_bytes())
+        except Exception as e:
+            gps_msg = None
+            print(f"Error processing GPS: {e}", file=sys.stderr)
+            continue
+
+        gps_msg = None
+        rr.log("CurrentLoc", rr.GeoPoints(lat_lon=[gps.latitude, gps.longitude]))
 
 
 async def main_async(args):
@@ -55,19 +65,19 @@ async def main_async(args):
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
+        remote_endpoint = format_remote_endpoint(args.remote)
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+        config.insert_json5("connect", f'{{"endpoints": ["{remote_endpoint}"]}}')
     session = zenoh.open(config)
 
-    # Create drains
-    loop = asyncio.get_running_loop()
-    drain = MessageDrain(loop)
+    session.declare_subscriber("rt/gps", gps_handler)
+    gps_task = asyncio.create_task(gps_worker())
 
-    session.declare_subscriber("rt/gps", drain.callback)
-    await asyncio.gather((gps_handler(drain)))
-
-    while True:
-        asyncio.sleep(0.001)
+    try:
+        await asyncio.gather(gps_task)
+    finally:
+        gps_task.cancel()
+        await asyncio.gather(gps_task, return_exceptions=True)
 
 
 def main():
@@ -77,7 +87,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Connect to remote endpoint (e.g., '10.10.41.100' or 'tcp/10.10.41.100:7447').",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

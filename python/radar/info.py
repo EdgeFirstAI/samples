@@ -4,50 +4,61 @@
 import zenoh
 import sys
 import asyncio
-import time
 from argparse import ArgumentParser
 from edgefirst.schemas.edgefirst_msgs import RadarInfo
 import rerun as rr
-import threading
+
+def format_remote_endpoint(remote):
+    if not remote:
+        return None
+    
+    # Already in full format (tcp/IP:PORT)
+    if remote.startswith("tcp/") and ":" in remote.split("/", 1)[1]:
+        return remote
+    
+    # Just IP address (e.g., "10.10.41.100")
+    if "/" not in remote and ":" not in remote:
+        return f"tcp/{remote}:7447"
+    
+    # IP:PORT format (e.g., "10.10.41.100:7447")
+    if ":" in remote and not remote.startswith("tcp/"):
+        return f"tcp/{remote}"
+    
+    # tcp/IP format (e.g., "tcp/10.10.41.100")
+    if remote.startswith("tcp/") and ":" not in remote.split("/", 1)[1]:
+        return f"{remote}:7447"
+    
+    # Fallback: return as-is
+    return remote
+
+info_msg = None
 
 
-class MessageDrain:
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(maxsize=100)
-        self._loop = loop
-
-    def callback(self, msg):
-        if not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
-
-    async def read(self):
-        return await self._queue.get()
-
-    async def get_latest(self):
-        latest = await self._queue.get()
-        while not self._queue.empty():
-            latest = self._queue.get_nowait()
-        return latest
+def info_handler(msg):
+    global info_msg
+    info_msg = msg
 
 
-def info_worker(msg):
-    radar_info = RadarInfo.deserialize(msg.payload.to_bytes())
-    radar_log = "Range Mode: %s\n" % str(radar_info.frequency_sweep)
-    radar_log += "Center Band: %s\n" % str(radar_info.center_frequency)
-    radar_log += "Sensitivity: %s\n" % str(radar_info.detection_sensitivity)
-    radar_log += "Range Toggle: %s\n" % str(radar_info.range_toggle)
-    rr.log("RadarInfo", rr.TextLog(radar_log))
-
-
-async def info_handler(drain):
+async def info_worker():
+    global info_msg
     while True:
-        msg = await drain.get_latest()
-        thread = threading.Thread(target=info_worker, args=[msg])
-        thread.start()
-
-        while thread.is_alive():
+        if info_msg is None:
             await asyncio.sleep(0.001)
-        thread.join()
+            continue
+
+        try:
+            radar_info = RadarInfo.from_cdr(info_msg.payload.to_bytes())
+        except Exception as e:
+            info_msg = None
+            print(f"Error processing radar info: {e}", file=sys.stderr)
+            continue
+
+        info_msg = None
+        radar_log = "Range Mode: %s\n" % str(radar_info.frequency_sweep)
+        radar_log += "Center Band: %s\n" % str(radar_info.center_frequency)
+        radar_log += "Sensitivity: %s\n" % str(radar_info.detection_sensitivity)
+        radar_log += "Range Toggle: %s\n" % str(radar_info.range_toggle)
+        rr.log("RadarInfo", rr.TextLog(radar_log))
 
 
 async def main_async(args):
@@ -59,19 +70,19 @@ async def main_async(args):
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
     if args.remote:
+        remote_endpoint = format_remote_endpoint(args.remote)
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+        config.insert_json5("connect", f'{{"endpoints": ["{remote_endpoint}"]}}')
     session = zenoh.open(config)
 
-    # Create drains
-    loop = asyncio.get_running_loop()
-    drain = MessageDrain(loop)
+    session.declare_subscriber("rt/radar/info", info_handler)
+    info_task = asyncio.create_task(info_worker())
 
-    session.declare_subscriber("rt/radar/info", drain.callback)
-    await asyncio.gather((info_handler(drain)))
-
-    while True:
-        asyncio.sleep(0.001)
+    try:
+        await asyncio.gather(info_task)
+    finally:
+        info_task.cancel()
+        await asyncio.gather(info_task, return_exceptions=True)
 
 
 def main():
@@ -81,7 +92,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Connect to remote endpoint (e.g., '10.10.41.100' or 'tcp/10.10.41.100:7447').",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

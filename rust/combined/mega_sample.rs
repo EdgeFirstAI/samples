@@ -1,61 +1,31 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
-// use std::collections::HashSet;
-// use std::time::{Duration, Instant};
-// use tokio::time::sleep;
-// use zenoh::handlers::FifoChannelHandler;
-// use zenoh::pubsub::Subscriber;
-// use std::sync::{Arc};
-// use tokio::sync::Mutex;
-// use clap::Parser;
-// use edgefirst_samples::Args;
-// use edgefirst_schemas::edgefirst_msgs::Detect;
-// use rerun::Boxes3D;
-// use std::error::Error;
-// use clap::Parser as _;
-// use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
-// use rerun::{Image};
-// use openh264::decoder::Decoder;
-// use openh264::nal_units;
-// use openh264::formats::YUVSource;
-// use tokio::task;
-// use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2};
-// use rerun::{Color, Points3D, Position3D};
-// use edgefirst_schemas::edgefirst_msgs::Mask;
-// use ndarray::{Array2, Array};
-// use zstd::stream::decode_all;
-// use std::io::Cursor;
-// use rerun::{AnnotationContext, SegmentationImage};
-// use edgefirst_schemas::sensor_msgs::NavSatFix;
-// use zenoh::sample::Sample;
-
 use std::{collections::HashSet, error::Error, sync::Arc, time::Instant};
 
-use clap::Parser;
+use clap::Parser as _;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
-    decode_pcd,
-    edgefirst_msgs::Detect,
+    edgefirst_msgs::{Detect, Model},
     foxglove_msgs::FoxgloveCompressedVideo,
-    sensor_msgs::{NavSatFix, PointCloud2},
-    serde_cdr::deserialize,
+    sensor_msgs::{NavSatFix, PointCloud2, pointcloud::DynPointCloud},
 };
 
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
 use rerun::{Boxes3D, Color, Image, Points3D, Position3D};
-use tokio::{sync::Mutex, task};
+use tokio::task;
 use zenoh::{handlers::FifoChannelHandler, pubsub::Subscriber, sample::Sample};
 
 async fn camera_h264_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
+    rr: Arc<rerun::RecordingStream>,
 ) {
-    // Create decoder inside the function
     let mut decoder = Decoder::new().expect("Failed to create decoder");
+    let mut rgb_raw: Vec<u8> = Vec::new();
 
     while let Ok(msg) = sub.recv_async().await {
-        let video = match deserialize::<FoxgloveCompressedVideo>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let video = match FoxgloveCompressedVideo::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize video: {:?}", e);
@@ -63,257 +33,245 @@ async fn camera_h264_handler(
             }
         };
 
-        for packet in nal_units(&video.data) {
+        for packet in nal_units(video.data()) {
             let Ok(Some(yuv)) = decoder.decode(packet) else {
                 continue;
             };
             let rgb_len = yuv.rgb8_len();
-            let mut rgb_raw = vec![0; rgb_len];
+            rgb_raw.resize(rgb_len, 0);
             yuv.write_rgb8(&mut rgb_raw);
             let width = yuv.dimensions().0;
             let height = yuv.dimensions().1;
 
-            let image = Image::from_rgb24(rgb_raw, [width as u32, height as u32]);
-            let rr_guard = rr.lock().await;
-            if let Err(e) = rr_guard.log("/camera", &image) {
+            let image = Image::from_rgb24(rgb_raw.as_slice(), [width as u32, height as u32]);
+            if let Err(e) = rr.log("/camera", &image) {
                 eprintln!("Failed to log video: {:?}", e);
             }
         }
     }
 }
 
-async fn model_boxes2d_handler(
+async fn model_output_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
+    rr: Arc<rerun::RecordingStream>,
 ) {
+    let mut centers = Vec::new();
+    let mut sizes = Vec::new();
+    let mut labels: Vec<String> = Vec::new();
+
     while let Ok(msg) = sub.recv_async().await {
-        let detection = match deserialize::<Detect>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let model = match Model::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize detect message: {:?}", e);
-                continue; // skip this message and continue
+                eprintln!("Failed to deserialize model output: {:?}", e);
+                continue;
             }
         };
-        let mut centers = Vec::new();
-        let mut sizes = Vec::new();
-        let mut labels = Vec::new();
 
-        for b in detection.boxes {
-            centers.push([b.center_x * 960.0, b.center_y * 540.0]);
-            sizes.push([b.width * 960.0, b.height * 540.0]);
-            labels.push(b.label);
+        centers.clear();
+        sizes.clear();
+        labels.clear();
+
+        for b in model.masks() {
+            println!(   
+                "Model detected mask with size {}x{}, boxed: {}, encoding: {}",
+                b.width,
+                b.height,
+                b.boxed,
+                b.encoding
+            );
+            println!("Mask data length: {}", b.mask.len());
         }
 
-        let rr_guard = rr.lock().await;
-        match rr_guard.log(
+        for b in model.boxes() {
+            centers.push([b.center_x, b.center_y]);
+            sizes.push([b.width, b.height]);
+            labels.push(b.label.to_string());
+            println!(
+                "Model detected {} at ({}, {}) with size {}x{}",
+                b.label, b.center_x, b.center_y, b.width, b.height
+            );
+        }
+
+        if let Err(e) = rr.log(
             "/camera/boxes2d",
-            &rerun::Boxes2D::from_centers_and_sizes(centers, sizes).with_labels(labels),
+            &rerun::Boxes2D::from_centers_and_sizes(&centers, &sizes)
+                .with_labels(labels.iter().map(|s| s.as_str())),
         ) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to log boxes2d: {:?}", e);
-                continue; // skip this message and continue
-            }
-        };
-        let model_time_sec = detection.model_time.sec as f64;
-        let model_time_nsec = detection.model_time.nanosec as f64;
-        let total_time = model_time_sec + (model_time_nsec / 1e9);
-        match rr_guard.log(
+            eprintln!("Failed to log boxes2d: {:?}", e);
+            continue;
+        }
+
+        let model_time = model.model_time();
+        let total_time = model_time.sec as f64 + (model_time.nanosec as f64 / 1e9);
+        if let Err(e) = rr.log(
             "/metrics/detection_inference",
             &rerun::archetypes::Scalars::new([total_time]),
         ) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to log detection inference: {:?}", e);
-                continue; // skip this message and continue
-            }
-        };
+            eprintln!("Failed to log detection inference: {:?}", e);
+        }
     }
 }
 
-// async fn model_mask_handler(
-//     sub: Subscriber<FifoChannelHandler<Sample>>,
-//     rr: Arc<Mutex<rerun::RecordingStream>>,
-//     compressed: Bool
-// ) {
-//     while let Ok(msg) = sub.recv_async().await {
-//         let mask = match deserialize::<Mask>(&msg.payload().to_bytes()) {
-//             Ok(v) => v,
-//             Err(e) => {
-//                 eprintln!("Failed to deserialize detect message: {:?}", e);
-//                 continue; // skip this message and continue
-//             }
-//         };
-//         let decompressed_bytes = decode_all(Cursor::new(&mask.mask))?;
-//         let h = mask.height as usize;
-//         let w = mask.width as usize;
-//         let total_len = mask.mask.len() as u32;
-//         let c = (total_len / (h as u32 * w as u32)) as usize;
-
-//         let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
-
-//         // Compute argmax along the last axis (class channel)
-//         let array2: Array2<u8> = arr3
-//             .map_axis(ndarray::Axis(2), |class_scores| {
-//                 class_scores
-//                     .iter()
-//                     .enumerate()
-//                     .max_by_key(|(_, val)| *val)
-//                     .map(|(idx, _)| idx as u8)
-//                     .unwrap_or(0)
-//             });
-
-//         // Log segmentation mask
-//         let rr_guard = rr.lock().await;
-//         let _ = match rr_guard.log("/camera/mask", &SegmentationImage::try_from(array2)?) {
-//             Ok(v) => v,
-//             Err(e) => {
-//                 eprintln!("Failed to log mask: {:?}", e);
-//                 continue; // skip this message and continue
-//             }
-//         };
-//     }
-// }
-
 async fn radar_clusters_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
+    rr: Arc<rerun::RecordingStream>,
 ) {
+    let mut clustered: Vec<(f32, f32, f32, f64)> = Vec::new();
+
     while let Ok(msg) = sub.recv_async().await {
-        let pcd = match deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let pcd = match PointCloud2::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
-                continue; // skip this message and continue
+                continue;
             }
         };
-        let points = decode_pcd(&pcd);
-        let clustered_points: Vec<_> = points.iter().filter(|x| x.id > 0).collect();
-        let max_cluster_id = clustered_points
-            .iter()
-            .map(|x| x.id)
-            .max()
-            .unwrap_or(1)
-            .max(1);
-
-        let points = Points3D::new(
-            clustered_points
-                .iter()
-                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
-        )
-        .with_colors(clustered_points.iter().map(|p| {
-            let (r, g, b) = colorous::TURBO
-                .eval_continuous(p.id as f64 / max_cluster_id as f64)
-                .as_tuple();
-            Color::from_rgb(r, g, b)
-        }));
-        let rr_guard = rr.lock().await;
-        match rr_guard.log("/pointcloud/radar", &points) {
+        let cloud = match DynPointCloud::from_pointcloud2(&pcd) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log radar pointcloud: {:?}", e);
-                continue; // skip this message and continue
+                eprintln!("Failed to parse radar pointcloud: {:?}", e);
+                continue;
             }
         };
+
+        clustered.clear();
+        clustered.extend(cloud.iter().filter_map(|p| {
+            let id = p.read_as_f64("cluster_id").unwrap_or(0.0);
+            if id > 0.0 {
+                Some((
+                    p.read_as_f32("x").unwrap_or(0.0),
+                    p.read_as_f32("y").unwrap_or(0.0),
+                    p.read_as_f32("z").unwrap_or(0.0),
+                    id,
+                ))
+            } else {
+                None
+            }
+        }));
+
+        let max_cluster_id = clustered
+            .iter()
+            .map(|p| p.3)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(1.0)
+            .max(1.0);
+
+        let points = Points3D::new(clustered.iter().map(|p| Position3D::new(p.0, p.1, p.2)))
+            .with_colors(clustered.iter().map(|p| {
+                let (r, g, b) = colorous::TURBO
+                    .eval_continuous(p.3 / max_cluster_id)
+                    .as_tuple();
+                Color::from_rgb(r, g, b)
+            }));
+        if let Err(e) = rr.log("/pointcloud/radar", &points) {
+            eprintln!("Failed to log radar pointcloud: {:?}", e);
+        }
     }
 }
 
 async fn lidar_clusters_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
+    rr: Arc<rerun::RecordingStream>,
 ) {
-    while let Ok(msg) = sub.recv_async().await {
-        let pcd = match deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
-                continue; // skip this message and continue
-            }
-        };
-        let points = decode_pcd(&pcd);
-        let clustered_points: Vec<_> = points.iter().filter(|x| x.id > 0).collect();
-        let max_cluster_id = clustered_points
-            .iter()
-            .map(|x| x.id)
-            .max()
-            .unwrap_or(1)
-            .max(1);
+    let mut clustered: Vec<(f32, f32, f32, f64)> = Vec::new();
 
-        let points = Points3D::new(
-            clustered_points
-                .iter()
-                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
-        )
-        .with_colors(clustered_points.iter().map(|p| {
-            let (r, g, b) = colorous::TURBO
-                .eval_continuous(p.id as f64 / max_cluster_id as f64)
-                .as_tuple();
-            Color::from_rgb(r, g, b)
-        }));
-        let rr_guard = rr.lock().await;
-        match rr_guard.log("/pointcloud/lidar", &points) {
+    while let Ok(msg) = sub.recv_async().await {
+        let bytes = msg.payload().to_bytes();
+        let pcd = match PointCloud2::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to log radar pointcloud: {:?}", e);
-                continue; // skip this message and continue
+                eprintln!("Failed to deserialize lidar pointcloud: {:?}", e);
+                continue;
             }
         };
+        let cloud = match DynPointCloud::from_pointcloud2(&pcd) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to parse lidar pointcloud: {:?}", e);
+                continue;
+            }
+        };
+
+        clustered.clear();
+        clustered.extend(cloud.iter().filter_map(|p| {
+            let id = p.read_as_f64("cluster_id").unwrap_or(0.0);
+            if id > 0.0 {
+                Some((
+                    p.read_as_f32("x").unwrap_or(0.0),
+                    p.read_as_f32("y").unwrap_or(0.0),
+                    p.read_as_f32("z").unwrap_or(0.0),
+                    id,
+                ))
+            } else {
+                None
+            }
+        }));
+
+        let max_cluster_id = clustered
+            .iter()
+            .map(|p| p.3)
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap_or(1.0)
+            .max(1.0);
+
+        let points = Points3D::new(clustered.iter().map(|p| Position3D::new(p.0, p.1, p.2)))
+            .with_colors(clustered.iter().map(|p| {
+                let (r, g, b) = colorous::TURBO
+                    .eval_continuous(p.3 / max_cluster_id)
+                    .as_tuple();
+                Color::from_rgb(r, g, b)
+            }));
+        if let Err(e) = rr.log("/pointcloud/lidar", &points) {
+            eprintln!("Failed to log lidar pointcloud: {:?}", e);
+        }
     }
 }
 
-async fn gps_handler(
-    sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
-) {
+async fn gps_handler(sub: Subscriber<FifoChannelHandler<Sample>>, rr: Arc<rerun::RecordingStream>) {
     while let Ok(msg) = sub.recv_async().await {
-        let gps = match deserialize::<NavSatFix>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let gps = match NavSatFix::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
-                continue; // skip this message and continue
+                eprintln!("Failed to deserialize GPS fix: {:?}", e);
+                continue;
             }
         };
-        let rr_guard = rr.lock().await;
-        match rr_guard.log(
+        if let Err(e) = rr.log(
             "/gps",
-            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)]),
+            &rerun::GeoPoints::from_lat_lon([(gps.latitude(), gps.longitude())]),
         ) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to log radar pointcloud: {:?}", e);
-                continue; // skip this message and continue
-            }
-        };
+            eprintln!("Failed to log GPS fix: {:?}", e);
+        }
     }
 }
 
 async fn fusion_boxes3d_handler(
     sub: Subscriber<FifoChannelHandler<Sample>>,
-    rr: Arc<Mutex<rerun::RecordingStream>>,
+    rr: Arc<rerun::RecordingStream>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let det = match deserialize::<Detect>(&msg.payload().to_bytes()) {
+        let bytes = msg.payload().to_bytes();
+        let det = match Detect::from_cdr(&bytes) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize fusion_boxes3d: {:?}", e);
-                continue; // skip this message and continue
+                continue;
             }
         };
-        let boxes = det.boxes;
-        // The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
-        // We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
+        let boxes = det.boxes();
+        // Convert from optical frame (x=right, y=down, z=forward) to
+        // standard frame (x=forward, y=left, z=up)
         let rr_boxes = Boxes3D::from_centers_and_sizes(
             boxes.iter().map(|b| (b.distance, -b.center_x, -b.center_y)),
             boxes.iter().map(|b| (b.width, b.width, b.height)),
         );
-        let rr_guard = rr.lock().await;
-        match rr_guard.log("/pointcloud/boxes3d", &rr_boxes) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to log fusion boxes3d: {:?}", e);
-                continue; // skip this message and continue
-            }
-        };
+        if let Err(e) = rr.log("/pointcloud/boxes3d", &rr_boxes) {
+            eprintln!("Failed to log fusion boxes3d: {:?}", e);
+        }
     }
 }
 
@@ -342,8 +300,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             break;
         }
         let topic = msg.key_expr().as_str();
-        // Ignore message if the topic is known otherwise save the topic
-        if topics.contains(msg.key_expr().as_str()) {
+        if topics.contains(topic) {
             continue;
         }
         topics.insert(msg.key_expr().to_string());
@@ -363,71 +320,48 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Undeclare subscriber
     subscriber.undeclare().await.unwrap();
 
     let (rr, _serve_guard) = args.rerun.init("mega-sample")?;
-    let rr = Arc::new(Mutex::new(rr));
+    let rr = Arc::new(rr);
 
     if camera_topics.contains("rt/camera/h264") {
-        let cam_sub = session.declare_subscriber("rt/camera/h264").await.unwrap();
-        let cam_rr = rr.clone();
-        task::spawn(camera_h264_handler(cam_sub, cam_rr));
+        let sub = session.declare_subscriber("rt/camera/h264").await.unwrap();
+        task::spawn(camera_h264_handler(sub, rr.clone()));
     }
 
-    if model_topics.contains("rt/model/boxes2d") {
-        let boxes2d_sub = session
-            .declare_subscriber("rt/model/boxes2d")
-            .await
-            .unwrap();
-        let boxes2d_rr = rr.clone();
-        task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr));
+    if model_topics.contains("rt/model/output") {
+        let sub = session.declare_subscriber("rt/model/output").await.unwrap();
+        task::spawn(model_output_handler(sub, rr.clone()));
     }
-
-    // if model_topics.contains("rt/model/mask_compressed") {
-    //     // Log annotation context
-    //     rr.lock().await.log(
-    //         "/",
-    //         &AnnotationContext::new([
-    //             (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
-    //             (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
-    //     )?;
-    //     let mask_sub = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
-    //     let mask_rr = rr.clone();
-    //     task::spawn(model_mask_handler(mask_sub, mask_rr, true));
-    // }
 
     if radar_topics.contains("rt/radar/clusters") {
-        let radar_sub = session
+        let sub = session
             .declare_subscriber("rt/radar/clusters")
             .await
             .unwrap();
-        let radar_rr = rr.clone();
-        task::spawn(radar_clusters_handler(radar_sub, radar_rr));
+        task::spawn(radar_clusters_handler(sub, rr.clone()));
     }
 
     if lidar_topics.contains("rt/lidar/clusters") {
-        let lidar_sub = session
+        let sub = session
             .declare_subscriber("rt/lidar/clusters")
             .await
             .unwrap();
-        let lidar_rr = rr.clone();
-        task::spawn(lidar_clusters_handler(lidar_sub, lidar_rr));
+        task::spawn(lidar_clusters_handler(sub, rr.clone()));
     }
 
     if fusion_topics.contains("rt/fusion/boxes3d") {
-        let boxes3d_sub = session
+        let sub = session
             .declare_subscriber("rt/fusion/boxes3d")
             .await
             .unwrap();
-        let boxes3d_rr = rr.clone();
-        task::spawn(fusion_boxes3d_handler(boxes3d_sub, boxes3d_rr));
+        task::spawn(fusion_boxes3d_handler(sub, rr.clone()));
     }
 
     if misc_topics.contains("rt/gps") {
-        let gps_sub = session.declare_subscriber("rt/gps").await.unwrap();
-        let gps_rr = rr.clone();
-        task::spawn(gps_handler(gps_sub, gps_rr));
+        let sub = session.declare_subscriber("rt/gps").await.unwrap();
+        task::spawn(gps_handler(sub, rr.clone()));
     }
 
     // Keep running until interrupted

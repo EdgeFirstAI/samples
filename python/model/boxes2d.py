@@ -2,55 +2,64 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 import zenoh
-from edgefirst.schemas.edgefirst_msgs import Detect
+from edgefirst.schemas.edgefirst_msgs import Model
 from argparse import ArgumentParser
 import sys
 import rerun as rr
 import asyncio
-import time
-import threading
+
+def format_remote_endpoint(remote):
+    if not remote:
+        return None
+    
+    # Already in full format (tcp/IP:PORT)
+    if remote.startswith("tcp/") and ":" in remote.split("/", 1)[1]:
+        return remote
+    
+    # Just IP address (e.g., "10.10.41.100")
+    if "/" not in remote and ":" not in remote:
+        return f"tcp/{remote}:7447"
+    
+    # IP:PORT format (e.g., "10.10.41.100:7447")
+    if ":" in remote and not remote.startswith("tcp/"):
+        return f"tcp/{remote}"
+    
+    # tcp/IP format (e.g., "tcp/10.10.41.100")
+    if remote.startswith("tcp/") and ":" not in remote.split("/", 1)[1]:
+        return f"{remote}:7447"
+    
+    # Fallback: return as-is
+    return remote
+
+# Global variable for message storage
+boxes2d_msg = None
 
 
-class MessageDrain:
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(maxsize=100)
-        self._loop = loop
-
-    def callback(self, msg):
-        if not self._loop.is_closed():
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, msg)
-
-    async def read(self):
-        return await self._queue.get()
-
-    async def get_latest(self):
-        latest = await self._queue.get()
-        while not self._queue.empty():
-            latest = self._queue.get_nowait()
-        return latest
+def boxes2d_handler(msg):
+    """Simple sync handler that stores message in global."""
+    global boxes2d_msg
+    boxes2d_msg = msg
 
 
-def boxes2d_worker(msg):
-    detection = Detect.deserialize(msg.payload.to_bytes())
-    centers = []
-    sizes = []
-    labels = []
-    for box in detection.boxes:
-        centers.append((box.center_x, box.center_y))
-        sizes.append((box.width, box.height))
-        labels.append(box.label)
-    rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
-
-
-async def boxes2d_handler(drain):
+async def boxes2d_worker():
+    """Async worker that processes messages from global."""
+    global boxes2d_msg
     while True:
-        msg = await drain.get_latest()
-        thread = threading.Thread(target=boxes2d_worker, args=[msg])
-        thread.start()
-
-        while thread.is_alive():
-            await asyncio.sleep(0.001)
-        thread.join()
+        if boxes2d_msg is not None:
+            try:
+                msg = boxes2d_msg
+                detection = Model.from_cdr(msg.payload.to_bytes())
+                centers = []
+                sizes = []
+                labels = []
+                for box in detection.boxes:
+                    centers.append((box.center_x, box.center_y))
+                    sizes.append((box.width, box.height))
+                    labels.append(box.label)
+                rr.log("boxes", rr.Boxes2D(centers=centers, sizes=sizes, labels=labels))
+            except Exception as e:
+                print(f"Error processing boxes2d message: {e}", file=sys.stderr)
+        await asyncio.sleep(0.01)
 
 
 async def main_async(args):
@@ -61,21 +70,21 @@ async def main_async(args):
     # Zenoh config
     config = zenoh.Config()
     config.insert_json5("scouting/multicast/interface", "'lo'")
-    if args.remote:
+    remote = format_remote_endpoint(args.remote)
+    if remote:
         config.insert_json5("mode", "'client'")
-        config.insert_json5("connect", f'{{"endpoints": ["{args.remote}"]}}')
+        config.insert_json5("connect", f'{{"endpoints": ["{remote}"]}}')
     session = zenoh.open(config)
 
-    # Create drains
-    loop = asyncio.get_running_loop()
-    drain = MessageDrain(loop)
-
-    session.declare_subscriber("rt/model/boxes2d", drain.callback)
-    await asyncio.gather((boxes2d_handler(drain)))
-
-    while True:
-        asyncio.sleep(0.001)
-
+    # Declare subscriber with simple handler
+    session.declare_subscriber("rt/model/boxes2d", boxes2d_handler)
+    boxes2d_task = asyncio.create_task(boxes2d_worker())
+    # Start worker task
+    try:
+        await asyncio.gather(boxes2d_task)
+    finally:
+        boxes2d_task.cancel()
+        await asyncio.gather(boxes2d_task, return_exceptions=True)
 
 def main():
     parser = ArgumentParser(description="EdgeFirst Samples - Boxes2D")
@@ -84,7 +93,7 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help="Remote endpoint (IP:PORT or just IP, defaults to port 7447)",
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

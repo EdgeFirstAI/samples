@@ -592,4 +592,4 @@ Built with:
 **EdgeFirst** is a trademark of Au-Zone Technologies.  
 For more information, visit https://au-zone.com/
 
-<img referrerpolicy="no-referrer-when-downgrade" src="https://px.edgefirst.ai/a.png?x-pxid=9cd4efec-3cfe-41af-8606-e3816a28b610" alt="" width="1" height="1" style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;" />
+<img referrerpolicy="no-referrer" src="https://px.edgefirst.ai/a.png?x-pxid=9cd4efec-3cfe-41af-8606-e3816a28b610" alt="" width="1" height="1" style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;" />

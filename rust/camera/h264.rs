@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{foxglove_msgs::FoxgloveCompressedVideo, serde_cdr::deserialize};
+use edgefirst_schemas::foxglove_msgs::FoxgloveCompressedVideo;
 use openh264::decoder::Decoder;
 use openh264::formats::YUVSource;
 use openh264::nal_units;
@@ -15,8 +15,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for "rt/camera/h264"
-    let subscriber = session.declare_subscriber("rt/camera/h264").await.unwrap();
+    // Create a subscriber for "<hostname>/camera/h264"
+    let subscriber = session
+        .declare_subscriber(format!("{}/camera/h264", args.hostname()))
+        .await
+        .unwrap();
 
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("camera-h264")?;
@@ -24,8 +27,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut decoder = Decoder::new()?;
 
     while let Ok(msg) = subscriber.recv() {
-        let video: FoxgloveCompressedVideo = deserialize(&msg.payload().to_bytes())?;
-        for packet in nal_units(&video.data) {
+        let video = FoxgloveCompressedVideo::from_cdr(msg.payload().to_bytes())?;
+        for packet in nal_units(video.data()) {
             let Ok(Some(yuv)) = decoder.decode(packet) else {
                 continue;
             };

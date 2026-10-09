@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+# NOTE: "model/mask_compressed" is disabled by default on EdgeFirst Perception
+# 2.8+. Enable it by setting MASK_TOPIC=model/mask_compressed in
+# /etc/default/model on the device, or use the "model/output" (Model)
+# topic/sample instead.
+
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Mask
 from argparse import ArgumentParser
@@ -11,6 +16,13 @@ import time
 import threading
 import zstd
 import numpy as np
+
+
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
 
 
 class MessageDrain:
@@ -35,7 +47,12 @@ class MessageDrain:
 
 
 def mask_worker(msg):
-    mask = Mask.deserialize(msg.payload.to_bytes())
+    try:
+        mask = Mask.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Model Mask Compressed: {e}", file=sys.stderr)
+        return
+
     decoded_array = zstd.decompress(bytes(mask.mask))
     np_arr = np.frombuffer(decoded_array, np.uint8)
     np_arr = np.reshape(np_arr, [mask.height, mask.width, -1])
@@ -78,7 +95,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/model/mask_compressed", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/model/mask_compressed", drain.callback
+    )
     await asyncio.gather((mask_handler(drain)))
 
     while True:
@@ -92,7 +111,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

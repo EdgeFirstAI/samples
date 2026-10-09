@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+// NOTE: "model/mask" is disabled by default on EdgeFirst Perception 2.8+.
+// Enable it by setting MASK_TOPIC=model/mask in /etc/default/model on the
+// device, or use the "model-output" (Model) sample instead.
+
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Mask, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Mask;
 use ndarray::{Array, Array2};
 use rerun::{AnnotationContext, SegmentationImage};
 use std::error::Error;
@@ -13,21 +17,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for "rt/model/mask"
-    let subscriber = session.declare_subscriber("rt/model/mask").await.unwrap();
+    // Create a subscriber for "<hostname>/model/mask"
+    let subscriber = session
+        .declare_subscriber(format!("{}/model/mask", args.hostname()))
+        .await
+        .unwrap();
 
     // Create Rerun logger using the provided parameters
     let (rr, _serve_guard) = args.rerun.init("model-mask")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let mask: Mask = deserialize(&msg.payload().to_bytes())?;
+        let mask = Mask::from_cdr(msg.payload().to_bytes())?;
 
-        let h = mask.height as usize;
-        let w = mask.width as usize;
-        let total_len = mask.mask.len() as u32;
+        let h = mask.height() as usize;
+        let w = mask.width() as usize;
+        let total_len = mask.mask_data().len() as u32;
         let c = (total_len / (h as u32 * w as u32)) as usize;
 
-        let arr3 = Array::from_shape_vec((h, w, c), mask.mask.clone())?;
+        let arr3 = Array::from_shape_vec((h, w, c), mask.mask_data().to_vec())?;
 
         // Compute argmax along the last axis (class channel)
         let array2: Array2<u8> = arr3.map_axis(ndarray::Axis(2), |class_scores| {

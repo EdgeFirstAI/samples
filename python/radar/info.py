@@ -11,6 +11,13 @@ import rerun as rr
 import threading
 
 
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
+
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -31,7 +38,12 @@ class MessageDrain:
 
 
 def info_worker(msg):
-    radar_info = RadarInfo.deserialize(msg.payload.to_bytes())
+    try:
+        radar_info = RadarInfo.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Radar Info: {e}", file=sys.stderr)
+        return
+
     radar_log = "Range Mode: %s\n" % str(radar_info.frequency_sweep)
     radar_log += "Center Band: %s\n" % str(radar_info.center_frequency)
     radar_log += "Sensitivity: %s\n" % str(radar_info.detection_sensitivity)
@@ -67,7 +79,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/radar/info", drain.callback)
+    session.declare_subscriber(f"{topic_prefix(args.remote)}/radar/info", drain.callback)
     await asyncio.gather((info_handler(drain)))
 
     while True:
@@ -81,7 +93,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

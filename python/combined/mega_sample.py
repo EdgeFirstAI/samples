@@ -15,7 +15,85 @@ import io
 import av
 import numpy as np
 from edgefirst.schemas.sensor_msgs import PointCloud2
-from edgefirst.schemas import decode_pcd, colormap, turbo_colormap
+import struct
+import colorsys
+
+
+class Point:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        self.z = 0
+        self.fields = dict()
+
+
+SIZE_OF_DATATYPE = [
+    0,
+    1,  # pub const INT8: u8= 1
+    1,  # pub const UINT8: u8= 2
+    2,  # pub const INT16: u8= 3
+    2,  # pub const UINT16: u8= 4
+    4,  # pub const INT32: u8= 5
+    4,  # pub const UINT32: u8= 6
+    4,  # pub const FLOAT32: u8= 7
+    8,  # pub const FLOAT64: u8 = 8
+]
+
+STRUCT_LETTER_OF_DATATYPE = [
+    "",
+    "b",  # pub const INT8: u8= 1
+    "B",  # pub const UINT8: u8= 2
+    "h",  # pub const INT16: u8= 3
+    "H",  # pub const UINT16: u8= 4
+    "i",  # pub const INT32: u8= 5
+    "I",  # pub const UINT32: u8= 6
+    "f",  # pub const FLOAT32: u8= 7
+    "d",  # pub const FLOAT64: u8 = 8
+]
+
+
+def decode_pcd(pcd: PointCloud2) -> list[Point]:
+    points = []
+    data = pcd.data.tobytes()
+    endian_format = ">" if pcd.is_bigendian else "<"
+    for i in range(pcd.height):
+        for j in range(pcd.width):
+            point = Point()
+            point_start = (i * pcd.width + j) * pcd.point_step
+            # Loop through the provided Fields for each Point (x, y, z, speed,
+            # power, rcs)
+            for f in pcd.fields:
+                val = 0
+                # Decode the data according to the datatype and endian format stated
+                # in the message, location in the array block determined
+                # through the offset
+                arr = bytearray(
+                    data[(point_start + f.offset):(point_start + f.offset + SIZE_OF_DATATYPE[f.datatype])])
+                val = struct.unpack(
+                    f'{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}', arr)[0]
+                if f.name == "x":
+                    point.x = val
+                elif f.name == "y":
+                    point.y = val
+                elif f.name == "z":
+                    point.z = val
+                else:
+                    point.fields[f.name] = val
+            points.append(point)
+    return points
+
+
+def colormap(cmap, x):
+    x = max(0.0, min(1.0, x))
+    a = int(x * 255.0)
+    b = min(255, a + 1)
+    frac = x * 255.0 - a
+    return [cmap[a][c] + frac * (cmap[b][c] - cmap[a][c]) for c in range(3)]
+
+
+# Rainbow gradient used in place of the Turbo colormap previously bundled
+# with edgefirst.schemas (removed upstream).
+turbo_colormap = [colorsys.hsv_to_rgb(0.68 * (1.0 - i / 255.0), 1.0, 1.0) for i in range(256)]
 
 # Constants for syscall
 SYS_pidfd_open = 434  # From syscall.h
@@ -48,6 +126,13 @@ class FrameSize:
     async def get(self):
         await self._event.wait()
         return self._size
+
+
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
 
 
 class MessageDrain:
@@ -108,7 +193,12 @@ def dma_worker(msg, frame_storage):
     from edgefirst.schemas.edgefirst_msgs import DmaBuffer
     import mmap
 
-    dma_buf = DmaBuffer.deserialize(msg.payload.to_bytes())
+    try:
+        dma_buf = DmaBuffer.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Camera DMA: {e}", file=sys.stderr)
+        return
+
     pidfd = pidfd_open(dma_buf.pid)
     if pidfd < 0:
         return
@@ -150,7 +240,12 @@ def jpeg_worker(msg, frame_storage):
     import cv2
     from edgefirst.schemas.sensor_msgs import CompressedImage
 
-    image = CompressedImage.deserialize(msg.payload.to_bytes())
+    try:
+        image = CompressedImage.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Camera JPEG: {e}", file=sys.stderr)
+        return
+
     np_arr = np.frombuffer(bytearray(image.data), np.uint8)
     im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
@@ -172,17 +267,22 @@ async def jpeg_handler(drain, frame_storage):
 def boxes2d_worker(msg, boxes_tracked, frame_size):
     from edgefirst.schemas.edgefirst_msgs import Detect
 
-    detection = Detect.deserialize(msg.payload.to_bytes())
+    try:
+        detection = Detect.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Detection: {e}", file=sys.stderr)
+        return
+
     centers, sizes, labels, colors = [], [], [], []
     for box in detection.boxes:
-        if box.track.id and box.track.id not in boxes_tracked:
-            boxes_tracked[box.track.id] = [
-                box.label + ": " + box.track.id[:6],
+        if box.track_id and box.track_id not in boxes_tracked:
+            boxes_tracked[box.track_id] = [
+                box.label + ": " + box.track_id[:6],
                 list(np.random.choice(range(256), size=3)),
             ]
-        if box.track.id:
-            colors.append(boxes_tracked[box.track.id][1])
-            labels.append(boxes_tracked[box.track.id][0])
+        if box.track_id:
+            colors.append(boxes_tracked[box.track_id][1])
+            labels.append(boxes_tracked[box.track_id][0])
         else:
             colors.append([0, 255, 0])
             labels.append(box.label)
@@ -221,7 +321,12 @@ def mask_worker(msg, frame_size, remote):
     import numpy as np
     import cv2
 
-    mask = Mask.deserialize(msg.payload.to_bytes())
+    try:
+        mask = Mask.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Mask: {e}", file=sys.stderr)
+        return
+
     if remote:
         decoded_array = zstd.decompress(bytes(mask.mask))
         np_arr = np.frombuffer(decoded_array, np.uint8).reshape(
@@ -257,7 +362,12 @@ async def mask_handler(drain, frame_storage, remote):
 def gps_worker(msg):
     from edgefirst.schemas.sensor_msgs import NavSatFix
 
-    gps = NavSatFix.deserialize(msg.payload.to_bytes())
+    try:
+        gps = NavSatFix.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing GPS: {e}", file=sys.stderr)
+        return
+
     rr.log("/gps", rr.GeoPoints(lat_lon=[gps.latitude, gps.longitude]))
 
 
@@ -275,7 +385,12 @@ async def gps_handler(drain):
 def boxes3d_worker(msg):
     from edgefirst.schemas.edgefirst_msgs import Detect
 
-    detection = Detect.deserialize(msg.payload.to_bytes())
+    try:
+        detection = Detect.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Boxes3D: {e}", file=sys.stderr)
+        return
+
     # The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
     # We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
     centers = [(x.distance, -x.center_x, -x.center_y) for x in detection.boxes]
@@ -296,7 +411,12 @@ async def boxes3d_handler(drain):
 
 
 def radar_worker(msg):
-    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
+    try:
+        pcd = PointCloud2.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Radar: {e}", file=sys.stderr)
+        return
+
     points = decode_pcd(pcd)
     clusters = [p for p in points if p.cluster_id > 0]
     if not clusters:
@@ -322,7 +442,12 @@ async def radar_handler(drain):
 def lidar_worker(msg):
     if not msg:
         return
-    pcd = PointCloud2.deserialize(msg.payload.to_bytes())
+    try:
+        pcd = PointCloud2.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Lidar: {e}", file=sys.stderr)
+        return
+
     points = decode_pcd(pcd)
     clusters = [p for p in points if p.cluster_id > 0]
     if not clusters:
@@ -359,8 +484,12 @@ async def main_async(args):
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
-    # Create a subscriber for all topics matching the pattern "rt/**"
-    subscriber = session.declare_subscriber("rt/**")
+    # Topics are published under "<hostname>/..."; the hostname is parsed
+    # from --remote, or "*" to match any host when discovering locally.
+    host = topic_prefix(args.remote)
+
+    # Create a subscriber for all topics matching the pattern "<hostname>/**"
+    subscriber = session.declare_subscriber(f"{host}/**")
 
     # Keep a list of discovered topics to avoid noise from duplicates
     camera_topics = set()
@@ -379,19 +508,19 @@ async def main_async(args):
 
         # Ignore message if the topic is known otherwise save the topic
         topic = str(msg.key_expr)
-        if "rt/camera" in topic:
+        if f"{host}/camera" in topic:
             if topic not in camera_topics:
                 camera_topics.add(topic)
-        elif "rt/model" in topic:
+        elif f"{host}/model" in topic:
             if topic not in model_topics:
                 model_topics.add(topic)
-        elif "rt/radar" in topic:
+        elif f"{host}/radar" in topic:
             if topic not in radar_topics:
                 radar_topics.add(topic)
-        elif "rt/fusion" in topic:
+        elif f"{host}/fusion" in topic:
             if topic not in fusion_topics:
                 fusion_topics.add(topic)
-        elif "rt/lidar" in topic:
+        elif f"{host}/lidar" in topic:
             if topic not in lidar_topics:
                 lidar_topics.add(topic)
         else:
@@ -428,51 +557,56 @@ async def main_async(args):
     frame_size_storage = FrameSize()
 
     cam_topic = None
-    if args.remote is None and "rt/camera/dma" in camera_topics:
-        cam_topic = "rt/camera/dma"
+    if args.remote is None and f"{host}/camera/dma" in camera_topics:
+        cam_topic = f"{host}/camera/dma"
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(dma_handler(cam_drain, frame_size_storage))
-    elif "rt/camera/h264" in camera_topics:
-        cam_topic = "rt/camera/h264"
+    elif f"{host}/camera/h264" in camera_topics:
+        cam_topic = f"{host}/camera/h264"
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(h264_handler(cam_drain, frame_size_storage))
-    elif "rt/camera/jpeg" in camera_topics:
-        cam_topic = "rt/camera/jpeg"
+    elif f"{host}/camera/jpeg" in camera_topics:
+        cam_topic = f"{host}/camera/jpeg"
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(jpeg_handler(cam_drain, frame_size_storage))
     else:
         print("No camera topic available")
 
-    if "rt/model/boxes2d" in model_topics:
-        session.declare_subscriber("rt/model/boxes2d", boxes2d_drain.callback)
+    # NOTE: "model/boxes2d", "model/mask" and "model/mask_compressed" are
+    # disabled by default on EdgeFirst Perception 2.8+. Enable them with
+    # DETECT_TOPIC=model/boxes2d and MASK_TOPIC=model/mask[_compressed] in
+    # /etc/default/model on the device, or use the "model/output" (Model)
+    # topic/sample instead.
+    if f"{host}/model/boxes2d" in model_topics:
+        session.declare_subscriber(f"{host}/model/boxes2d", boxes2d_drain.callback)
         async_funcs.append(boxes2d_handler(boxes2d_drain, frame_size_storage))
 
-    if args.remote is None and "rt/model/mask" in model_topics:
-        session.declare_subscriber("rt/model/mask", mask_drain.callback)
-    elif args.remote is not None and "rt/model/mask_compressed" in model_topics:
-        session.declare_subscriber("rt/model/mask_compressed", mask_drain.callback)
-    elif "rt/model/mask" in model_topics:
-        session.declare_subscriber("rt/model/mask", mask_drain.callback)
-    elif "rt/model/mask_compressed" in model_topics:
-        session.declare_subscriber("rt/model/mask_compressed", mask_drain.callback)
+    if args.remote is None and f"{host}/model/mask" in model_topics:
+        session.declare_subscriber(f"{host}/model/mask", mask_drain.callback)
+    elif args.remote is not None and f"{host}/model/mask_compressed" in model_topics:
+        session.declare_subscriber(f"{host}/model/mask_compressed", mask_drain.callback)
+    elif f"{host}/model/mask" in model_topics:
+        session.declare_subscriber(f"{host}/model/mask", mask_drain.callback)
+    elif f"{host}/model/mask_compressed" in model_topics:
+        session.declare_subscriber(f"{host}/model/mask_compressed", mask_drain.callback)
 
-    if "rt/model/mask" in model_topics or "rt/model/mask_compressed" in model_topics:
+    if f"{host}/model/mask" in model_topics or f"{host}/model/mask_compressed" in model_topics:
         async_funcs.append(mask_handler(mask_drain, frame_size_storage, args.remote))
 
-    if "rt/gps" in misc_topics:
-        session.declare_subscriber("rt/gps", gps_drain.callback)
+    if f"{host}/gps" in misc_topics:
+        session.declare_subscriber(f"{host}/gps", gps_drain.callback)
         async_funcs.append(gps_handler(gps_drain))
 
-    if "rt/fusion/boxes3d" in fusion_topics:
-        session.declare_subscriber("rt/fusion/boxes3d", boxes3d_drain.callback)
+    if f"{host}/fusion/boxes3d" in fusion_topics:
+        session.declare_subscriber(f"{host}/fusion/boxes3d", boxes3d_drain.callback)
         async_funcs.append(boxes3d_handler(boxes3d_drain))
 
-    if "rt/radar/clusters" in radar_topics:
-        session.declare_subscriber("rt/radar/clusters", radar_drain.callback)
+    if f"{host}/radar/clusters" in radar_topics:
+        session.declare_subscriber(f"{host}/radar/clusters", radar_drain.callback)
         async_funcs.append(radar_handler(radar_drain))
 
-    if "rt/lidar/clusters" in lidar_topics:
-        session.declare_subscriber("rt/lidar/clusters", lidar_drain.callback)
+    if f"{host}/lidar/clusters" in lidar_topics:
+        session.declare_subscriber(f"{host}/lidar/clusters", lidar_drain.callback)
         async_funcs.append(lidar_handler(lidar_drain))
 
     # Launch concurrent processing tasks
@@ -489,7 +623,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

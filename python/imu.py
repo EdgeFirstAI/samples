@@ -12,6 +12,13 @@ from rerun.datatypes import Quaternion
 import threading
 
 
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
+
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -32,13 +39,18 @@ class MessageDrain:
 
 
 def imu_worker(msg):
-    imu = Imu.deserialize(msg.payload.to_bytes())
+    try:
+        imu = Imu.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing IMU: {e}", file=sys.stderr)
+        return
+    
     x = imu.orientation.x
     y = imu.orientation.y
     z = imu.orientation.z
     w = imu.orientation.w
     rr.log(
-        "/imu", rr.Transform3D(clear=False, quaternion=Quaternion(xyzw=[x, y, z, w]))
+        "/imu", rr.Transform3D(quaternion=Quaternion(xyzw=[x, y, z, w]))
     )
 
 
@@ -71,9 +83,9 @@ async def main_async(args):
     drain = MessageDrain(loop)
 
     rr.log("/imu", rr.Boxes3D(half_sizes=[[0.5, 0.5, 0.5]], fill_mode="solid"))
-    rr.log("/imu", rr.Transform3D(axis_length=2))
+    rr.log("/imu", rr.TransformAxes3D(2))
 
-    session.declare_subscriber("rt/imu", drain.callback)
+    session.declare_subscriber(f"{topic_prefix(args.remote)}/imu", drain.callback)
     await asyncio.gather((imu_handler(drain)))
 
     while True:
@@ -87,7 +99,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

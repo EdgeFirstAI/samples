@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+// NOTE: "model/mask_compressed" is disabled by default on EdgeFirst
+// Perception 2.8+. Enable it by setting MASK_TOPIC=model/mask_compressed in
+// /etc/default/model on the device, or use the "model-output" (Model)
+// sample instead.
+
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Mask, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Mask;
 use ndarray::{Array, Array2};
 use rerun::{AnnotationContext, SegmentationImage};
 use std::error::Error;
@@ -15,9 +20,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for "rt/model/mask"
+    // Create a subscriber for "<hostname>/model/mask_compressed"
     let subscriber = session
-        .declare_subscriber("rt/model/mask_compressed")
+        .declare_subscriber(format!("{}/model/mask_compressed", args.hostname()))
         .await
         .unwrap();
 
@@ -25,12 +30,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("model-compressed_mask")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let mask: Mask = deserialize(&msg.payload().to_bytes())?;
-        let decompressed_bytes = decode_all(Cursor::new(&mask.mask))?;
+        let mask = Mask::from_cdr(msg.payload().to_bytes())?;
+        let decompressed_bytes = decode_all(Cursor::new(mask.mask_data()))?;
 
-        let h = mask.height as usize;
-        let w = mask.width as usize;
-        let total_len = mask.mask.len() as u32;
+        let h = mask.height() as usize;
+        let w = mask.width() as usize;
+        let total_len = mask.mask_data().len() as u32;
         let c = (total_len / (h as u32 * w as u32)) as usize;
 
         let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;

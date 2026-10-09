@@ -2,7 +2,7 @@
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
 import zenoh
-from edgefirst.schemas.edgefirst_msgs import DmaBuffer
+from edgefirst.schemas.edgefirst_msgs import CameraFrame
 import rerun as rr
 import rerun.blueprint as rrb
 from argparse import ArgumentParser
@@ -35,6 +35,13 @@ def pidfd_getfd(pidfd: int, target_fd: int, flags: int = GETFD_FLAGS) -> int:
     return libc.syscall(SYS_pidfd_getfd, pidfd, target_fd, flags)
 
 
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
+
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -57,24 +64,37 @@ class MessageDrain:
 
 
 def dma_worker(msg):
-    dma_buf = DmaBuffer.deserialize(msg.payload.to_bytes())
-    pidfd = pidfd_open(dma_buf.pid)
+    try:
+        frame = CameraFrame.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Camera Frame: {e}", file=sys.stderr)
+        return
+
+    tensor = frame.tensor
+    height, width = tensor.shape[0], tensor.shape[1]
+
+    pidfd = pidfd_open(tensor.pid)
     if pidfd < 0:
         return
 
-    fd = pidfd_getfd(pidfd, dma_buf.fd, GETFD_FLAGS)
+    # All planes of the frame share one DMA buffer, so the handle of the
+    # first plane is enough to reach the whole frame.
+    fd = pidfd_getfd(pidfd, tensor.planes[0].handle, GETFD_FLAGS)
     if fd < 0:
         return
 
-    # Now fd can be used as a file descriptor
-    mm = mmap.mmap(fd, dma_buf.length)
+    # Map the buffer from its start and copy each plane out of the mapping
+    # to assemble the complete NV12 frame.
+    length = max(p.offset + p.size for p in tensor.planes)
+    mm = mmap.mmap(fd, length, offset=0)
+    nv12 = b"".join(mm[p.offset:p.offset + p.used] for p in tensor.planes)
     rr.log(
         "/camera",
         rr.Image(
-            bytes=mm[:],
-            width=dma_buf.width,
-            height=dma_buf.height,
-            pixel_format=rr.PixelFormat.YUY2,
+            bytes=nv12,
+            width=width,
+            height=height,
+            pixel_format=rr.PixelFormat.NV12,
         ),
     )
     mm.close()
@@ -103,7 +123,7 @@ async def main_async(args):
     rr.send_blueprint(blueprint)
 
     if args.remote:
-        print("DMA example is only functional when run on an EdgeFirst Platform")
+        print("Camera Frame example is only functional when run on an EdgeFirst Platform")
         return
 
     # Zenoh config
@@ -118,7 +138,7 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/camera/dma", drain.callback)
+    session.declare_subscriber(f"{topic_prefix(args.remote)}/camera/frame", drain.callback)
     await asyncio.gather((dma_handler(drain)))
 
     while True:
@@ -132,7 +152,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

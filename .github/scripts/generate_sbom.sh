@@ -18,7 +18,7 @@ echo
 # Step 2: Generate source code SBOM with scancode (~5 seconds)
 echo "[2/6] Generating source code SBOM with scancode..."
 if [ ! -f "venv/bin/scancode" ]; then
-    echo "Error: scancode not found. Please install: python3 -m venv venv && venv/bin/pip install scancode-toolkit"
+    echo "Error: scancode not found. Please install: python3 -m venv venv && venv/bin/pip install scancode-toolkit pluggy==1.6.0"
     exit 1
 fi
 

@@ -35,10 +35,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let h = mask.height() as usize;
         let w = mask.width() as usize;
-        let total_len = mask.mask_data().len() as u32;
+        let total_len = decompressed_bytes.len() as u32;
         let c = (total_len / (h as u32 * w as u32)) as usize;
 
-        let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes.clone())?;
+        let arr3 = Array::from_shape_vec([h, w, c], decompressed_bytes)?;
 
         // Compute argmax along the last axis (class channel)
         let array2: Array2<u8> = arr3.map_axis(ndarray::Axis(2), |class_scores| {

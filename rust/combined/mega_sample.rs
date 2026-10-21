@@ -336,6 +336,12 @@ async fn fusion_boxes3d_handler(
     }
 }
 
+// Topics are keyed by the concrete publishing host, so look up the
+// discovered key matching the desired suffix instead of assuming it.
+fn find_topic(topics: &HashSet<String>, suffix: &str) -> Option<String> {
+    topics.iter().find(|topic| topic.ends_with(suffix)).cloned()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
@@ -392,20 +398,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("mega-sample")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    let camera_h264_topic = format!("{}/camera/h264", host);
-    if camera_topics.contains(&camera_h264_topic) {
+    if let Some(camera_h264_topic) = find_topic(&camera_topics, "/camera/h264") {
         let cam_sub = session.declare_subscriber(camera_h264_topic).await.unwrap();
         let cam_rr = rr.clone();
         task::spawn(camera_h264_handler(cam_sub, cam_rr));
     }
 
-    let model_boxes2d_topic = format!("{}/model/boxes2d", host);
     // NOTE: "model/boxes2d" and "model/mask_compressed" are disabled by
     // default on EdgeFirst Perception 2.8+. Enable them with
     // DETECT_TOPIC=model/boxes2d and MASK_TOPIC=model/mask_compressed in
     // /etc/default/model on the device, or use the "model-output" (Model)
     // sample instead.
-    if model_topics.contains(&model_boxes2d_topic) {
+    if let Some(model_boxes2d_topic) = find_topic(&model_topics, "/model/boxes2d") {
         let boxes2d_sub = session
             .declare_subscriber(model_boxes2d_topic)
             .await
@@ -427,8 +431,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //     task::spawn(model_mask_handler(mask_sub, mask_rr, true));
     // }
 
-    let radar_clusters_topic = format!("{}/radar/clusters", host);
-    if radar_topics.contains(&radar_clusters_topic) {
+    if let Some(radar_clusters_topic) = find_topic(&radar_topics, "/radar/clusters") {
         let radar_sub = session
             .declare_subscriber(radar_clusters_topic)
             .await
@@ -437,8 +440,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task::spawn(radar_clusters_handler(radar_sub, radar_rr));
     }
 
-    let lidar_clusters_topic = format!("{}/lidar/clusters", host);
-    if lidar_topics.contains(&lidar_clusters_topic) {
+    if let Some(lidar_clusters_topic) = find_topic(&lidar_topics, "/lidar/clusters") {
         let lidar_sub = session
             .declare_subscriber(lidar_clusters_topic)
             .await
@@ -447,8 +449,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task::spawn(lidar_clusters_handler(lidar_sub, lidar_rr));
     }
 
-    let fusion_boxes3d_topic = format!("{}/fusion/boxes3d", host);
-    if fusion_topics.contains(&fusion_boxes3d_topic) {
+    if let Some(fusion_boxes3d_topic) = find_topic(&fusion_topics, "/fusion/boxes3d") {
         let boxes3d_sub = session
             .declare_subscriber(fusion_boxes3d_topic)
             .await
@@ -457,8 +458,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         task::spawn(fusion_boxes3d_handler(boxes3d_sub, boxes3d_rr));
     }
 
-    let gps_topic = format!("{}/gps", host);
-    if misc_topics.contains(&gps_topic) {
+    if let Some(gps_topic) = find_topic(&misc_topics, "/gps") {
         let gps_sub = session.declare_subscriber(gps_topic).await.unwrap();
         let gps_rr = rr.clone();
         task::spawn(gps_handler(gps_sub, gps_rr));

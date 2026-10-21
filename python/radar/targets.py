@@ -51,7 +51,7 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
     for i in range(pcd.height):
         for j in range(pcd.width):
             point = Point()
-            point_start = (i * pcd.width + j) * pcd.point_step
+            point_start = i * pcd.row_step + j * pcd.point_step
             # Loop through the provided Fields for each Point (x, y, z, speed,
             # power, rcs)
             for f in pcd.fields:

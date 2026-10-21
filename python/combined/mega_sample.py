@@ -59,7 +59,7 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
     for i in range(pcd.height):
         for j in range(pcd.width):
             point = Point()
-            point_start = (i * pcd.width + j) * pcd.point_step
+            point_start = i * pcd.row_step + j * pcd.point_step
             # Loop through the provided Fields for each Point (x, y, z, speed,
             # power, rcs)
             for f in pcd.fields:
@@ -133,6 +133,23 @@ def topic_prefix(remote):
     if not remote:
         return "*"
     return remote.split("/")[-1].split(":")[0]
+
+
+def topic_category(topic):
+    # Classify by the segment after the hostname, since the hostname itself
+    # may be a wildcard match ("*") while the discovered topic key always
+    # contains the concrete publishing host.
+    parts = topic.split("/")
+    return parts[1] if len(parts) > 1 else ""
+
+
+def find_topic(topics, suffix):
+    # Topics are keyed by the concrete publishing host, so look up the
+    # discovered key matching the desired suffix instead of assuming it.
+    for topic in topics:
+        if topic.endswith(suffix):
+            return topic
+    return None
 
 
 class MessageDrain:
@@ -506,26 +523,22 @@ async def main_async(args):
             break
         msg = subscriber.recv()
 
-        # Ignore message if the topic is known otherwise save the topic
+        # Save the topic, classified by category rather than by the
+        # (possibly wildcarded) host prefix.
         topic = str(msg.key_expr)
-        if f"{host}/camera" in topic:
-            if topic not in camera_topics:
-                camera_topics.add(topic)
-        elif f"{host}/model" in topic:
-            if topic not in model_topics:
-                model_topics.add(topic)
-        elif f"{host}/radar" in topic:
-            if topic not in radar_topics:
-                radar_topics.add(topic)
-        elif f"{host}/fusion" in topic:
-            if topic not in fusion_topics:
-                fusion_topics.add(topic)
-        elif f"{host}/lidar" in topic:
-            if topic not in lidar_topics:
-                lidar_topics.add(topic)
+        category = topic_category(topic)
+        if category == "camera":
+            camera_topics.add(topic)
+        elif category == "model":
+            model_topics.add(topic)
+        elif category == "radar":
+            radar_topics.add(topic)
+        elif category == "fusion":
+            fusion_topics.add(topic)
+        elif category == "lidar":
+            lidar_topics.add(topic)
         else:
-            if topic not in misc_topics:
-                misc_topics.add(topic)
+            misc_topics.add(topic)
 
     subscriber.undeclare()
     del subscriber
@@ -557,16 +570,15 @@ async def main_async(args):
     frame_size_storage = FrameSize()
 
     cam_topic = None
-    if args.remote is None and f"{host}/camera/dma" in camera_topics:
-        cam_topic = f"{host}/camera/dma"
+    if args.remote is None:
+        cam_topic = find_topic(camera_topics, "/camera/frame")
+    if cam_topic:
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(dma_handler(cam_drain, frame_size_storage))
-    elif f"{host}/camera/h264" in camera_topics:
-        cam_topic = f"{host}/camera/h264"
+    elif cam_topic := find_topic(camera_topics, "/camera/h264"):
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(h264_handler(cam_drain, frame_size_storage))
-    elif f"{host}/camera/jpeg" in camera_topics:
-        cam_topic = f"{host}/camera/jpeg"
+    elif cam_topic := find_topic(camera_topics, "/camera/jpeg"):
         session.declare_subscriber(cam_topic, cam_drain.callback)
         async_funcs.append(jpeg_handler(cam_drain, frame_size_storage))
     else:
@@ -577,36 +589,42 @@ async def main_async(args):
     # DETECT_TOPIC=model/boxes2d and MASK_TOPIC=model/mask[_compressed] in
     # /etc/default/model on the device, or use the "model/output" (Model)
     # topic/sample instead.
-    if f"{host}/model/boxes2d" in model_topics:
-        session.declare_subscriber(f"{host}/model/boxes2d", boxes2d_drain.callback)
+    boxes2d_topic = find_topic(model_topics, "/model/boxes2d")
+    if boxes2d_topic:
+        session.declare_subscriber(boxes2d_topic, boxes2d_drain.callback)
         async_funcs.append(boxes2d_handler(boxes2d_drain, frame_size_storage))
 
-    if args.remote is None and f"{host}/model/mask" in model_topics:
-        session.declare_subscriber(f"{host}/model/mask", mask_drain.callback)
-    elif args.remote is not None and f"{host}/model/mask_compressed" in model_topics:
-        session.declare_subscriber(f"{host}/model/mask_compressed", mask_drain.callback)
-    elif f"{host}/model/mask" in model_topics:
-        session.declare_subscriber(f"{host}/model/mask", mask_drain.callback)
-    elif f"{host}/model/mask_compressed" in model_topics:
-        session.declare_subscriber(f"{host}/model/mask_compressed", mask_drain.callback)
-
-    if f"{host}/model/mask" in model_topics or f"{host}/model/mask_compressed" in model_topics:
+    mask_topic = None
+    if args.remote is None:
+        mask_topic = find_topic(model_topics, "/model/mask")
+    elif args.remote is not None:
+        mask_topic = find_topic(model_topics, "/model/mask_compressed")
+    if not mask_topic:
+        mask_topic = find_topic(model_topics, "/model/mask") or find_topic(
+            model_topics, "/model/mask_compressed"
+        )
+    if mask_topic:
+        session.declare_subscriber(mask_topic, mask_drain.callback)
         async_funcs.append(mask_handler(mask_drain, frame_size_storage, args.remote))
 
-    if f"{host}/gps" in misc_topics:
-        session.declare_subscriber(f"{host}/gps", gps_drain.callback)
+    gps_topic = find_topic(misc_topics, "/gps")
+    if gps_topic:
+        session.declare_subscriber(gps_topic, gps_drain.callback)
         async_funcs.append(gps_handler(gps_drain))
 
-    if f"{host}/fusion/boxes3d" in fusion_topics:
-        session.declare_subscriber(f"{host}/fusion/boxes3d", boxes3d_drain.callback)
+    boxes3d_topic = find_topic(fusion_topics, "/fusion/boxes3d")
+    if boxes3d_topic:
+        session.declare_subscriber(boxes3d_topic, boxes3d_drain.callback)
         async_funcs.append(boxes3d_handler(boxes3d_drain))
 
-    if f"{host}/radar/clusters" in radar_topics:
-        session.declare_subscriber(f"{host}/radar/clusters", radar_drain.callback)
+    radar_topic = find_topic(radar_topics, "/radar/clusters")
+    if radar_topic:
+        session.declare_subscriber(radar_topic, radar_drain.callback)
         async_funcs.append(radar_handler(radar_drain))
 
-    if f"{host}/lidar/clusters" in lidar_topics:
-        session.declare_subscriber(f"{host}/lidar/clusters", lidar_drain.callback)
+    lidar_topic = find_topic(lidar_topics, "/lidar/clusters")
+    if lidar_topic:
+        session.declare_subscriber(lidar_topic, lidar_drain.callback)
         async_funcs.append(lidar_handler(lidar_drain))
 
     # Launch concurrent processing tasks

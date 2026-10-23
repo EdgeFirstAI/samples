@@ -35,11 +35,9 @@ use std::{collections::HashSet, error::Error, sync::Arc, time::Instant};
 use clap::Parser;
 use edgefirst_samples::Args;
 use edgefirst_schemas::{
-    decode_pcd,
     edgefirst_msgs::Detect,
     foxglove_msgs::FoxgloveCompressedVideo,
-    sensor_msgs::{NavSatFix, PointCloud2},
-    serde_cdr::deserialize,
+    sensor_msgs::{NavSatFix, PointCloud2, pointcloud::DynPointCloud},
 };
 
 use openh264::{decoder::Decoder, formats::YUVSource, nal_units};
@@ -55,7 +53,7 @@ async fn camera_h264_handler(
     let mut decoder = Decoder::new().expect("Failed to create decoder");
 
     while let Ok(msg) = sub.recv_async().await {
-        let video = match deserialize::<FoxgloveCompressedVideo>(&msg.payload().to_bytes()) {
+        let video = match FoxgloveCompressedVideo::from_cdr(msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize video: {:?}", e);
@@ -63,7 +61,7 @@ async fn camera_h264_handler(
             }
         };
 
-        for packet in nal_units(&video.data) {
+        for packet in nal_units(video.data()) {
             let Ok(Some(yuv)) = decoder.decode(packet) else {
                 continue;
             };
@@ -87,7 +85,7 @@ async fn model_boxes2d_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let detection = match deserialize::<Detect>(&msg.payload().to_bytes()) {
+        let detection = match Detect::from_cdr(msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize detect message: {:?}", e);
@@ -98,7 +96,7 @@ async fn model_boxes2d_handler(
         let mut sizes = Vec::new();
         let mut labels = Vec::new();
 
-        for b in detection.boxes {
+        for b in detection.boxes() {
             centers.push([b.center_x * 960.0, b.center_y * 540.0]);
             sizes.push([b.width * 960.0, b.height * 540.0]);
             labels.push(b.label);
@@ -115,8 +113,9 @@ async fn model_boxes2d_handler(
                 continue; // skip this message and continue
             }
         };
-        let model_time_sec = detection.model_time.sec as f64;
-        let model_time_nsec = detection.model_time.nanosec as f64;
+        let model_time = detection.model_time();
+        let model_time_sec = model_time.sec as f64;
+        let model_time_nsec = model_time.nanosec as f64;
         let total_time = model_time_sec + (model_time_nsec / 1e9);
         match rr_guard.log(
             "/metrics/detection_inference",
@@ -180,30 +179,40 @@ async fn radar_clusters_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let pcd = match deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+        let pcd = match PointCloud2::from_cdr(msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
                 continue; // skip this message and continue
             }
         };
-        let points = decode_pcd(&pcd);
-        let clustered_points: Vec<_> = points.iter().filter(|x| x.id > 0).collect();
+        let cloud = match DynPointCloud::from_pointcloud2(&pcd) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to decode radar pointcloud: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let clustered_points: Vec<_> = cloud
+            .iter()
+            .filter(|p| p.read_as_f64("cluster_id").unwrap_or(0.0) > 0.0)
+            .collect();
         let max_cluster_id = clustered_points
             .iter()
-            .map(|x| x.id)
-            .max()
-            .unwrap_or(1)
-            .max(1);
+            .map(|p| p.read_as_f64("cluster_id").unwrap_or(0.0))
+            .fold(1.0_f64, f64::max);
 
-        let points = Points3D::new(
-            clustered_points
-                .iter()
-                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
-        )
+        let points = Points3D::new(clustered_points.iter().map(|p| {
+            Position3D::new(
+                p.read_f32("x").unwrap_or(0.0),
+                p.read_f32("y").unwrap_or(0.0),
+                p.read_f32("z").unwrap_or(0.0),
+            )
+        }))
         .with_colors(clustered_points.iter().map(|p| {
+            let cluster_id = p.read_as_f64("cluster_id").unwrap_or(0.0);
             let (r, g, b) = colorous::TURBO
-                .eval_continuous(p.id as f64 / max_cluster_id as f64)
+                .eval_continuous(cluster_id / max_cluster_id)
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));
@@ -223,30 +232,40 @@ async fn lidar_clusters_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let pcd = match deserialize::<PointCloud2>(&msg.payload().to_bytes()) {
+        let pcd = match PointCloud2::from_cdr(msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
                 continue; // skip this message and continue
             }
         };
-        let points = decode_pcd(&pcd);
-        let clustered_points: Vec<_> = points.iter().filter(|x| x.id > 0).collect();
+        let cloud = match DynPointCloud::from_pointcloud2(&pcd) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to decode radar pointcloud: {:?}", e);
+                continue; // skip this message and continue
+            }
+        };
+        let clustered_points: Vec<_> = cloud
+            .iter()
+            .filter(|p| p.read_as_f64("cluster_id").unwrap_or(0.0) > 0.0)
+            .collect();
         let max_cluster_id = clustered_points
             .iter()
-            .map(|x| x.id)
-            .max()
-            .unwrap_or(1)
-            .max(1);
+            .map(|p| p.read_as_f64("cluster_id").unwrap_or(0.0))
+            .fold(1.0_f64, f64::max);
 
-        let points = Points3D::new(
-            clustered_points
-                .iter()
-                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
-        )
+        let points = Points3D::new(clustered_points.iter().map(|p| {
+            Position3D::new(
+                p.read_f32("x").unwrap_or(0.0),
+                p.read_f32("y").unwrap_or(0.0),
+                p.read_f32("z").unwrap_or(0.0),
+            )
+        }))
         .with_colors(clustered_points.iter().map(|p| {
+            let cluster_id = p.read_as_f64("cluster_id").unwrap_or(0.0);
             let (r, g, b) = colorous::TURBO
-                .eval_continuous(p.id as f64 / max_cluster_id as f64)
+                .eval_continuous(cluster_id / max_cluster_id)
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));
@@ -266,7 +285,7 @@ async fn gps_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let gps = match deserialize::<NavSatFix>(&msg.payload().to_bytes()) {
+        let gps = match NavSatFix::from_cdr(msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize radar pointcloud: {:?}", e);
@@ -276,7 +295,7 @@ async fn gps_handler(
         let rr_guard = rr.lock().await;
         match rr_guard.log(
             "/gps",
-            &rerun::GeoPoints::from_lat_lon([(gps.latitude, gps.longitude)]),
+            &rerun::GeoPoints::from_lat_lon([(gps.latitude(), gps.longitude())]),
         ) {
             Ok(v) => v,
             Err(e) => {
@@ -292,14 +311,14 @@ async fn fusion_boxes3d_handler(
     rr: Arc<Mutex<rerun::RecordingStream>>,
 ) {
     while let Ok(msg) = sub.recv_async().await {
-        let det = match deserialize::<Detect>(&msg.payload().to_bytes()) {
+        let det = match Detect::from_cdr(msg.payload().to_bytes()) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to deserialize fusion_boxes3d: {:?}", e);
                 continue; // skip this message and continue
             }
         };
-        let boxes = det.boxes;
+        let boxes = det.boxes();
         // The 3D boxes are in an _optical frame of reference, where x is right, y is down, and z (distance) is forward
         // We will convert them to a normal frame of reference, where x is forward, y is left, and z is up
         let rr_boxes = Boxes3D::from_centers_and_sizes(
@@ -317,13 +336,23 @@ async fn fusion_boxes3d_handler(
     }
 }
 
+// Topics are keyed by the concrete publishing host, so look up the
+// discovered key matching the desired suffix instead of assuming it.
+fn find_topic(topics: &HashSet<String>, suffix: &str) -> Option<String> {
+    topics.iter().find(|topic| topic.ends_with(suffix)).cloned()
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
+    let host = args.hostname();
 
-    // Create a subscriber for all topics matching the pattern "rt/**"
-    let subscriber = session.declare_subscriber("rt/**").await.unwrap();
+    // Create a subscriber for all topics matching the pattern "<hostname>/**"
+    let subscriber = session
+        .declare_subscriber(format!("{}/**", host))
+        .await
+        .unwrap();
 
     // Sets for discovered topics
     let mut topics = HashSet::new();
@@ -348,15 +377,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         topics.insert(msg.key_expr().to_string());
 
-        if topic.contains("rt/camera") {
+        if topic.contains("/camera") {
             camera_topics.insert(msg.key_expr().to_string());
-        } else if topic.contains("rt/model") {
+        } else if topic.contains("/model") {
             model_topics.insert(msg.key_expr().to_string());
-        } else if topic.contains("rt/radar") {
+        } else if topic.contains("/radar") {
             radar_topics.insert(msg.key_expr().to_string());
-        } else if topic.contains("rt/fusion") {
+        } else if topic.contains("/fusion") {
             fusion_topics.insert(msg.key_expr().to_string());
-        } else if topic.contains("rt/lidar") {
+        } else if topic.contains("/lidar") {
             lidar_topics.insert(msg.key_expr().to_string());
         } else {
             misc_topics.insert(msg.key_expr().to_string());
@@ -369,22 +398,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("mega-sample")?;
     let rr = Arc::new(Mutex::new(rr));
 
-    if camera_topics.contains("rt/camera/h264") {
-        let cam_sub = session.declare_subscriber("rt/camera/h264").await.unwrap();
+    if let Some(camera_h264_topic) = find_topic(&camera_topics, "/camera/h264") {
+        let cam_sub = session.declare_subscriber(camera_h264_topic).await.unwrap();
         let cam_rr = rr.clone();
         task::spawn(camera_h264_handler(cam_sub, cam_rr));
     }
 
-    if model_topics.contains("rt/model/boxes2d") {
+    // NOTE: "model/boxes2d" and "model/mask_compressed" are disabled by
+    // default on EdgeFirst Perception 2.8+. Enable them with
+    // DETECT_TOPIC=model/boxes2d and MASK_TOPIC=model/mask_compressed in
+    // /etc/default/model on the device, or use the "model-output" (Model)
+    // sample instead.
+    if let Some(model_boxes2d_topic) = find_topic(&model_topics, "/model/boxes2d") {
         let boxes2d_sub = session
-            .declare_subscriber("rt/model/boxes2d")
+            .declare_subscriber(model_boxes2d_topic)
             .await
             .unwrap();
         let boxes2d_rr = rr.clone();
         task::spawn(model_boxes2d_handler(boxes2d_sub, boxes2d_rr));
     }
 
-    // if model_topics.contains("rt/model/mask_compressed") {
+    // if model_topics.contains(&format!("{}/model/mask_compressed", host)) {
     //     // Log annotation context
     //     rr.lock().await.log(
     //         "/",
@@ -392,40 +426,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //             (0, "background", rerun::Rgba32::from_rgb(0, 0, 0)),
     //             (1, "person", rerun::Rgba32::from_rgb(0, 255, 0))])
     //     )?;
-    //     let mask_sub = session.declare_subscriber("rt/model/mask_compressed").await.unwrap();
+    //     let mask_sub = session.declare_subscriber(format!("{}/model/mask_compressed", host)).await.unwrap();
     //     let mask_rr = rr.clone();
     //     task::spawn(model_mask_handler(mask_sub, mask_rr, true));
     // }
 
-    if radar_topics.contains("rt/radar/clusters") {
+    if let Some(radar_clusters_topic) = find_topic(&radar_topics, "/radar/clusters") {
         let radar_sub = session
-            .declare_subscriber("rt/radar/clusters")
+            .declare_subscriber(radar_clusters_topic)
             .await
             .unwrap();
         let radar_rr = rr.clone();
         task::spawn(radar_clusters_handler(radar_sub, radar_rr));
     }
 
-    if lidar_topics.contains("rt/lidar/clusters") {
+    if let Some(lidar_clusters_topic) = find_topic(&lidar_topics, "/lidar/clusters") {
         let lidar_sub = session
-            .declare_subscriber("rt/lidar/clusters")
+            .declare_subscriber(lidar_clusters_topic)
             .await
             .unwrap();
         let lidar_rr = rr.clone();
         task::spawn(lidar_clusters_handler(lidar_sub, lidar_rr));
     }
 
-    if fusion_topics.contains("rt/fusion/boxes3d") {
+    if let Some(fusion_boxes3d_topic) = find_topic(&fusion_topics, "/fusion/boxes3d") {
         let boxes3d_sub = session
-            .declare_subscriber("rt/fusion/boxes3d")
+            .declare_subscriber(fusion_boxes3d_topic)
             .await
             .unwrap();
         let boxes3d_rr = rr.clone();
         task::spawn(fusion_boxes3d_handler(boxes3d_sub, boxes3d_rr));
     }
 
-    if misc_topics.contains("rt/gps") {
-        let gps_sub = session.declare_subscriber("rt/gps").await.unwrap();
+    if let Some(gps_topic) = find_topic(&misc_topics, "/gps") {
+        let gps_sub = session.declare_subscriber(gps_topic).await.unwrap();
         let gps_rr = rr.clone();
         task::spawn(gps_handler(gps_sub, gps_rr));
     }

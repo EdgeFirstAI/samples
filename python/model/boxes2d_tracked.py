@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+# NOTE: "model/boxes2d" is disabled by default on EdgeFirst Perception 2.8+.
+# Enable it by setting DETECT_TOPIC=model/boxes2d in /etc/default/model on
+# the device, or use the "model/output" (Model) topic/sample instead.
+
 import zenoh
 from edgefirst.schemas.edgefirst_msgs import Detect
 from argparse import ArgumentParser
@@ -10,6 +14,13 @@ import asyncio
 import time
 import numpy as np
 import threading
+
+
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
 
 
 class MessageDrain:
@@ -32,20 +43,25 @@ class MessageDrain:
 
 
 def boxes2d_worker(msg, boxes_tracked):
-    detection = Detect.deserialize(msg.payload.to_bytes())
+    try:
+        detection = Detect.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Model Boxes2D: {e}", file=sys.stderr)
+        return
+
     centers = []
     sizes = []
     labels = []
     colors = []
     for box in detection.boxes:
-        if box.track.id and box.track.id not in boxes_tracked:
-            boxes_tracked[box.track.id] = [
-                box.label + ": " + box.track.id[:6],
+        if box.track_id and box.track_id not in boxes_tracked:
+            boxes_tracked[box.track_id] = [
+                box.label + ": " + box.track_id[:6],
                 list(np.random.choice(range(256), size=3)),
             ]
-        if box.track.id:
-            colors.append(boxes_tracked[box.track.id][1])
-            labels.append(boxes_tracked[box.track.id][0])
+        if box.track_id:
+            colors.append(boxes_tracked[box.track_id][1])
+            labels.append(boxes_tracked[box.track_id][0])
         else:
             colors.append([0, 255, 0])
             labels.append(box.label)
@@ -86,7 +102,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/model/boxes2d", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/model/boxes2d", drain.callback
+    )
     await asyncio.gather((boxes2d_handler(drain)))
 
     while True:
@@ -100,7 +118,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

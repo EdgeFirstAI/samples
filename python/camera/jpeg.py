@@ -15,6 +15,13 @@ import threading
 import rerun.blueprint as rrb
 
 
+def topic_prefix(remote):
+    # Topics are published under "<hostname>/..."; use "*" to match any host locally.
+    if not remote:
+        return "*"
+    return remote.split("/")[-1].split(":")[0]
+
+
 class MessageDrain:
     def __init__(self, loop):
         self._queue = asyncio.Queue(maxsize=100)
@@ -37,7 +44,12 @@ class MessageDrain:
 
 
 def jpeg_worker(msg):
-    image = CompressedImage.deserialize(msg.payload.to_bytes())
+    try:
+        image = CompressedImage.from_cdr(msg.payload.to_bytes())
+    except Exception as e:
+        print(f"Error processing Camera JPEG: {e}", file=sys.stderr)
+        return
+
     np_arr = np.frombuffer(bytearray(image.data), np.uint8)
     im = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
     im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
@@ -76,7 +88,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber("rt/camera/jpeg", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/camera/jpeg", drain.callback
+    )
     await asyncio.gather((jpeg_handler(drain)))
 
     while True:
@@ -90,7 +104,12 @@ def main():
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     rr.script_add_args(parser)
     args = parser.parse_args()

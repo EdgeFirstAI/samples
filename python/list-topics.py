@@ -13,7 +13,12 @@ if __name__ == "__main__":
         "--remote",
         type=str,
         default=None,
-        help="Connect to the remote endpoint instead of local.",
+        help=(
+            "Connect to the remote endpoint using its hostname, not its IP "
+            "address (e.g. maivin-1234:7447), since topics are published "
+            'under "<hostname>/<topic>" and the hostname is needed to find '
+            "them."
+        ),
     )
     args.add_argument(
         "-t",
@@ -33,8 +38,10 @@ if __name__ == "__main__":
         config.insert_json5("connect", '{"endpoints": ["%s"]}' % args.remote)
     session = zenoh.open(config)
 
-    # Create a subscriber for all topics matching the pattern "rt/**"
-    subscriber = session.declare_subscriber("rt/**")
+    # Create a subscriber for all topics matching the pattern "<hostname>/**",
+    # or "*/**" to match any host when discovering locally.
+    host = args.remote.split("/")[-1].split(":")[0] if args.remote else "*"
+    subscriber = session.declare_subscriber(f"{host}/**")
 
     # Keep a list of discovered topics to avoid noise from duplicates
     topics = set()

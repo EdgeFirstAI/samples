@@ -3,7 +3,7 @@
 
 use clap::Parser;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Mask, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Mask;
 use rerun::{
     AnnotationContext, SegmentationImage, datatypes::ClassDescriptionMapElem, external::ndarray,
 };
@@ -17,9 +17,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create Rerun logger using the provided parameters
     let (rec, _serve_guard) = args.rerun.init("fusion-model_output-tracked")?;
 
-    // Create a subscriber for "rt/fusion/model_output"
+    // Create a subscriber for "<hostname>/fusion/model_output/tracked"
     let subscriber = session
-        .declare_subscriber("rt/fusion/model_output/tracked")
+        .declare_subscriber(format!("{}/fusion/model_output/tracked", args.hostname()))
         .await
         .unwrap();
 
@@ -31,17 +31,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ]),
     );
     while let Ok(msg) = subscriber.recv() {
-        let bytes = &msg.payload().to_bytes();
-        let mask: Mask = deserialize(bytes)?;
+        let mask = Mask::from_cdr(msg.payload().to_bytes())?;
 
-        let mask_classes = mask.mask.len() / mask.width as usize / mask.height as usize;
+        let mask_classes = mask.mask_data().len() / mask.width() as usize / mask.height() as usize;
         let mask_argmax: Vec<u8> = mask
-            .mask
+            .mask_data()
             .chunks_exact(mask_classes)
             .map(argmax_slice)
             .collect();
         let mask = ndarray::Array2::from_shape_vec(
-            [mask.width as usize, mask.height as usize],
+            [mask.width() as usize, mask.height() as usize],
             mask_argmax,
         )
         .unwrap();

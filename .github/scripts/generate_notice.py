@@ -35,7 +35,9 @@ def extract_license_from_component(component: Dict) -> Set[str]:
             expr = lic_entry["expression"]
             # Parse expression (simplified - splits on OR/AND/WITH)
             parts = expr.replace("(", "").replace(")", "")
-            parts = parts.replace(" OR ", " ").replace(" AND ", " ").replace(" WITH ", " ")
+            parts = (
+                parts.replace(" OR ", " ").replace(" AND ", " ").replace(" WITH ", " ")
+            )
             for part in parts.split():
                 if part and not part.isspace():
                     licenses.add(part)
@@ -52,7 +54,7 @@ def generate_notice(sbom_path: str) -> str:
     """Generate NOTICE content from SBOM."""
 
     try:
-        with open(sbom_path, 'r') as f:
+        with open(sbom_path, "r") as f:
             sbom = json.load(f)
     except Exception as e:
         print(f"Error reading SBOM: {e}", file=sys.stderr)
@@ -82,7 +84,9 @@ def generate_notice(sbom_path: str) -> str:
     notice.append("This product includes software developed at Au-Zone Technologies")
     notice.append("(https://au-zone.com/).")
     notice.append("")
-    notice.append("This software contains components from the following third-party projects")
+    notice.append(
+        "This software contains components from the following third-party projects"
+    )
     notice.append("that require attribution:")
     notice.append("")
 
@@ -94,8 +98,12 @@ def generate_notice(sbom_path: str) -> str:
         notice.append("  (No third-party components requiring attribution)")
 
     notice.append("")
-    notice.append("For a complete Software Content Register (SBOM) including all dependencies,")
-    notice.append("licenses, and version information, see the sbom.json file generated via")
+    notice.append(
+        "For a complete Software Content Register (SBOM) including all dependencies,"
+    )
+    notice.append(
+        "licenses, and version information, see the sbom.json file generated via"
+    )
     notice.append("GitHub Actions in this repository or included in release artifacts.")
     notice.append("")
 

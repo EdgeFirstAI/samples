@@ -16,7 +16,9 @@ pub struct Args {
     #[arg(long, default_value = "peer")]
     pub mode: WhatAmI,
 
-    /// connect to zenoh endpoints
+    /// connect to zenoh endpoints using the device hostname, not its IP
+    /// address (e.g. --remote maivin-1234:7447), since topics are published
+    /// under "`<hostname>`/`<topic>`" and the hostname is needed to find them
     #[arg(short, long)]
     pub remote: Vec<String>,
 
@@ -27,6 +29,21 @@ pub struct Args {
     /// disable zenoh multicast scouting
     #[arg(long)]
     pub no_multicast_scouting: bool,
+}
+
+impl Args {
+    /// Returns the topic prefix for this connection: the hostname parsed
+    /// from the first `--remote` endpoint, or `*` to match any host when
+    /// connecting locally.
+    pub fn hostname(&self) -> String {
+        match self.remote.first() {
+            Some(endpoint) => {
+                let host_port = endpoint.rsplit('/').next().unwrap_or(endpoint);
+                host_port.split(':').next().unwrap_or(host_port).to_string()
+            }
+            None => "*".to_string(),
+        }
+    }
 }
 
 impl From<Args> for Config {

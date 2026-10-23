@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright © 2025 Au-Zone Technologies. All Rights Reserved.
 
+// NOTE: "model/boxes2d" is disabled by default on EdgeFirst Perception 2.8+.
+// Enable it by setting DETECT_TOPIC=model/boxes2d in /etc/default/model on
+// the device, or use the "model-output" (Model) sample instead.
+
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{edgefirst_msgs::Detect, serde_cdr::deserialize};
+use edgefirst_schemas::edgefirst_msgs::Detect;
 use rand::{Rng, rng};
 use rerun::Boxes2D;
 use std::collections::HashMap;
@@ -14,9 +18,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for "rt/model/boxes2d"
+    // Create a subscriber for "<hostname>/model/boxes2d"
     let subscriber = session
-        .declare_subscriber("rt/model/boxes2d")
+        .declare_subscriber(format!("{}/model/boxes2d", args.hostname()))
         .await
         .unwrap();
 
@@ -26,31 +30,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut boxes_tracked: HashMap<String, (String, [u8; 3])> = HashMap::new();
 
     while let Ok(msg) = subscriber.recv() {
-        let detection: Detect = deserialize(&msg.payload().to_bytes())?;
+        let detection = Detect::from_cdr(msg.payload().to_bytes())?;
         let mut centers = Vec::new();
         let mut sizes = Vec::new();
         let mut labels = Vec::new();
         let mut colors = Vec::new();
 
-        for b in detection.boxes {
-            if !b.track.id.is_empty() {
+        for b in detection.boxes() {
+            if !b.track_id.is_empty() {
                 // Insert into map if not already present
-                let entry = boxes_tracked.entry(b.track.id.clone()).or_insert_with(|| {
-                    let mut rng_maker = rng();
-                    let random_color = [
-                        rng_maker.random_range(0..=255),
-                        rng_maker.random_range(0..=255),
-                        rng_maker.random_range(0..=255),
-                    ];
-                    let short_id = &b.track.id[..6.min(b.track.id.len())];
-                    let label = format!("{}: {}", b.label, short_id);
-                    (label, random_color)
-                });
+                let entry = boxes_tracked
+                    .entry(b.track_id.to_string())
+                    .or_insert_with(|| {
+                        let mut rng_maker = rng();
+                        let random_color = [
+                            rng_maker.random_range(0..=255),
+                            rng_maker.random_range(0..=255),
+                            rng_maker.random_range(0..=255),
+                        ];
+                        let short_id = &b.track_id[..6.min(b.track_id.len())];
+                        let label = format!("{}: {}", b.label, short_id);
+                        (label, random_color)
+                    });
 
                 labels.push(entry.0.clone());
                 colors.push(entry.1);
             } else {
-                labels.push(b.label.clone());
+                labels.push(b.label.to_string());
                 colors.push([0, 255, 0]);
             }
 

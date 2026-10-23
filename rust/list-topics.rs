@@ -10,8 +10,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for all topics matching the pattern "rt/**"
-    let subscriber = session.declare_subscriber("rt/**").await.unwrap();
+    // Create a subscriber for all topics matching the pattern "<hostname>/**"
+    let subscriber = session
+        .declare_subscriber(format!("{}/**", args.hostname()))
+        .await
+        .unwrap();
 
     // Keep a list of discovered topics to avoid noise from duplicates
     let mut topics = HashSet::new();

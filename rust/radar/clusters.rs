@@ -3,7 +3,7 @@
 
 use clap::Parser as _;
 use edgefirst_samples::Args;
-use edgefirst_schemas::{decode_pcd, sensor_msgs::PointCloud2, serde_cdr::deserialize};
+use edgefirst_schemas::sensor_msgs::{PointCloud2, pointcloud::DynPointCloud};
 use rerun::{Color, Points3D, Position3D};
 use std::error::Error;
 
@@ -12,9 +12,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
     let session = zenoh::open(args.clone()).await.unwrap();
 
-    // Create a subscriber for "rt/radar/clusters"
+    // Create a subscriber for "<hostname>/radar/clusters"
     let subscriber = session
-        .declare_subscriber("rt/radar/clusters")
+        .declare_subscriber(format!("{}/radar/clusters", args.hostname()))
         .await
         .unwrap();
 
@@ -22,24 +22,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (rr, _serve_guard) = args.rerun.init("radar-clusters")?;
 
     while let Ok(msg) = subscriber.recv() {
-        let pcd: PointCloud2 = deserialize(&msg.payload().to_bytes())?;
-        let points = decode_pcd(&pcd);
-        let clustered_points: Vec<_> = points.iter().filter(|x| x.id > 0).collect();
+        let pcd = PointCloud2::from_cdr(msg.payload().to_bytes())?;
+        let cloud = DynPointCloud::from_pointcloud2(&pcd)?;
+        let clustered_points: Vec<_> = cloud
+            .iter()
+            .filter(|p| p.read_as_f64("cluster_id").unwrap_or(0.0) > 0.0)
+            .collect();
         let max_cluster_id = clustered_points
             .iter()
-            .map(|x| x.id)
-            .max()
-            .unwrap_or(1)
-            .max(1);
+            .map(|p| p.read_as_f64("cluster_id").unwrap_or(0.0))
+            .fold(1.0_f64, f64::max);
 
-        let points = Points3D::new(
-            clustered_points
-                .iter()
-                .map(|p| Position3D::new(p.x as f32, p.y as f32, p.z as f32)),
-        )
+        let points = Points3D::new(clustered_points.iter().map(|p| {
+            Position3D::new(
+                p.read_f32("x").unwrap_or(0.0),
+                p.read_f32("y").unwrap_or(0.0),
+                p.read_f32("z").unwrap_or(0.0),
+            )
+        }))
         .with_colors(clustered_points.iter().map(|p| {
+            let cluster_id = p.read_as_f64("cluster_id").unwrap_or(0.0);
             let (r, g, b) = colorous::TURBO
-                .eval_continuous(p.id as f64 / max_cluster_id as f64)
+                .eval_continuous(cluster_id / max_cluster_id)
                 .as_tuple();
             Color::from_rgb(r, g, b)
         }));

@@ -60,7 +60,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // All planes of the frame share one DMA buffer, so the handle of the
         // first plane is enough to reach the whole frame.
-        let fd = match get_file_from_pidfd(pidfd.as_raw_fd(), planes[0].handle as i32, GetFdFlags::empty()) {
+        let fd = match get_file_from_pidfd(
+            pidfd.as_raw_fd(),
+            planes[0].handle as i32,
+            GetFdFlags::empty(),
+        ) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!(
@@ -99,11 +103,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             })
             .collect();
 
-        let rr_image = rerun::Image::from_pixel_format(
-            [width, height],
-            rerun::PixelFormat::NV12,
-            nv12,
-        );
+        let rr_image =
+            rerun::Image::from_pixel_format([width, height], rerun::PixelFormat::NV12, nv12);
         let _ = rec.log("camera/frame", &rr_image);
 
         unsafe {

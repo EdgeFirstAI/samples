@@ -26,7 +26,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Reflectivity image must be mono8
         assert_eq!(reflect.encoding(), "mono8");
 
-        let img = rerun::Image::from_l8(reflect.data().to_vec(), [reflect.width(), reflect.height()]);
+        let img =
+            rerun::Image::from_l8(reflect.data().to_vec(), [reflect.width(), reflect.height()]);
         rr.log("lidar/reflect", &img)?;
     }
 

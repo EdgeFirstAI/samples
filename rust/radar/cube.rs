@@ -24,7 +24,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     while let Ok(msg) = subscriber.recv() {
         let radar = RadarCube::from_cdr(msg.payload().to_bytes())?;
         let data = Array::<u16, _>::from_shape_vec(
-            radar.shape().iter().map(|&x| x as usize).collect::<Vec<_>>(),
+            radar
+                .shape()
+                .iter()
+                .map(|&x| x as usize)
+                .collect::<Vec<_>>(),
             radar
                 .cube()
                 .iter()

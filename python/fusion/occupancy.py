@@ -18,7 +18,7 @@ class Point:
         self.x = 0
         self.y = 0
         self.z = 0
-        self.fields = dict()
+        self.fields = {}
 
 
 SIZE_OF_DATATYPE = [

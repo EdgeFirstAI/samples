@@ -18,7 +18,7 @@ pub struct Args {
 
     /// connect to zenoh endpoints using the device hostname, not its IP
     /// address (e.g. --remote maivin-1234:7447), since topics are published
-    /// under "<hostname>/<topic>" and the hostname is needed to find them
+    /// under "`<hostname>`/`<topic>`" and the hostname is needed to find them
     #[arg(short, long)]
     pub remote: Vec<String>,
 

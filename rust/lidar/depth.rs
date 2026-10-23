@@ -32,8 +32,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
         let pixels: Vec<u16> = depth
             .data()
-            .chunks_exact(2)
-            .map(|a| u16_from_bytes([a[0], a[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|a| u16_from_bytes(*a))
             .collect();
         let img: Vec<_> = pixels.iter().map(|f| (f / 256) as u8).collect();
         let img = rerun::Image::from_l8(img, [depth.width(), depth.height()]);

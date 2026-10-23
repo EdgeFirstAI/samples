@@ -87,7 +87,7 @@ def dma_worker(msg):
     # to assemble the complete NV12 frame.
     length = max(p.offset + p.size for p in tensor.planes)
     mm = mmap.mmap(fd, length, offset=0)
-    nv12 = b"".join(mm[p.offset:p.offset + p.used] for p in tensor.planes)
+    nv12 = b"".join(mm[p.offset : p.offset + p.used] for p in tensor.planes)
     rr.log(
         "/camera",
         rr.Image(
@@ -123,7 +123,9 @@ async def main_async(args):
     rr.send_blueprint(blueprint)
 
     if args.remote:
-        print("Camera Frame example is only functional when run on an EdgeFirst Platform")
+        print(
+            "Camera Frame example is only functional when run on an EdgeFirst Platform"
+        )
         return
 
     # Zenoh config
@@ -138,7 +140,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/camera/frame", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/camera/frame", drain.callback
+    )
     await asyncio.gather((dma_handler(drain)))
 
     while True:

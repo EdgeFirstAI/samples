@@ -91,7 +91,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/model/mask", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/model/mask", drain.callback
+    )
     await asyncio.gather((mask_handler(drain)))
 
     while True:

@@ -62,9 +62,15 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
                 # in the message, location in the array block determined
                 # through the offset
                 arr = bytearray(
-                    data[(point_start + f.offset):(point_start + f.offset + SIZE_OF_DATATYPE[f.datatype])])
+                    data[
+                        (point_start + f.offset) : (
+                            point_start + f.offset + SIZE_OF_DATATYPE[f.datatype]
+                        )
+                    ]
+                )
                 val = struct.unpack(
-                    f'{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}', arr)[0]
+                    f"{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}", arr
+                )[0]
                 if f.name == "x":
                     point.x = val
                 elif f.name == "y":
@@ -87,7 +93,9 @@ def colormap(cmap, x):
 
 # Rainbow gradient used in place of the Turbo colormap previously bundled
 # with edgefirst.schemas (removed upstream).
-turbo_colormap = [colorsys.hsv_to_rgb(0.68 * (1.0 - i / 255.0), 1.0, 1.0) for i in range(256)]
+turbo_colormap = [
+    colorsys.hsv_to_rgb(0.68 * (1.0 - i / 255.0), 1.0, 1.0) for i in range(256)
+]
 
 
 def topic_prefix(remote):
@@ -162,7 +170,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/radar/clusters", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/radar/clusters", drain.callback
+    )
     await asyncio.gather((clusters_handler(drain)))
 
     while True:

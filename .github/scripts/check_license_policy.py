@@ -79,7 +79,9 @@ def extract_license_from_component(component: Dict) -> Set[str]:
             expr = lic_entry["expression"]
             # Parse expression (simplified - splits on OR/AND/WITH)
             parts = expr.replace("(", "").replace(")", "")
-            parts = parts.replace(" OR ", " ").replace(" AND ", " ").replace(" WITH ", " ")
+            parts = (
+                parts.replace(" OR ", " ").replace(" AND ", " ").replace(" WITH ", " ")
+            )
             for part in parts.split():
                 if part and not part.isspace():
                     licenses.add(part)
@@ -87,7 +89,9 @@ def extract_license_from_component(component: Dict) -> Set[str]:
     return licenses
 
 
-def check_license_policy(sbom_path: str) -> Tuple[bool, List[str], List[str], List[str]]:
+def check_license_policy(
+    sbom_path: str,
+) -> Tuple[bool, List[str], List[str], List[str]]:
     """
     Check license policy compliance.
 
@@ -95,7 +99,7 @@ def check_license_policy(sbom_path: str) -> Tuple[bool, List[str], List[str], Li
         (passed, disallowed_components, review_required_components, unknown_components)
     """
     try:
-        with open(sbom_path, 'r') as f:
+        with open(sbom_path, "r") as f:
             sbom = json.load(f)
     except Exception as e:
         print(f"Error reading SBOM: {e}", file=sys.stderr)
@@ -111,12 +115,12 @@ def check_license_policy(sbom_path: str) -> Tuple[bool, List[str], List[str], Li
         name = component.get("name", "unknown")
         version = component.get("version", "unknown")
         component_id = f"{name}@{version}"
-        
+
         # Check for license override first
         if component_id in LICENSE_OVERRIDES:
             # Use overridden license
             continue
-        
+
         licenses = extract_license_from_component(component)
 
         if not licenses:
@@ -141,7 +145,9 @@ def check_license_policy(sbom_path: str) -> Tuple[bool, List[str], List[str], Li
             continue
 
         # Check for unknown licenses (not in allowed, review, or disallowed lists)
-        known_licenses = ALLOWED_LICENSES | REVIEW_REQUIRED_LICENSES | DISALLOWED_LICENSES
+        known_licenses = (
+            ALLOWED_LICENSES | REVIEW_REQUIRED_LICENSES | DISALLOWED_LICENSES
+        )
         unknown = licenses - known_licenses
         if unknown:
             unknown_components.append(
@@ -193,7 +199,9 @@ def main():
     elif passed and (review_required or unknown):
         print("⚠️  License policy check passed, but manual review required:")
         if review_required:
-            print(f"   - {len(review_required)} component(s) with licenses requiring review")
+            print(
+                f"   - {len(review_required)} component(s) with licenses requiring review"
+            )
         if unknown:
             print(f"   - {len(unknown)} component(s) with unknown licenses")
         print()

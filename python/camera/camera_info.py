@@ -81,7 +81,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/camera/info", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/camera/info", drain.callback
+    )
     await asyncio.gather((info_handler(drain)))
 
     while True:

@@ -80,7 +80,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/fusion/boxes3d", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/fusion/boxes3d", drain.callback
+    )
     await asyncio.gather((boxes3d_handler(drain)))
 
     while True:

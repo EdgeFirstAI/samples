@@ -44,14 +44,12 @@ def imu_worker(msg):
     except Exception as e:
         print(f"Error processing IMU: {e}", file=sys.stderr)
         return
-    
+
     x = imu.orientation.x
     y = imu.orientation.y
     z = imu.orientation.z
     w = imu.orientation.w
-    rr.log(
-        "/imu", rr.Transform3D(quaternion=Quaternion(xyzw=[x, y, z, w]))
-    )
+    rr.log("/imu", rr.Transform3D(quaternion=Quaternion(xyzw=[x, y, z, w])))
 
 
 async def imu_handler(drain):

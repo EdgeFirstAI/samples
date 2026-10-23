@@ -84,7 +84,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/lidar/reflect", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/lidar/reflect", drain.callback
+    )
     await asyncio.gather((reflect_handler(drain)))
 
     while True:

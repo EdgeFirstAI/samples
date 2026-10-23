@@ -61,9 +61,15 @@ def decode_pcd(pcd: PointCloud2) -> list[Point]:
                 # in the message, location in the array block determined
                 # through the offset
                 arr = bytearray(
-                    data[(point_start + f.offset):(point_start + f.offset + SIZE_OF_DATATYPE[f.datatype])])
+                    data[
+                        (point_start + f.offset) : (
+                            point_start + f.offset + SIZE_OF_DATATYPE[f.datatype]
+                        )
+                    ]
+                )
                 val = struct.unpack(
-                    f'{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}', arr)[0]
+                    f"{endian_format}{STRUCT_LETTER_OF_DATATYPE[f.datatype]}", arr
+                )[0]
                 if f.name == "x":
                     point.x = val
                 elif f.name == "y":
@@ -142,7 +148,9 @@ async def main_async(args):
     loop = asyncio.get_running_loop()
     drain = MessageDrain(loop)
 
-    session.declare_subscriber(f"{topic_prefix(args.remote)}/lidar/points", drain.callback)
+    session.declare_subscriber(
+        f"{topic_prefix(args.remote)}/lidar/points", drain.callback
+    )
     await asyncio.gather((points_handler(drain)))
 
     while True:
